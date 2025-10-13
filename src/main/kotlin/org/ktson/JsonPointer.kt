@@ -9,7 +9,7 @@ import kotlinx.serialization.json.*
 object JsonPointer {
     /**
      * Resolve a JSON Pointer path in a document
-     * 
+     *
      * @param document The JSON document to navigate
      * @param pointer The JSON Pointer string (e.g., "/foo/bar/0")
      * @return The element at the pointer location, or null if not found
@@ -18,7 +18,7 @@ object JsonPointer {
         if (pointer.isEmpty() || pointer == "#") {
             return document
         }
-        
+
         val path = if (pointer.startsWith("#/")) {
             pointer.substring(2)
         } else if (pointer.startsWith("/")) {
@@ -28,14 +28,14 @@ object JsonPointer {
         } else {
             pointer
         }
-        
+
         if (path.isEmpty()) {
             return document
         }
-        
+
         val tokens = path.split("/").map { decodeToken(it) }
         var current: JsonElement = document
-        
+
         for (token in tokens) {
             current = when (current) {
                 is JsonObject -> {
@@ -49,29 +49,25 @@ object JsonPointer {
                 else -> return null
             }
         }
-        
+
         return current
     }
-    
+
     /**
      * Decode a JSON Pointer token
      * ~ is encoded as ~0
      * / is encoded as ~1
      */
-    private fun decodeToken(token: String): String {
-        return token
+    private fun decodeToken(token: String): String = token
             .replace("~1", "/")
             .replace("~0", "~")
-    }
-    
+
     /**
      * Encode a string as a JSON Pointer token
      */
-    fun encodeToken(token: String): String {
-        return token
+    fun encodeToken(token: String): String = token
             .replace("~", "~0")
             .replace("/", "~1")
-    }
 }
 
 /**
@@ -82,28 +78,24 @@ class ReferenceResolver {
     private val schemaCache = mutableMapOf<String, JsonElement>()
     private val recursionDepth = mutableMapOf<String, Int>()
     private val maxRecursionDepth = 100
-    
+
     /**
      * Resolve a $ref reference
-     * 
+     *
      * @param ref The reference string (e.g., "#/definitions/foo", "http://example.com/schema")
      * @param rootSchema The root schema document
      * @param currentSchema The current schema context
      * @return The resolved schema, or null if not found
      */
-    fun resolveRef(
-        ref: String,
-        rootSchema: JsonElement,
-        currentSchema: JsonElement = rootSchema
-    ): JsonElement? {
+    fun resolveRef(ref: String, rootSchema: JsonElement, currentSchema: JsonElement = rootSchema): JsonElement? {
         // Check recursion depth
         val depth = recursionDepth.getOrDefault(ref, 0)
         if (depth >= maxRecursionDepth) {
             return null // Infinite recursion detected
         }
-        
+
         recursionDepth[ref] = depth + 1
-        
+
         try {
             return when {
                 // Local reference (#/...)
@@ -128,7 +120,7 @@ class ReferenceResolver {
             }
         }
     }
-    
+
     /**
      * Clear the cache
      */
@@ -137,4 +129,3 @@ class ReferenceResolver {
         recursionDepth.clear()
     }
 }
-

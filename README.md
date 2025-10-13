@@ -519,6 +519,12 @@ cd ktson
 # Run tests
 ./gradlew test
 
+# Check code style
+./gradlew ktlintCheck
+
+# Auto-format code
+./gradlew ktlintFormat
+
 # Publish to local Maven repository
 ./gradlew publishToMavenLocal
 ```
@@ -528,6 +534,13 @@ cd ktson
 - Kotlin 2.2.20+
 - Java 21+
 - Kotlinx Serialization 1.6.0+
+
+## Code Quality
+
+The project uses **Ktlint** for code style enforcement:
+- IntelliJ IDEA code style
+- Automatic formatting via `./gradlew ktlintFormat`
+- CI-ready with `./gradlew ktlintCheck`
 
 ## License
 

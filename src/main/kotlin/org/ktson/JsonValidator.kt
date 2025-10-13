@@ -7,34 +7,26 @@ import kotlinx.serialization.json.*
  */
 class JsonValidator(
     private val enableMetaSchemaValidation: Boolean = true,
-    private val formatAssertion: Boolean = true // Draft 2020-12 uses annotation by default
+    // Draft 2020-12 uses annotation by default
+    private val formatAssertion: Boolean = true,
 ) {
     private val referenceResolver = ReferenceResolver()
-    
+
     /**
      * Validates a JSON instance against a JSON schema
      * Thread-safe synchronous implementation
      */
-    fun validate(
-        instance: JsonElement,
-        schema: JsonSchema
-    ): ValidationResult {
-        return validateInternal(instance, schema, "")
-    }
-    
+    fun validate(instance: JsonElement, schema: JsonSchema): ValidationResult = validateInternal(instance, schema, "")
+
     /**
      * Validates a JSON instance from string against a schema from string
      */
-    fun validate(
-        instanceJson: String,
-        schemaJson: String,
-        schemaVersion: SchemaVersion = SchemaVersion.DRAFT_2020_12
-    ): ValidationResult {
+    fun validate(instanceJson: String, schemaJson: String, schemaVersion: SchemaVersion = SchemaVersion.DRAFT_2020_12): ValidationResult {
         val instance = Json.parseToJsonElement(instanceJson)
         val schema = JsonSchema.fromString(schemaJson, schemaVersion)
         return validate(instance, schema)
     }
-    
+
     /**
      * Validates that a JSON schema is valid according to its meta-schema
      */
@@ -42,36 +34,32 @@ class JsonValidator(
         if (!enableMetaSchemaValidation) {
             return ValidationResult.Valid
         }
-        
+
         // Basic schema validation
         val errors = mutableListOf<ValidationError>()
         validateSchemaStructure(schema.schema, "", errors)
-        
+
         return if (errors.isEmpty()) {
             ValidationResult.Valid
         } else {
             ValidationResult.Invalid(errors)
         }
     }
-    
+
     /**
      * Internal validation implementation
      */
-    private fun validateInternal(
-        instance: JsonElement,
-        schema: JsonSchema,
-        path: String
-    ): ValidationResult {
+    private fun validateInternal(instance: JsonElement, schema: JsonSchema, path: String): ValidationResult {
         val errors = mutableListOf<ValidationError>()
         validateElement(instance, schema.schema, path, errors, schema.effectiveVersion, schema.schema)
-        
+
         return if (errors.isEmpty()) {
             ValidationResult.Valid
         } else {
             ValidationResult.Invalid(errors)
         }
     }
-    
+
     /**
      * Validates a JSON element against a schema element
      */
@@ -81,7 +69,7 @@ class JsonValidator(
         path: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement
+        rootSchema: JsonElement,
     ) {
         when (schemaElement) {
             is JsonObject -> {
@@ -96,7 +84,7 @@ class JsonValidator(
                     }
                     return
                 }
-                
+
                 // Check for $recursiveRef (2019-09)
                 val recursiveRef = schemaElement["\$recursiveRef"]?.jsonPrimitive?.contentOrNull
                 if (recursiveRef != null) {
@@ -110,7 +98,7 @@ class JsonValidator(
                     }
                     return
                 }
-                
+
                 // Check for $dynamicRef (2020-12)
                 val dynamicRef = schemaElement["\$dynamicRef"]?.jsonPrimitive?.contentOrNull
                 if (dynamicRef != null) {
@@ -124,7 +112,7 @@ class JsonValidator(
                     }
                     return
                 }
-                
+
                 validateAgainstObjectSchema(instance, schemaElement, path, errors, version, rootSchema)
             }
             is JsonPrimitive -> {
@@ -139,7 +127,7 @@ class JsonValidator(
             else -> {} // Arrays and nulls are ignored as schemas
         }
     }
-    
+
     /**
      * Validates against an object schema (keyword-based)
      */
@@ -149,44 +137,44 @@ class JsonValidator(
         path: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement
+        rootSchema: JsonElement,
     ) {
         // Type validation
         schema["type"]?.let { typeSchema ->
             validateType(instance, typeSchema, path, errors)
         }
-        
+
         // Const validation
         schema["const"]?.let { constValue ->
             if (!jsonEquals(instance, constValue)) {
                 errors.add(ValidationError(path, "Value must be const: $constValue", "const"))
             }
         }
-        
+
         // Enum validation
         schema["enum"]?.jsonArray?.let { enumValues ->
             if (enumValues.none { jsonEquals(it, instance) }) {
                 errors.add(ValidationError(path, "Value must be one of: $enumValues", "enum"))
             }
         }
-        
+
         when (instance) {
             is JsonObject -> validateObject(instance, schema, path, errors, version, rootSchema)
             is JsonArray -> validateArray(instance, schema, path, errors, version, rootSchema)
             is JsonPrimitive -> validatePrimitive(instance, schema, path, errors, version)
         }
-        
+
         // Combined schemas
         schema["allOf"]?.jsonArray?.let { validateAllOf(instance, it, path, errors, version, rootSchema) }
         schema["anyOf"]?.jsonArray?.let { validateAnyOf(instance, it, path, errors, version, rootSchema) }
         schema["oneOf"]?.jsonArray?.let { validateOneOf(instance, it, path, errors, version, rootSchema) }
         schema["not"]?.let { validateNot(instance, it, path, errors, version, rootSchema) }
-        
+
         // Conditional schemas (2019-09 and later)
         schema["if"]?.let { ifSchema ->
             val ifErrors = mutableListOf<ValidationError>()
             validateElement(instance, ifSchema, path, ifErrors, version, rootSchema)
-            
+
             if (ifErrors.isEmpty()) {
                 // If validation passed, validate against "then"
                 schema["then"]?.let { thenSchema ->
@@ -200,22 +188,17 @@ class JsonValidator(
             }
         }
     }
-    
+
     /**
      * Validates type keyword
      */
-    private fun validateType(
-        instance: JsonElement,
-        typeSchema: JsonElement,
-        path: String,
-        errors: MutableList<ValidationError>
-    ) {
+    private fun validateType(instance: JsonElement, typeSchema: JsonElement, path: String, errors: MutableList<ValidationError>) {
         val types = when (typeSchema) {
             is JsonPrimitive -> listOf(typeSchema.content)
             is JsonArray -> typeSchema.map { it.jsonPrimitive.content }
             else -> return
         }
-        
+
         val instanceType = getJsonType(instance)
         // In JSON Schema, "number" type accepts both integers and floats
         val isValid = if ("number" in types && instanceType == "integer") {
@@ -223,12 +206,12 @@ class JsonValidator(
         } else {
             instanceType in types
         }
-        
+
         if (!isValid) {
             errors.add(ValidationError(path, "Expected type(s): ${types.joinToString()}, but got: $instanceType", "type"))
         }
     }
-    
+
     /**
      * Gets the JSON type name of an element
      */
@@ -260,7 +243,7 @@ class JsonValidator(
         element is JsonArray -> "array"
         else -> "unknown"
     }
-    
+
     /**
      * Compares two JSON elements for equality, considering numeric equivalence.
      * In JSON Schema, 1.0 and 1 are considered equal, as are 0.0 and 0.
@@ -268,24 +251,24 @@ class JsonValidator(
     private fun jsonEquals(a: JsonElement, b: JsonElement): Boolean {
         // If they're directly equal, return true
         if (a == b) return true
-        
+
         // Check numeric equivalence for primitives
         if (a is JsonPrimitive && b is JsonPrimitive) {
             val aNum = a.doubleOrNull
             val bNum = b.doubleOrNull
-            
+
             // If both are numbers, compare their numeric values
             if (aNum != null && bNum != null) {
                 return aNum == bNum
             }
         }
-        
+
         // Check arrays recursively
         if (a is JsonArray && b is JsonArray) {
             if (a.size != b.size) return false
             return a.indices.all { jsonEquals(a[it], b[it]) }
         }
-        
+
         // Check objects recursively
         if (a is JsonObject && b is JsonObject) {
             if (a.size != b.size) return false
@@ -293,10 +276,10 @@ class JsonValidator(
                 b.containsKey(key) && jsonEquals(a[key]!!, b[key]!!)
             }
         }
-        
+
         return false
     }
-    
+
     /**
      * Validates an object instance
      */
@@ -306,7 +289,7 @@ class JsonValidator(
         path: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement
+        rootSchema: JsonElement,
     ) {
         // Properties validation
         schema["properties"]?.jsonObject?.let { properties ->
@@ -317,7 +300,7 @@ class JsonValidator(
                 }
             }
         }
-        
+
         // Required properties
         schema["required"]?.jsonArray?.let { required ->
             required.forEach { requiredProp ->
@@ -327,12 +310,12 @@ class JsonValidator(
                 }
             }
         }
-        
+
         // Additional properties
         schema["additionalProperties"]?.let { additionalPropsSchema ->
             val definedProps = schema["properties"]?.jsonObject?.keys ?: emptySet()
             val patternProps = schema["patternProperties"]?.jsonObject?.keys ?: emptySet()
-            
+
             instance.keys.forEach { propName ->
                 if (propName !in definedProps && !matchesAnyPattern(propName, patternProps)) {
                     val propPath = if (path.isEmpty()) propName else "$path.$propName"
@@ -349,7 +332,7 @@ class JsonValidator(
                 }
             }
         }
-        
+
         // Pattern properties
         schema["patternProperties"]?.jsonObject?.let { patternProps ->
             patternProps.forEach { (pattern, propSchema) ->
@@ -361,7 +344,7 @@ class JsonValidator(
                 }
             }
         }
-        
+
         // Min/Max properties (support decimal values per spec)
         schema["minProperties"]?.jsonPrimitive?.let { minPropsValue ->
             val minProps = minPropsValue.doubleOrNull?.toInt() ?: minPropsValue.intOrNull ?: 0
@@ -369,14 +352,14 @@ class JsonValidator(
                 errors.add(ValidationError(path, "Object has ${instance.size} properties, minimum is $minProps", "minProperties"))
             }
         }
-        
+
         schema["maxProperties"]?.jsonPrimitive?.let { maxPropsValue ->
             val maxProps = maxPropsValue.doubleOrNull?.toInt() ?: maxPropsValue.intOrNull ?: Int.MAX_VALUE
             if (instance.size > maxProps) {
                 errors.add(ValidationError(path, "Object has ${instance.size} properties, maximum is $maxProps", "maxProperties"))
             }
         }
-        
+
         // Property names (2019-09 and later)
         schema["propertyNames"]?.let { propNamesSchema ->
             instance.keys.forEach { propName ->
@@ -384,7 +367,7 @@ class JsonValidator(
                 validateElement(propNameElement, propNamesSchema, "$path.<propertyName>", errors, version, rootSchema)
             }
         }
-        
+
         // Dependent required (2019-09 and later)
         schema["dependentRequired"]?.jsonObject?.let { depRequired ->
             depRequired.forEach { (propName, requiredProps) ->
@@ -398,7 +381,7 @@ class JsonValidator(
                 }
             }
         }
-        
+
         // Dependent schemas (2019-09 and later)
         schema["dependentSchemas"]?.jsonObject?.let { depSchemas ->
             depSchemas.forEach { (propName, depSchema) ->
@@ -408,7 +391,7 @@ class JsonValidator(
             }
         }
     }
-    
+
     /**
      * Validates an array instance
      */
@@ -418,11 +401,11 @@ class JsonValidator(
         path: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement
+        rootSchema: JsonElement,
     ) {
         // Prefix items (2020-12)
         val hasPrefixItems = schema.containsKey("prefixItems")
-        
+
         if (hasPrefixItems) {
             schema["prefixItems"]?.jsonArray?.let { prefixItems ->
                 prefixItems.forEachIndexed { index, itemSchema ->
@@ -431,7 +414,7 @@ class JsonValidator(
                         validateElement(instance[index], itemSchema, itemPath, errors, version, rootSchema)
                     }
                 }
-                
+
                 // In 2020-12, if both prefixItems and items exist, items applies to remaining items
                 schema["items"]?.let { itemsSchema ->
                     for (index in prefixItems.size until instance.size) {
@@ -463,7 +446,7 @@ class JsonValidator(
                 }
             }
         }
-        
+
         // Additional items (for tuple validation)
         if (schema.containsKey("items") && schema["items"] is JsonArray) {
             val itemsCount = (schema["items"] as JsonArray).size
@@ -483,7 +466,7 @@ class JsonValidator(
                 }
             }
         }
-        
+
         // Contains
         schema["contains"]?.let { containsSchema ->
             val matchingIndices = mutableListOf<Int>()
@@ -494,38 +477,48 @@ class JsonValidator(
                     matchingIndices.add(index)
                 }
             }
-            
+
             // Min/Max contains (2019-09 and later) - handle decimal values
-            val minContains = schema["minContains"]?.jsonPrimitive?.let { 
+            val minContains = schema["minContains"]?.jsonPrimitive?.let {
                 it.doubleOrNull?.toInt() ?: it.intOrNull ?: 1
             } ?: 1
-            
+
             val maxContains = schema["maxContains"]?.jsonPrimitive?.let {
                 it.doubleOrNull?.toInt() ?: it.intOrNull
             }
-            
+
             // Special case: if minContains is 0, contains is always valid
             if (minContains == 0) {
                 // Check maxContains only
                 maxContains?.let { max ->
                     if (matchingIndices.size > max) {
-                        errors.add(ValidationError(path, "Array contains ${matchingIndices.size} matching items, maximum is $max", "maxContains"))
+                        errors.add(
+                            ValidationError(path, "Array contains ${matchingIndices.size} matching items, maximum is $max", "maxContains"),
+                        )
                     }
                 }
             } else {
                 // Normal case: minContains >= 1
                 if (matchingIndices.size < minContains) {
-                    errors.add(ValidationError(path, "Array contains ${matchingIndices.size} matching items, minimum is $minContains", if (schema.containsKey("minContains")) "minContains" else "contains"))
+                    errors.add(
+                        ValidationError(
+                            path,
+                            "Array contains ${matchingIndices.size} matching items, minimum is $minContains",
+                            if (schema.containsKey("minContains")) "minContains" else "contains",
+                        ),
+                    )
                 }
-                
+
                 maxContains?.let { max ->
                     if (matchingIndices.size > max) {
-                        errors.add(ValidationError(path, "Array contains ${matchingIndices.size} matching items, maximum is $max", "maxContains"))
+                        errors.add(
+                            ValidationError(path, "Array contains ${matchingIndices.size} matching items, maximum is $max", "maxContains"),
+                        )
                     }
                 }
             }
         }
-        
+
         // Min/Max items (support decimal values per spec)
         schema["minItems"]?.jsonPrimitive?.let { minItemsValue ->
             val minItems = minItemsValue.doubleOrNull?.toInt() ?: minItemsValue.intOrNull ?: 0
@@ -533,14 +526,14 @@ class JsonValidator(
                 errors.add(ValidationError(path, "Array has ${instance.size} items, minimum is $minItems", "minItems"))
             }
         }
-        
+
         schema["maxItems"]?.jsonPrimitive?.let { maxItemsValue ->
             val maxItems = maxItemsValue.doubleOrNull?.toInt() ?: maxItemsValue.intOrNull ?: Int.MAX_VALUE
             if (instance.size > maxItems) {
                 errors.add(ValidationError(path, "Array has ${instance.size} items, maximum is $maxItems", "maxItems"))
             }
         }
-        
+
         // Unique items
         schema["uniqueItems"]?.jsonPrimitive?.booleanOrNull?.let { uniqueItems ->
             if (uniqueItems) {
@@ -556,14 +549,14 @@ class JsonValidator(
             }
         }
     }
-    
+
     /**
      * Helper function to count Unicode codepoints (not UTF-16 code units).
      * JSON Schema requires counting codepoints for minLength/maxLength.
      * Example: "💩" has 1 codepoint but 2 UTF-16 code units.
      */
     private fun String.codepointLength(): Int = this.codePointCount(0, this.length)
-    
+
     /**
      * Validates a primitive instance
      */
@@ -572,14 +565,14 @@ class JsonValidator(
         schema: JsonObject,
         path: String,
         errors: MutableList<ValidationError>,
-        version: SchemaVersion
+        version: SchemaVersion,
     ) {
         when {
             instance.isString -> validateString(instance.content, schema, path, errors, version)
             else -> validateNumber(instance, schema, path, errors)
         }
     }
-    
+
     /**
      * Validates a string value
      */
@@ -588,7 +581,7 @@ class JsonValidator(
         schema: JsonObject,
         path: String,
         errors: MutableList<ValidationError>,
-        version: SchemaVersion
+        version: SchemaVersion,
     ) {
         // Min/Max length (support decimal values per spec)
         // Note: JSON Schema counts Unicode codepoints, not UTF-16 code units
@@ -599,7 +592,7 @@ class JsonValidator(
                 errors.add(ValidationError(path, "String length is $length codepoints, minimum is $minLength", "minLength"))
             }
         }
-        
+
         schema["maxLength"]?.jsonPrimitive?.let { maxLengthValue ->
             val maxLength = maxLengthValue.doubleOrNull?.toInt() ?: maxLengthValue.intOrNull ?: Int.MAX_VALUE
             val length = value.codepointLength()
@@ -607,14 +600,14 @@ class JsonValidator(
                 errors.add(ValidationError(path, "String length is $length codepoints, maximum is $maxLength", "maxLength"))
             }
         }
-        
+
         // Pattern
         schema["pattern"]?.jsonPrimitive?.contentOrNull?.let { pattern ->
             if (!Regex(pattern).containsMatchIn(value)) {
                 errors.add(ValidationError(path, "String does not match pattern: $pattern", "pattern"))
             }
         }
-        
+
         // Format (basic validation)
         // In 2020-12, format is an annotation by default unless formatAssertion is enabled
         schema["format"]?.jsonPrimitive?.contentOrNull?.let { format ->
@@ -623,16 +616,11 @@ class JsonValidator(
             }
         }
     }
-    
+
     /**
      * Validates format keyword (basic implementation)
      */
-    private fun validateFormat(
-        value: String,
-        format: String,
-        path: String,
-        errors: MutableList<ValidationError>
-    ) {
+    private fun validateFormat(value: String, format: String, path: String, errors: MutableList<ValidationError>) {
         val valid = when (format) {
             "email" -> value.matches(Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}$"))
             "uri" -> value.matches(Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*"))
@@ -644,37 +632,32 @@ class JsonValidator(
             "uuid" -> value.matches(Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"))
             else -> true // Unknown formats are ignored
         }
-        
+
         if (!valid) {
             errors.add(ValidationError(path, "String does not match format: $format", "format"))
         }
     }
-    
+
     /**
      * Validates a number value
      */
-    private fun validateNumber(
-        instance: JsonPrimitive,
-        schema: JsonObject,
-        path: String,
-        errors: MutableList<ValidationError>
-    ) {
+    private fun validateNumber(instance: JsonPrimitive, schema: JsonObject, path: String, errors: MutableList<ValidationError>) {
         val number = instance.doubleOrNull ?: return
-        
+
         // Minimum
         schema["minimum"]?.jsonPrimitive?.doubleOrNull?.let { minimum ->
             if (number < minimum) {
                 errors.add(ValidationError(path, "Number $number is less than minimum $minimum", "minimum"))
             }
         }
-        
+
         // Maximum
         schema["maximum"]?.jsonPrimitive?.doubleOrNull?.let { maximum ->
             if (number > maximum) {
                 errors.add(ValidationError(path, "Number $number is greater than maximum $maximum", "maximum"))
             }
         }
-        
+
         // Exclusive minimum
         schema["exclusiveMinimum"]?.let { exclusiveMin ->
             when (exclusiveMin) {
@@ -698,7 +681,7 @@ class JsonValidator(
                 else -> {}
             }
         }
-        
+
         // Exclusive maximum
         schema["exclusiveMaximum"]?.let { exclusiveMax ->
             when (exclusiveMax) {
@@ -722,7 +705,7 @@ class JsonValidator(
                 else -> {}
             }
         }
-        
+
         // Multiple of
         schema["multipleOf"]?.jsonPrimitive?.doubleOrNull?.let { multipleOf ->
             if (multipleOf > 0) {
@@ -742,7 +725,7 @@ class JsonValidator(
             }
         }
     }
-    
+
     /**
      * Validates allOf combiner
      */
@@ -752,13 +735,13 @@ class JsonValidator(
         path: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement
+        rootSchema: JsonElement,
     ) {
         schemas.forEach { schema ->
             validateElement(instance, schema, path, errors, version, rootSchema)
         }
     }
-    
+
     /**
      * Validates anyOf combiner
      */
@@ -768,19 +751,19 @@ class JsonValidator(
         path: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement
+        rootSchema: JsonElement,
     ) {
         val anyValid = schemas.any { schema ->
             val tempErrors = mutableListOf<ValidationError>()
             validateElement(instance, schema, path, tempErrors, version, rootSchema)
             tempErrors.isEmpty()
         }
-        
+
         if (!anyValid) {
             errors.add(ValidationError(path, "Instance does not match any of the schemas", "anyOf"))
         }
     }
-    
+
     /**
      * Validates oneOf combiner
      */
@@ -790,21 +773,21 @@ class JsonValidator(
         path: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement
+        rootSchema: JsonElement,
     ) {
         val validCount = schemas.count { schema ->
             val tempErrors = mutableListOf<ValidationError>()
             validateElement(instance, schema, path, tempErrors, version, rootSchema)
             tempErrors.isEmpty()
         }
-        
+
         when (validCount) {
             0 -> errors.add(ValidationError(path, "Instance does not match any of the oneOf schemas", "oneOf"))
             1 -> {} // Valid
             else -> errors.add(ValidationError(path, "Instance matches more than one oneOf schema", "oneOf"))
         }
     }
-    
+
     /**
      * Validates not combiner
      */
@@ -814,31 +797,25 @@ class JsonValidator(
         path: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement
+        rootSchema: JsonElement,
     ) {
         val tempErrors = mutableListOf<ValidationError>()
         validateElement(instance, schema, path, tempErrors, version, rootSchema)
-        
+
         if (tempErrors.isEmpty()) {
             errors.add(ValidationError(path, "Instance matches the not schema but should not", "not"))
         }
     }
-    
+
     /**
      * Checks if a property name matches any pattern
      */
-    private fun matchesAnyPattern(propName: String, patterns: Set<String>): Boolean {
-        return patterns.any { Regex(it).containsMatchIn(propName) }
-    }
-    
+    private fun matchesAnyPattern(propName: String, patterns: Set<String>): Boolean = patterns.any { Regex(it).containsMatchIn(propName) }
+
     /**
      * Validates the structure of a schema itself
      */
-    private fun validateSchemaStructure(
-        schema: JsonElement,
-        path: String,
-        errors: MutableList<ValidationError>
-    ) {
+    private fun validateSchemaStructure(schema: JsonElement, path: String, errors: MutableList<ValidationError>) {
         when (schema) {
             is JsonObject -> {
                 // Check for invalid combinations
@@ -858,7 +835,9 @@ class JsonValidator(
                                 if (typeElement !is JsonPrimitive || !typeElement.isString) {
                                     errors.add(ValidationError(path, "type array must contain only strings", "\$schema"))
                                 } else if (typeElement.content !in validTypes) {
-                                    errors.add(ValidationError(path, "type value '${typeElement.content}' is not a valid JSON type", "\$schema"))
+                                    errors.add(
+                                        ValidationError(path, "type value '${typeElement.content}' is not a valid JSON type", "\$schema"),
+                                    )
                                 }
                             }
                         }
@@ -867,14 +846,14 @@ class JsonValidator(
                         }
                     }
                 }
-                
+
                 // Validate $schema if present
                 schema["\$schema"]?.let { schemaUri ->
                     if (schemaUri !is JsonPrimitive || !schemaUri.isString) {
                         errors.add(ValidationError(path, "\$schema must be a string", "\$schema"))
                     }
                 }
-                
+
                 // Recursively validate nested schemas
                 schema.forEach { (key, value) ->
                     val newPath = if (path.isEmpty()) key else "$path.$key"
@@ -887,7 +866,8 @@ class JsonValidator(
                             }
                         }
                         "items", "additionalProperties", "additionalItems", "contains", "propertyNames",
-                        "if", "then", "else", "not" -> {
+                        "if", "then", "else", "not",
+                        -> {
                             validateSchemaStructure(value, newPath, errors)
                         }
                         "allOf", "anyOf", "oneOf", "prefixItems" -> {
@@ -912,4 +892,3 @@ class JsonValidator(
         }
     }
 }
-

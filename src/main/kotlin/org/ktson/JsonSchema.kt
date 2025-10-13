@@ -7,23 +7,23 @@ import kotlinx.serialization.json.*
  */
 data class JsonSchema(
     val schema: JsonElement,
-    val version: SchemaVersion = SchemaVersion.DRAFT_2020_12
+    val version: SchemaVersion = SchemaVersion.DRAFT_2020_12,
 ) {
     /**
      * Gets the $schema property if present
      */
     val schemaUri: String? = (schema as? JsonObject)?.get("\$schema")?.jsonPrimitive?.contentOrNull
-    
+
     /**
      * Detects the schema version from the $schema property
      */
     val detectedVersion: SchemaVersion? = SchemaVersion.fromUri(schemaUri)
-    
+
     /**
      * The actual version to use for validation (detected or default)
      */
     val effectiveVersion: SchemaVersion = detectedVersion ?: version
-    
+
     companion object {
         /**
          * Parse a JSON schema from a string
@@ -32,13 +32,10 @@ data class JsonSchema(
             val element = Json.parseToJsonElement(schemaJson)
             return JsonSchema(element, defaultVersion)
         }
-        
+
         /**
          * Create a schema from a JsonElement
          */
-        fun fromElement(element: JsonElement, defaultVersion: SchemaVersion = SchemaVersion.DRAFT_2020_12): JsonSchema {
-            return JsonSchema(element, defaultVersion)
-        }
+        fun fromElement(element: JsonElement, defaultVersion: SchemaVersion = SchemaVersion.DRAFT_2020_12): JsonSchema = JsonSchema(element, defaultVersion)
     }
 }
-

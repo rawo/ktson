@@ -7,15 +7,13 @@ data class ValidationError(
     val path: String,
     val message: String,
     val keyword: String? = null,
-    val schemaPath: String? = null
+    val schemaPath: String? = null,
 ) {
-    override fun toString(): String {
-        return buildString {
+    override fun toString(): String = buildString {
             append("Validation error at '$path': $message")
             keyword?.let { append(" (keyword: $it)") }
             schemaPath?.let { append(" (schema path: $it)") }
         }
-    }
 }
 
 /**
@@ -24,13 +22,12 @@ data class ValidationError(
 sealed class ValidationResult {
     data object Valid : ValidationResult()
     data class Invalid(val validationErrors: List<ValidationError>) : ValidationResult()
-    
+
     val isValid: Boolean get() = this is Valid
     val isInvalid: Boolean get() = this is Invalid
-    
+
     fun getErrors(): List<ValidationError> = when (this) {
         is Valid -> emptyList()
         is Invalid -> validationErrors
     }
 }
-
