@@ -1,12 +1,11 @@
 package org.ktson
 
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.*
 
 /**
  * Example usage of the KtSON JSON Schema validator
  */
-fun main() = runBlocking {
+fun main() {
     // Create a validator instance
     val validator = JsonValidator()
     
@@ -34,7 +33,7 @@ fun main() = runBlocking {
     example7SchemaValidation(validator)
 }
 
-suspend fun example1BasicValidation(validator: JsonValidator) {
+fun example1BasicValidation(validator: JsonValidator) {
     println("Example 1: Basic Type Validation")
     println("-".repeat(50))
     
@@ -60,7 +59,7 @@ suspend fun example1BasicValidation(validator: JsonValidator) {
     println()
 }
 
-suspend fun example2ObjectValidation(validator: JsonValidator) {
+fun example2ObjectValidation(validator: JsonValidator) {
     println("Example 2: Object Validation")
     println("-".repeat(50))
     
@@ -98,7 +97,7 @@ suspend fun example2ObjectValidation(validator: JsonValidator) {
     println()
 }
 
-suspend fun example3ArrayValidation(validator: JsonValidator) {
+fun example3ArrayValidation(validator: JsonValidator) {
     println("Example 3: Array Validation")
     println("-".repeat(50))
     
@@ -133,7 +132,7 @@ suspend fun example3ArrayValidation(validator: JsonValidator) {
     println()
 }
 
-suspend fun example4FormatValidation(validator: JsonValidator) {
+fun example4FormatValidation(validator: JsonValidator) {
     println("Example 4: Format Validation")
     println("-".repeat(50))
     
@@ -161,7 +160,7 @@ suspend fun example4FormatValidation(validator: JsonValidator) {
     println()
 }
 
-suspend fun example5CombiningSchemas(validator: JsonValidator) {
+fun example5CombiningSchemas(validator: JsonValidator) {
     println("Example 5: Combining Schemas (allOf, anyOf, oneOf)")
     println("-".repeat(50))
     
@@ -198,7 +197,7 @@ suspend fun example5CombiningSchemas(validator: JsonValidator) {
     println()
 }
 
-suspend fun example6ConditionalValidation(validator: JsonValidator) {
+fun example6ConditionalValidation(validator: JsonValidator) {
     println("Example 6: Conditional Validation (if-then-else)")
     println("-".repeat(50))
     
@@ -235,7 +234,7 @@ suspend fun example6ConditionalValidation(validator: JsonValidator) {
     println()
 }
 
-suspend fun example7SchemaValidation(validator: JsonValidator) {
+fun example7SchemaValidation(validator: JsonValidator) {
     println("Example 7: Schema Validation")
     println("-".repeat(50))
     

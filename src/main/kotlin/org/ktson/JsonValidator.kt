@@ -1,35 +1,33 @@
 package org.ktson
 
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.*
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Main JSON Schema validator with thread-safe suspend functions
+ * Main JSON Schema validator with thread-safe synchronous validation
  */
 class JsonValidator(
     private val enableMetaSchemaValidation: Boolean = true,
     private val formatAssertion: Boolean = true // Draft 2020-12 uses annotation by default
 ) {
-    private val mutex = Mutex()
-    private val schemaCache = mutableMapOf<String, JsonSchema>()
+    private val schemaCache = ConcurrentHashMap<String, JsonSchema>()
     private val referenceResolver = ReferenceResolver()
     
     /**
      * Validates a JSON instance against a JSON schema
-     * Thread-safe implementation using coroutines
+     * Thread-safe synchronous implementation
      */
-    suspend fun validate(
+    fun validate(
         instance: JsonElement,
         schema: JsonSchema
-    ): ValidationResult = mutex.withLock {
-        validateInternal(instance, schema, "")
+    ): ValidationResult {
+        return validateInternal(instance, schema, "")
     }
     
     /**
      * Validates a JSON instance from string against a schema from string
      */
-    suspend fun validate(
+    fun validate(
         instanceJson: String,
         schemaJson: String,
         schemaVersion: SchemaVersion = SchemaVersion.DRAFT_2020_12
@@ -42,7 +40,7 @@ class JsonValidator(
     /**
      * Validates that a JSON schema is valid according to its meta-schema
      */
-    suspend fun validateSchema(schema: JsonSchema): ValidationResult = mutex.withLock {
+    fun validateSchema(schema: JsonSchema): ValidationResult {
         if (!enableMetaSchemaValidation) {
             return ValidationResult.Valid
         }
