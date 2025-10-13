@@ -38,6 +38,8 @@ Test coverage and results:
 
 - **[TESTING.md](TESTING.md)** - Comprehensive testing guide
 - **[OFFICIAL_TEST_SUITE_RESULTS.md](OFFICIAL_TEST_SUITE_RESULTS.md)** - Results from official JSON Schema test suite
+- **[PERFORMANCE_TEST_RESULTS.md](PERFORMANCE_TEST_RESULTS.md)** - Performance benchmarks with large schemas
+- **[PERFORMANCE_TESTING_SUMMARY.md](PERFORMANCE_TESTING_SUMMARY.md)** - Performance test implementation guide
 
 ### Technical Deep Dives
 

@@ -493,10 +493,16 @@ The library includes comprehensive test suites:
 - Remaining failures primarily in advanced features (unevaluatedProperties/Items)
 - See `docs/REF_COMPLETION_SUMMARY.md` for detailed analysis
 
+### Performance Tests (6 tests) ✅
+- **Large schema validation** with schemas up to 50MB and data up to 20MB
+- **Thread-safety verification** with concurrent validation tests
+- **Execution time and memory usage** metrics
+- See `docs/PERFORMANCE_TEST_RESULTS.md` for detailed benchmarks
+
 Run tests with:
 
 ```bash
-# Run all tests (custom + official suite)
+# Run all tests (custom + official suite, excludes performance tests)
 ./gradlew test
 
 # Run only official test suite
@@ -504,6 +510,9 @@ Run tests with:
 
 # Run only custom tests
 ./gradlew test --tests "Draft*" --tests "Edge*"
+
+# Run performance tests (on demand only)
+./gradlew performanceTest
 ```
 
 ## Building from Source

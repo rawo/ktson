@@ -29,6 +29,47 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    // Exclude performance tests by default
+    filter {
+        excludeTestsMatching("org.ktson.PerformanceTest")
+    }
+    // Increase memory for tests
+    minHeapSize = "512m"
+    maxHeapSize = "2g"
+    // Show test output
+    testLogging {
+        events("passed", "skipped", "failed", "standardOut", "standardError")
+        showStandardStreams = true
+    }
+}
+
+// Create a separate task for performance tests
+tasks.register<Test>("performanceTest") {
+    description = "Runs performance tests"
+    group = "verification"
+
+    useJUnitPlatform()
+
+    // Include only performance tests
+    filter {
+        includeTestsMatching("org.ktson.PerformanceTest")
+    }
+
+    // Set test classpath
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+
+    // Increase memory for performance tests
+    minHeapSize = "512m"
+    maxHeapSize = "2g"
+
+    // Show test output
+    testLogging {
+        events("passed", "skipped", "failed", "standardOut", "standardError")
+        showStandardStreams = true
+    }
+
+    shouldRunAfter(tasks.test)
 }
 
 kotlin {
