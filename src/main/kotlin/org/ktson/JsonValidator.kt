@@ -1,7 +1,6 @@
 package org.ktson
 
 import kotlinx.serialization.json.*
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Main JSON Schema validator with thread-safe synchronous validation
@@ -10,7 +9,6 @@ class JsonValidator(
     private val enableMetaSchemaValidation: Boolean = true,
     private val formatAssertion: Boolean = true // Draft 2020-12 uses annotation by default
 ) {
-    private val schemaCache = ConcurrentHashMap<String, JsonSchema>()
     private val referenceResolver = ReferenceResolver()
     
     /**
