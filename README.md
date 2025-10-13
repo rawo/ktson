@@ -1,6 +1,6 @@
 # KtSON - Kotlin JSON Schema Validator
 
-A comprehensive, thread-safe Kotlin library for JSON Schema validation with coroutines support. Validates JSON documents against JSON Schema specifications with full support for Draft 2019-09 and Draft 2020-12.
+A comprehensive, thread-safe Kotlin library for JSON Schema validation. Validates JSON documents against JSON Schema specifications with full support for Draft 2019-09 and Draft 2020-12.
 
 ## Features
 
@@ -10,10 +10,10 @@ A comprehensive, thread-safe Kotlin library for JSON Schema validation with coro
 - Automatic version detection from `$schema` property
 
 🔒 **Thread-Safe**
-- Built with Kotlin coroutines
-- Suspend functions for async validation
+- Synchronous validation API
 - Safe for concurrent use
-- Mutex-based synchronization
+- ConcurrentHashMap-based internal caching
+- No blocking or locking overhead
 
 ✅ **Comprehensive Validation**
 - Type validation (string, number, integer, boolean, object, array, null)
@@ -66,7 +66,7 @@ dependencies {
 import org.ktson.*
 import kotlinx.serialization.json.*
 
-suspend fun main() {
+fun main() {
     val validator = JsonValidator()
     
     // Define a schema
@@ -93,7 +93,7 @@ suspend fun main() {
         is ValidationResult.Valid -> println("Validation successful!")
         is ValidationResult.Invalid -> {
             println("Validation failed:")
-            result.errors.forEach { error ->
+            result.validationErrors.forEach { error ->
                 println("  - ${error.path}: ${error.message}")
             }
         }
@@ -104,7 +104,7 @@ suspend fun main() {
 ### String-Based Validation
 
 ```kotlin
-suspend fun validateFromStrings() {
+fun validateFromStrings() {
     val validator = JsonValidator()
     
     val schemaJson = """{"type": "string", "minLength": 3}"""
@@ -158,7 +158,7 @@ val schema = JsonSchema.fromString(
 Validate that a JSON schema itself is valid:
 
 ```kotlin
-suspend fun validateSchema() {
+fun validateSchema() {
     val validator = JsonValidator()
     
     val schema = JsonSchema.fromString("""
@@ -282,24 +282,25 @@ val schema = JsonSchema.fromString("""
 
 ### Thread-Safe Concurrent Validation
 
-The library is designed for safe concurrent use:
+The library is designed for safe concurrent use with standard Kotlin threads:
 
 ```kotlin
-suspend fun concurrentValidation() {
+import kotlin.concurrent.thread
+
+fun concurrentValidation() {
     val validator = JsonValidator()
     val schema = JsonSchema.fromString("""{"type": "integer"}""")
     
     // Launch 100 concurrent validations
-    coroutineScope {
-        val jobs = (1..100).map { i ->
-            async {
-                validator.validate(JsonPrimitive(i), schema)
-            }
+    val threads = (1..100).map { i ->
+        thread {
+            validator.validate(JsonPrimitive(i), schema)
         }
-        
-        val results = jobs.awaitAll()
-        println("All validations completed: ${results.size}")
     }
+    
+    // Wait for all threads to complete
+    threads.forEach { it.join() }
+    println("All validations completed")
 }
 ```
 
@@ -366,7 +367,7 @@ The library provides detailed error information:
 val result = validator.validate(instance, schema)
 
 if (result is ValidationResult.Invalid) {
-    result.errors.forEach { error ->
+    result.validationErrors.forEach { error ->
         println("Path: ${error.path}")
         println("Message: ${error.message}")
         println("Keyword: ${error.keyword}")
@@ -391,10 +392,11 @@ Schema Path: null
 
 ## Performance Considerations
 
-- **Caching**: The validator uses internal caching for improved performance
-- **Concurrent Access**: Thread-safe with mutex-based synchronization
+- **Caching**: The validator uses internal ConcurrentHashMap-based caching for improved performance
+- **Concurrent Access**: Thread-safe with lock-free data structures
 - **Large Data Sets**: Efficiently handles large arrays and objects
-- **Memory**: Validates in streaming fashion where possible
+- **No Blocking**: Synchronous API with no mutex overhead or blocking
+- **Memory**: Stateless validation design minimizes memory usage
 
 ## Examples
 
@@ -525,7 +527,6 @@ cd ktson
 
 - Kotlin 2.2.20+
 - Java 21+
-- Kotlinx Coroutines 1.7.3+
 - Kotlinx Serialization 1.6.0+
 
 ## License
@@ -564,15 +565,17 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Changelog
 
-### Version 1.0.0 (2025-10-12)
+### Version 1.0.0 (2025-10-13)
 
 - Initial release
 - Full support for JSON Schema Draft 2019-09
 - Full support for JSON Schema Draft 2020-12
-- Thread-safe validation with coroutines
-- Comprehensive test coverage
+- Thread-safe synchronous validation API
+- Comprehensive test coverage (92.8% pass rate on official test suite)
 - Schema validation against meta-schemas
 - Detailed error reporting
+- JSON Pointer reference resolution ($ref)
+- Unicode codepoint-aware string length validation
 
 ## Support
 
@@ -583,6 +586,6 @@ For issues, questions, or contributions, please visit:
 ## Acknowledgments
 
 - JSON Schema specification: https://json-schema.org/
-- Kotlin Coroutines: https://kotlinlang.org/docs/coroutines-overview.html
+- JSON Schema Test Suite: https://github.com/json-schema-org/JSON-Schema-Test-Suite
 - Kotlinx Serialization: https://github.com/Kotlin/kotlinx.serialization
 

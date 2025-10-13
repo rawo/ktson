@@ -8,6 +8,7 @@ This directory contains comprehensive documentation for the KtSON JSON Schema va
 
 Quick overviews and summaries of the project:
 
+- **[MIGRATION_COMPLETE.md](MIGRATION_COMPLETE.md)** - 🎉 Async to Sync migration complete summary
 - **[FINAL_SUMMARY.md](FINAL_SUMMARY.md)** - Executive summary of $ref implementation completion
 - **[REF_COMPLETION_SUMMARY.md](REF_COMPLETION_SUMMARY.md)** - Detailed $ref implementation breakdown
 - **[UNICODE_FIX_SUMMARY.md](UNICODE_FIX_SUMMARY.md)** - Unicode codepoint counting fix details
@@ -15,6 +16,14 @@ Quick overviews and summaries of the project:
 - **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - Overall project architecture and details
 - **[FINAL_PROJECT_SUMMARY.md](FINAL_PROJECT_SUMMARY.md)** - Comprehensive project overview
 - **[TEST_SUITE_INTEGRATION_SUMMARY.md](TEST_SUITE_INTEGRATION_SUMMARY.md)** - Official test suite integration details
+
+### API Documentation
+
+Understanding the synchronous API:
+
+- **[SYNC_API_SUMMARY.md](SYNC_API_SUMMARY.md)** - Current synchronous API overview and usage
+- **[ASYNC_TO_SYNC_MIGRATION.md](ASYNC_TO_SYNC_MIGRATION.md)** - Migration guide from async to sync
+- **[SUSPEND_FUNCTION_ANALYSIS.md](SUSPEND_FUNCTION_ANALYSIS.md)** - Why we chose synchronous over async
 
 ### Feature Documentation
 
@@ -38,6 +47,13 @@ In-depth technical explanations:
 - **[100_PERCENT_COVERAGE_PLAN.md](100_PERCENT_COVERAGE_PLAN.md)** - Plan for 100% test coverage
 - **[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)** - Current implementation status
 
+### Version History
+
+Version upgrades and migrations:
+
+- **[VERSION_UPGRADE.md](VERSION_UPGRADE.md)** - Kotlin 2.2.20, Java 21, Gradle 9.1.0 upgrades
+- **[PACKAGE_MIGRATION.md](PACKAGE_MIGRATION.md)** - Migration from `com.ktson` to `org.ktson`
+
 ## 📊 Quick Stats
 
 - **Pass Rate**: 92.8% (2,205/2,376 tests)
@@ -49,9 +65,10 @@ In-depth technical explanations:
 
 Start with the [main README](../README.md) in the root directory, then explore:
 
-1. **For users**: [REF_USAGE_EXAMPLES.md](REF_USAGE_EXAMPLES.md)
+1. **For users**: [SYNC_API_SUMMARY.md](SYNC_API_SUMMARY.md) and [REF_USAGE_EXAMPLES.md](REF_USAGE_EXAMPLES.md)
 2. **For developers**: [FEATURES.md](FEATURES.md) and [TESTING.md](TESTING.md)
 3. **For architecture**: [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)
+4. **For migration**: [ASYNC_TO_SYNC_MIGRATION.md](ASYNC_TO_SYNC_MIGRATION.md)
 
 ## 💡 Need Help?
 
