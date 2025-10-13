@@ -120,12 +120,4 @@ class ReferenceResolver {
             }
         }
     }
-
-    /**
-     * Clear the cache
-     */
-    fun clearCache() {
-        schemaCache.clear()
-        recursionDepth.clear()
-    }
 }
