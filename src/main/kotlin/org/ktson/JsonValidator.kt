@@ -174,7 +174,6 @@ class JsonValidator(
             is JsonObject -> validateObject(instance, schema, path, errors, version, rootSchema)
             is JsonArray -> validateArray(instance, schema, path, errors, version, rootSchema)
             is JsonPrimitive -> validatePrimitive(instance, schema, path, errors, version)
-            else -> {}
         }
         
         // Combined schemas
@@ -461,7 +460,6 @@ class JsonValidator(
                             }
                         }
                     }
-                    else -> {}
                 }
             }
         }
