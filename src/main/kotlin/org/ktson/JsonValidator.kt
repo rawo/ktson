@@ -47,6 +47,7 @@ import org.ktson.SchemaKeywords.RECURSIVE_REF
 import org.ktson.SchemaKeywords.REF
 import org.ktson.SchemaKeywords.REQUIRED
 import org.ktson.SchemaKeywords.SCHEMA_FALSE
+import org.ktson.SchemaKeywords.SCHEMA
 import org.ktson.SchemaKeywords.THEN
 import org.ktson.SchemaKeywords.TYPE
 import org.ktson.SchemaKeywords.TYPE_ARRAY
@@ -882,32 +883,32 @@ class JsonValidator(
                     when (type) {
                         is JsonPrimitive -> {
                             if (!type.isString) {
-                                errors.add(ValidationError(path, "type must be a string or array of strings", "\$schema"))
+                                errors.add(ValidationError(path, "type must be a string or array of strings", SCHEMA))
                             } else if (type.content !in validTypes) {
-                                errors.add(ValidationError(path, "type value '${type.content}' is not a valid JSON type", "\$schema"))
+                                errors.add(ValidationError(path, "type value '${type.content}' is not a valid JSON type", SCHEMA))
                             }
                         }
                         is JsonArray -> {
                             type.forEach { typeElement ->
                                 if (typeElement !is JsonPrimitive || !typeElement.isString) {
-                                    errors.add(ValidationError(path, "type array must contain only strings", "\$schema"))
+                                    errors.add(ValidationError(path, "type array must contain only strings", SCHEMA))
                                 } else if (typeElement.content !in validTypes) {
                                     errors.add(
-                                        ValidationError(path, "type value '${typeElement.content}' is not a valid JSON type", "\$schema"),
+                                        ValidationError(path, "type value '${typeElement.content}' is not a valid JSON type", SCHEMA),
                                     )
                                 }
                             }
                         }
                         else -> {
-                            errors.add(ValidationError(path, "type must be a string or array", "\$schema"))
+                            errors.add(ValidationError(path, "type must be a string or array", SCHEMA))
                         }
                     }
                 }
 
                 // Validate $schema if present
-                schema["\$schema"]?.let { schemaUri ->
+                schema[SCHEMA]?.let { schemaUri ->
                     if (schemaUri !is JsonPrimitive || !schemaUri.isString) {
-                        errors.add(ValidationError(path, "\$schema must be a string", "\$schema"))
+                        errors.add(ValidationError(path, "\$schema must be a string", SCHEMA))
                     }
                 }
 
@@ -940,11 +941,11 @@ class JsonValidator(
             is JsonPrimitive -> {
                 // Boolean schemas are valid
                 if (schema.booleanOrNull == null && !schema.isString) {
-                    errors.add(ValidationError(path, "Schema must be an object or boolean", "\$schema"))
+                    errors.add(ValidationError(path, "Schema must be an object or boolean", SCHEMA))
                 }
             }
             else -> {
-                errors.add(ValidationError(path, "Schema must be an object or boolean", "\$schema"))
+                errors.add(ValidationError(path, "Schema must be an object or boolean", SCHEMA))
             }
         }
     }

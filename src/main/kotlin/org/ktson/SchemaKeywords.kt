@@ -9,6 +9,7 @@ object SchemaKeywords {
     const val REF = "\$ref"
     const val RECURSIVE_REF = "\$recursiveRef"
     const val DYNAMIC_REF = "\$dynamicRef"
+    const val SCHEMA = "\$schema"
 
     // Type validation
     const val TYPE = "type"

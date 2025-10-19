@@ -12,7 +12,7 @@ data class JsonSchema(
     /**
      * Gets the $schema property if present
      */
-    val schemaUri: String? = (schema as? JsonObject)?.get("\$schema")?.jsonPrimitive?.contentOrNull
+    val schemaUri: String? = (schema as? JsonObject)?.get(SchemaKeywords.SCHEMA)?.jsonPrimitive?.contentOrNull
 
     /**
      * Detects the schema version from the $schema property
