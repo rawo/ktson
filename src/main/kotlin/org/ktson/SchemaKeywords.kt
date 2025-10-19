@@ -72,6 +72,9 @@ object SchemaKeywords {
     const val TYPE_OBJECT = "object"
     const val TYPE_UNKNOWN = "unknown"
 
+    // Valid types for JSON Schema type validation
+    val VALID_TYPES = setOf(TYPE_STRING, TYPE_NUMBER, TYPE_INTEGER, TYPE_BOOLEAN, TYPE_OBJECT, TYPE_ARRAY, TYPE_NULL)
+
     // Format types
     const val FORMAT_EMAIL = "email"
     const val FORMAT_URI = "uri"

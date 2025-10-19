@@ -46,8 +46,8 @@ import org.ktson.SchemaKeywords.PROPERTY_NAMES
 import org.ktson.SchemaKeywords.RECURSIVE_REF
 import org.ktson.SchemaKeywords.REF
 import org.ktson.SchemaKeywords.REQUIRED
-import org.ktson.SchemaKeywords.SCHEMA_FALSE
 import org.ktson.SchemaKeywords.SCHEMA
+import org.ktson.SchemaKeywords.SCHEMA_FALSE
 import org.ktson.SchemaKeywords.THEN
 import org.ktson.SchemaKeywords.TYPE
 import org.ktson.SchemaKeywords.TYPE_ARRAY
@@ -877,10 +877,9 @@ class JsonValidator(
         when (schema) {
             is JsonObject -> {
                 // Check for invalid combinations
-                val validTypes = setOf("string", "number", "integer", "boolean", "object", "array", "null")
-                if (schema.containsKey("type")) {
-                    val type = schema[TYPE]
-                    when (type) {
+                val validTypes = SchemaKeywords.VALID_TYPES
+                if (schema.containsKey(TYPE)) {
+                    when (val type = schema[TYPE]) {
                         is JsonPrimitive -> {
                             if (!type.isString) {
                                 errors.add(ValidationError(path, "type must be a string or array of strings", SCHEMA))
@@ -908,7 +907,7 @@ class JsonValidator(
                 // Validate $schema if present
                 schema[SCHEMA]?.let { schemaUri ->
                     if (schemaUri !is JsonPrimitive || !schemaUri.isString) {
-                        errors.add(ValidationError(path, "\$schema must be a string", SCHEMA))
+                        errors.add(ValidationError(path, "$SCHEMA must be a string", SCHEMA))
                     }
                 }
 
