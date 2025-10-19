@@ -5,7 +5,12 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Test Coverage](https://img.shields.io/badge/Official%20Test%20Suite-92.8%25-brightgreen.svg)](docs/OFFICIAL_TEST_SUITE_RESULTS.md)
 
-A high-performance, thread-safe JSON Schema validator for Kotlin with comprehensive support for JSON Schema Draft 2019-09 and 2020-12.
+JSON Schema validator for Kotlin with comprehensive support for JSON Schema Draft 2019-09 and 2020-12.
+
+#### NOTE   
+This project is a playground for testing AI agents as a day-to-day tools in programming.  
+You can see the summaries and results from discussions with AI in the [./docs](./docs/) directory.  
+Most of the code refactoring were performed by AI agent with supervision and code review done by human.  
 
 ## Table of Contents
 
