@@ -273,11 +273,11 @@ class JsonValidator(
     /**
      * Gets the JSON type name of an element
      */
-    private fun getJsonType(element: JsonElement): String = when {
-        element is JsonNull -> TYPE_NULL
-        element is JsonPrimitive && element.isString -> TYPE_STRING
-        element is JsonPrimitive && element.booleanOrNull != null -> TYPE_BOOLEAN
-        element is JsonPrimitive -> {
+    private fun getJsonType(element: JsonElement): String = when (element) {
+        is JsonNull -> TYPE_NULL
+        is JsonPrimitive if element.isString -> TYPE_STRING
+        is JsonPrimitive if element.booleanOrNull != null -> TYPE_BOOLEAN
+        is JsonPrimitive -> {
             val content = element.content
             // Check if it's a number
             val doubleValue = element.doubleOrNull
@@ -297,8 +297,9 @@ class JsonValidator(
                 }
             }
         }
-        element is JsonObject -> TYPE_OBJECT
-        element is JsonArray -> TYPE_ARRAY
+
+        is JsonObject -> TYPE_OBJECT
+        is JsonArray -> TYPE_ARRAY
         else -> TYPE_UNKNOWN
     }
 
