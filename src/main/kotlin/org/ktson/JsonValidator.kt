@@ -915,19 +915,19 @@ class JsonValidator(
                 schema.forEach { (key, value) ->
                     val newPath = if (path.isEmpty()) key else "$path.$key"
                     when (key) {
-                        "properties", "patternProperties", "dependentSchemas" -> {
+                        PROPERTIES, PATTERN_PROPERTIES, DEPENDENT_SCHEMAS -> {
                             if (value is JsonObject) {
                                 value.forEach { (propName, propSchema) ->
                                     validateSchemaStructure(propSchema, "$newPath.$propName", errors)
                                 }
                             }
                         }
-                        "items", "additionalProperties", "additionalItems", "contains", "propertyNames",
-                        "if", "then", "else", "not",
+                        ITEMS, ADDITIONAL_PROPERTIES, ADDITIONAL_ITEMS, CONTAINS, PROPERTY_NAMES,
+                        IF, THEN, ELSE, NOT,
                         -> {
                             validateSchemaStructure(value, newPath, errors)
                         }
-                        "allOf", "anyOf", "oneOf", "prefixItems" -> {
+                        ALL_OF, ANY_OF, ONE_OF, PREFIX_ITEMS -> {
                             if (value is JsonArray) {
                                 value.forEachIndexed { index, subSchema ->
                                     validateSchemaStructure(subSchema, "$newPath[$index]", errors)
