@@ -46,6 +46,7 @@ Test coverage and results:
 In-depth technical explanations:
 
 - **[GRAPHEME_CLUSTER_ISSUE.md](GRAPHEME_CLUSTER_ISSUE.md)** - Unicode grapheme cluster issue explained
+- **[STACK_OVERFLOW_RISK_ANALYSIS.md](STACK_OVERFLOW_RISK_ANALYSIS.md)** - Recursion depth and stack overflow risk analysis
 - **[100_PERCENT_COVERAGE_PLAN.md](100_PERCENT_COVERAGE_PLAN.md)** - Plan for 100% test coverage
 - **[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)** - Current implementation status
 
