@@ -485,5 +485,5 @@ This should be fixed before production deployment, especially if:
 **Risk Rating: 7.5/10** (High Risk, Needs Immediate Attention)
 
 *Analysis Date: 2025-10-13*
-*Validator Version: 1.0.0-SNAPSHOT*
+*Validator Version: 0.0.1-SNAPSHOT*
 

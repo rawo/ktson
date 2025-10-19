@@ -172,6 +172,6 @@ To run performance tests on demand:
 ---
 
 *Tests performed on: 2025-10-13*
-*Validator Version: 1.0.0-SNAPSHOT*
+*Validator Version: 0.0.1-SNAPSHOT*
 *Performance tests run on demand only (excluded from default test suite)*
 
