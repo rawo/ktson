@@ -284,16 +284,16 @@ class JsonValidator(
             if (doubleValue != null) {
                 // If it's a whole number (no fractional part), it's an integer
                 if (doubleValue == kotlin.math.floor(doubleValue) && doubleValue.isFinite()) {
-                    "integer"
+                    TYPE_INTEGER
                 } else {
-                    "number"
+                    TYPE_NUMBER
                 }
             } else {
                 // Fallback to string parsing
                 if (content.contains('.') || content.contains('e', ignoreCase = true)) {
-                    "number"
+                    TYPE_NUMBER
                 } else {
-                    "integer"
+                    TYPE_INTEGER
                 }
             }
         }
@@ -462,7 +462,7 @@ class JsonValidator(
         rootSchema: JsonElement,
     ) {
         // Prefix items (2020-12)
-        val hasPrefixItems = schema.containsKey("prefixItems")
+        val hasPrefixItems = schema.containsKey(PREFIX_ITEMS)
 
         if (hasPrefixItems) {
             schema[PREFIX_ITEMS]?.jsonArray?.let { prefixItems ->
@@ -506,7 +506,7 @@ class JsonValidator(
         }
 
         // Additional items (for tuple validation)
-        if (schema.containsKey("items") && schema[ITEMS] is JsonArray) {
+        if (schema.containsKey(ITEMS) && schema[ITEMS] is JsonArray) {
             val itemsCount = (schema[ITEMS] as JsonArray).size
             schema[ADDITIONAL_ITEMS]?.let { additionalItemsSchema ->
                 for (index in itemsCount until instance.size) {
@@ -562,7 +562,7 @@ class JsonValidator(
                         ValidationError(
                             path,
                             "Array contains ${matchingIndices.size} matching items, minimum is $minContains",
-                            if (schema.containsKey("minContains")) "minContains" else "contains",
+                            if (schema.containsKey(MIN_CONTAINS)) MIN_CONTAINS else CONTAINS,
                         ),
                     )
                 }
@@ -818,7 +818,7 @@ class JsonValidator(
         }
 
         if (!anyValid) {
-            errors.add(ValidationError(path, "Instance does not match any of the schemas", "anyOf"))
+            errors.add(ValidationError(path, "Instance does not match any of the schemas", ANY_OF))
         }
     }
 
@@ -840,9 +840,9 @@ class JsonValidator(
         }
 
         when (validCount) {
-            0 -> errors.add(ValidationError(path, "Instance does not match any of the oneOf schemas", "oneOf"))
+            0 -> errors.add(ValidationError(path, "Instance does not match any of the oneOf schemas", ONE_OF))
             1 -> {} // Valid
-            else -> errors.add(ValidationError(path, "Instance matches more than one oneOf schema", "oneOf"))
+            else -> errors.add(ValidationError(path, "Instance matches more than one oneOf schema", ONE_OF))
         }
     }
 
@@ -861,7 +861,7 @@ class JsonValidator(
         validateElement(instance, schema, path, tempErrors, version, rootSchema)
 
         if (tempErrors.isEmpty()) {
-            errors.add(ValidationError(path, "Instance matches the not schema but should not", "not"))
+            errors.add(ValidationError(path, "Instance matches the not schema but should not", NOT))
         }
     }
 
