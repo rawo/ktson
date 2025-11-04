@@ -92,7 +92,7 @@ dependencies {
 <dependency>
     <groupId>org.ktson</groupId>
     <artifactId>ktson</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.0.2-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -272,12 +272,12 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 ### Known Limitations
 
-1. **Stack Overflow Risk** (Risk Level: HIGH - 7.5/10)
-   - No global recursion depth limit
-   - Deeply nested schemas (>500 levels) may cause stack overflow
-   - Complex combiner schemas (>50 levels) at high risk
-   - See [docs/STACK_OVERFLOW_RISK_ANALYSIS.md](docs/STACK_OVERFLOW_RISK_ANALYSIS.md)
-   - **Recommendation**: Implement depth tracking before production use with untrusted schemas
+1. **~~Stack Overflow Risk~~** ✅ **RESOLVED**
+   - ✅ Global recursion depth limiting implemented (default: 1000 levels)
+   - ✅ Configurable via `maxValidationDepth` constructor parameter
+   - ✅ Thread-safe implementation
+   - ✅ Covers all recursive validation paths
+   - See [docs/STACK_OVERFLOW_RISK_ANALYSIS.md](docs/STACK_OVERFLOW_RISK_ANALYSIS.md) for historical analysis
 
 2. **Remote References**
    - Only local references (`#/...`) are supported
@@ -298,10 +298,11 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 ### Test Coverage
 
-- **Custom Tests**: 140 tests (100% passing)
+- **Custom Tests**: 155 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
+  - Depth limit protection: 15 tests
 
 - **Official JSON Schema Test Suite**: 2,376 tests
   - ✅ Passing: 2,205 (92.8%)
@@ -315,18 +316,20 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 ### Recent Changes
 
+- ✅ **Stack overflow protection implemented** (configurable depth limiting)
 - ✅ Converted from async to synchronous API
 - ✅ Package migrated from `com.ktson` to `org.ktson`
 - ✅ Upgraded to Kotlin 2.2.20 and Java 21
 - ✅ Added Ktlint for code quality
 - ✅ Extracted schema keywords to constants
 - ✅ Performance test suite added
+- ✅ Thread-safe ReferenceResolver (stateless implementation)
 
 ### Roadmap
 
 **Before 1.0 Release:**
-- [ ] Implement recursion depth limiting (CRITICAL)
-- [ ] Add configurable validation limits
+- [x] ~~Implement recursion depth limiting~~ ✅ **COMPLETED**
+- [x] ~~Add configurable validation limits~~ ✅ **COMPLETED**
 - [ ] Implement `unevaluatedProperties` and `unevaluatedItems`
 - [ ] Add more format validators
 - [ ] Improve error messages

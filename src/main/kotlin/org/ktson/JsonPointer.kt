@@ -73,12 +73,9 @@ object JsonPointer {
 /**
  * Reference resolver for JSON Schema
  * Handles $ref, $recursiveRef, $dynamicRef
+ * Thread-safe and stateless implementation
  */
 class ReferenceResolver {
-    private val schemaCache = mutableMapOf<String, JsonElement>()
-    private val recursionDepth = mutableMapOf<String, Int>()
-    private val maxRecursionDepth = 100
-
     /**
      * Resolve a $ref reference
      *
@@ -87,37 +84,20 @@ class ReferenceResolver {
      * @param currentSchema The current schema context
      * @return The resolved schema, or null if not found
      */
-    fun resolveRef(ref: String, rootSchema: JsonElement, currentSchema: JsonElement = rootSchema): JsonElement? {
-        // Check recursion depth
-        val depth = recursionDepth.getOrDefault(ref, 0)
-        if (depth >= maxRecursionDepth) {
-            return null // Infinite recursion detected
-        }
-
-        recursionDepth[ref] = depth + 1
-
-        try {
-            return when {
-                // Local reference (#/...)
-                ref.startsWith("#/") || ref.startsWith("#") -> {
-                    JsonPointer.resolve(rootSchema, ref)
-                }
-                // HTTP/HTTPS reference (not supported in MVP)
-                ref.startsWith("http://") || ref.startsWith("https://") -> {
-                    // Would need to fetch remote schema
-                    null
-                }
-                // Relative reference
-                else -> {
-                    // For now, treat as local reference
-                    JsonPointer.resolve(rootSchema, "#/$ref")
-                }
+    fun resolveRef(ref: String, rootSchema: JsonElement, currentSchema: JsonElement = rootSchema): JsonElement? = when {
+            // Local reference (#/...)
+            ref.startsWith("#/") || ref.startsWith("#") -> {
+                JsonPointer.resolve(rootSchema, ref)
             }
-        } finally {
-            recursionDepth[ref] = recursionDepth[ref]!! - 1
-            if (recursionDepth[ref]!! == 0) {
-                recursionDepth.remove(ref)
+            // HTTP/HTTPS reference (not supported)
+            ref.startsWith("http://") || ref.startsWith("https://") -> {
+                // Would need to fetch remote schema
+                null
+            }
+            // Relative reference
+            else -> {
+                // For now, treat as local reference
+                JsonPointer.resolve(rootSchema, "#/$ref")
             }
         }
-    }
 }
