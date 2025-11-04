@@ -6,6 +6,7 @@ package org.ktson
  */
 object SchemaKeywords {
     // Schema reference keywords
+    const val ID = "\$id"
     const val REF = "\$ref"
     const val RECURSIVE_REF = "\$recursiveRef"
     const val DYNAMIC_REF = "\$dynamicRef"
