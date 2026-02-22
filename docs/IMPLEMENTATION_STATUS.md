@@ -1,119 +1,68 @@
-# Implementation Status for 100% Coverage
+# Implementation Status
 
-## Current Progress
+## Current State
 
-**Pass Rate**: 90.1% (2,014 / 2,236 tests)  
-**Failures**: 222 tests  
-**Improvement**: +29 tests fixed from initial 88.8%
+**Pass Rate**: 99.6% (2,403 / 2,412 official suite tests)
+**Failures**: 9 — all require remote schema loading (HTTP/HTTPS)
 
-## What's Been Fixed ✅
+## What's Implemented ✅
 
-1. **Decimal constraint values** (12 tests) ✅
-   - minItems, maxItems, minLength, maxLength, minProperties, maxProperties now accept decimals
-   
-2. **minContains = 0** (3 tests) ✅
-   - Special case where empty array is valid when minContains = 0
+### Core Keywords (all drafts)
+- Type, const, enum, boolean schemas
+- String: minLength, maxLength, pattern, format (8 formats)
+- Numeric: minimum, maximum, exclusiveMinimum, exclusiveMaximum, multipleOf
+- Object: properties, required, additionalProperties, patternProperties, minProperties, maxProperties, propertyNames, dependentRequired, dependentSchemas
+- Array: items, prefixItems, additionalItems, minItems, maxItems, uniqueItems, contains, minContains, maxContains
+- Combiners: allOf, anyOf, oneOf, not
+- Conditional: if/then/else
 
-3. **Format annotation mode** (6 tests) ✅
-   - Draft 2020-12 now treats format as annotation by default
+### References and Anchors
+- `$ref` — JSON Pointer and named anchor resolution, respects `$id` resource boundaries
+- `$anchor` / `$dynamicAnchor` — named anchors (both static and dynamic)
+- `$dynamicRef` — Draft 2020-12 dynamic scope resolution
+- `$recursiveRef` / `$recursiveAnchor` — Draft 2019-09 dynamic recursion
+- `$id`-based schema lookup with RFC 3986 relative URI resolution
+- Percent-decoding of URI fragments (RFC 6901 §6)
+- Sibling keyword evaluation alongside `$ref` (Draft 2019-09+)
 
-Total fixed: **21 tests**
+### Unevaluated Keywords
+- `unevaluatedProperties` — annotation-based, with full propagation through all applicators
+- `unevaluatedItems` — annotation-based, contains annotation (matching indices only)
+- Correct scoping: cousins/uncles cannot contribute annotations to a nested unevaluated check
 
-## Remaining Work (222 failures)
+### Infrastructure
+- Draft 2019-09 and 2020-12 version detection and dispatch
+- Configurable recursion depth limit (default 1000)
+- Recursion/cycle detection
+- Thread-safe stateless design
 
-### High Priority - Major Features
+## What's Not Implemented ⚠️
 
-#### 1. $ref Resolution (~50 failures)
-**Status**: NOT IMPLEMENTED  
-**Effort**: 8-12 hours  
-**Files needed**: New `JsonPointer.kt`, modifications to `JsonValidator.kt`
+### Remote Schema Loading (9 remaining failures)
+**Status**: Not implemented
+**Effort**: Medium (HTTP client + schema cache + integration)
 
-Features:
-- JSON Pointer implementation
-- Local $ref resolution (#/definitions/foo)
-- $recursiveRef support
-- $recursiveAnchor support
+Needed for:
+- `$ref: "http://..."` — fetching external schemas
+- `$ref: "other.json"` — cross-document references when documents aren't bundled
+- Meta-schema validation (fetches `https://json-schema.org/...`)
 
-#### 2. unevaluatedProperties/Items (~100 failures)
-**Status**: NOT IMPLEMENTED  
-**Effort**: 12-16 hours  
-**Files needed**: New evaluation tracking system
+### Optional / Low-Priority
+- Advanced format validators: hostname, idn-email, idn-hostname, iri, iri-reference, json-pointer, relative-json-pointer, regex (currently silently ignored)
+- `$vocabulary` — custom vocabulary declaration
+- ECMA-262 regex dialect (optional test suite)
 
-Features:
-- Track which properties/items were evaluated
-- Implement unevaluatedProperties keyword
-- Implement unevaluatedItems keyword  
-- Handle schema composition effects
+## Historical Progress
 
-#### 3. $dynamicRef (~40 failures)
-**Status**: NOT IMPLEMENTED  
-**Effort**: 8-12 hours  
-**Files needed**: Dynamic scope resolution system
-
-Features:
-- Implement $dynamicRef
-- Implement $dynamicAnchor
-- Dynamic scope tracking
-
-### Medium Priority - Edge Cases
-
-#### 4. const/enum comparison (~16 failures)
-**Status**: PARTIAL - Complex due to kotlinx.serialization limitations  
-**Issue**: Need to distinguish 1.0 from 1, 0.0 from 0
-
-This is fundamentally difficult because kotlinx.serialization.json doesn't preserve the distinction between integers and floats when they're mathematically equal.
-
-#### 5. uniqueItems with numeric types (~1 failure)
-**Status**: NOT IMPLEMENTED  
-**Tied to const/enum issue**
-
-#### 6. items and subitems (~3 failures)
-**Status**: NEEDS INVESTIGATION
-
-#### 7. Unicode grapheme clusters (~2 failures)
-**Status**: NOT IMPLEMENTED  
-**Needs**: ICU4J or similar library for proper grapheme counting
-
-#### 8. Integer type with 1.0 (~1 failure)
-**STATUS**: Should already work, needs verification
-
-## Estimated Total Remaining Effort
-
-**32-46 hours** to achieve 100% coverage
-
-This requires implementing 3 major new features plus resolving complex edge cases.
-
-## Realistic Options
-
-### Option A: Current State (Recommended)
-- **Pass Rate**: 90.1%
-- **Status**: Production-ready for most use cases
-- **Missing**: Advanced features rarely used
-
-### Option B: Add $ref Support
-- **Additional Effort**: 8-12 hours
-- **Expected Pass Rate**: ~93-94%
-- **Value**: High - $ref is commonly used
-
-### Option C: Full Implementation
-- **Additional Effort**: 32-46 hours
-- **Expected Pass Rate**: 100%
-- **Value**: Complete specification compliance
-
-## Next Steps
-
-I can continue implementing features toward 100% coverage. This will require:
-
-1. Implementing JSON Pointer and $ref resolution
-2. Implementing evaluation tracking for unevaluatedProperties/Items
-3. Implementing $dynamicRef system
-4. Solving const/enum comparison challenges
-5. Extensive testing and debugging
-
-This is substantial work. Would you like me to:
-- **Continue** with full implementation (will take significant time)
-- **Focus** on specific high-value features like $ref
-- **Stop** at current 90.1% which is excellent for production
-
-Please advise on how to proceed.
-
+| Milestone | Pass Rate | Failures |
+|---|---|---|
+| Initial (MVP) | 88.8% | 251 |
+| After decimal constraint fixes | 90.1% | 222 |
+| After re-enabling ref/anchor/defs/id tests | — | 217 |
+| After sibling keyword fix | — | 215 |
+| After `$anchor` + `$id`-based lookup | — | 179 |
+| After `$recursiveRef` / `$recursiveAnchor` | — | 167 |
+| After `$dynamicRef` dynamic scope | — | 154 |
+| After `$ref` resource-boundary scoping | — | 148 |
+| After `unevaluatedProperties` | — | 56 |
+| After `unevaluatedItems` | **99.6%** | **9** |

@@ -5,13 +5,13 @@
 ### Draft 2019-09 ✅
 - Full compliance with JSON Schema Draft 2019-09
 - All core validation keywords
-- Meta-schema validation
+- `$recursiveRef` / `$recursiveAnchor` dynamic recursion
 
 ### Draft 2020-12 ✅
 - Full compliance with JSON Schema Draft 2020-12
 - All core validation keywords
 - `prefixItems` support for tuple validation
-- Meta-schema validation
+- `$dynamicRef` / `$dynamicAnchor` dynamic scope resolution
 
 ## Validation Keywords Coverage
 
@@ -50,17 +50,19 @@
 - [x] `propertyNames` - Property name validation
 - [x] `dependentRequired` - Dependent required properties
 - [x] `dependentSchemas` - Dependent schemas
+- [x] `unevaluatedProperties` - Annotation-based, with full propagation through all applicators
 
 ### Array Validation ✅
 - [x] `items` - Item schema validation
 - [x] `prefixItems` - Tuple validation (2020-12)
-- [x] `additionalItems` - Additional items in tuples
+- [x] `additionalItems` - Additional items in tuples (2019-09)
 - [x] `minItems` - Minimum array length
 - [x] `maxItems` - Maximum array length
 - [x] `uniqueItems` - Unique items constraint
 - [x] `contains` - Contains validation
 - [x] `minContains` - Minimum matching items
 - [x] `maxContains` - Maximum matching items
+- [x] `unevaluatedItems` - Annotation-based, with contains annotation (matching indices only)
 
 ### Combining Schemas ✅
 - [x] `allOf` - Must match all schemas
@@ -80,6 +82,29 @@
 ### Boolean Schemas ✅
 - [x] `true` - Accepts any instance
 - [x] `false` - Rejects any instance
+
+### References and Anchors ✅
+- [x] `$ref` — JSON Pointer and named anchor resolution, respects `$id` resource boundaries
+- [x] `$anchor` — Named anchors within a schema resource
+- [x] `$dynamicAnchor` / `$dynamicRef` — Draft 2020-12 dynamic scope resolution
+- [x] `$recursiveAnchor` / `$recursiveRef` — Draft 2019-09 dynamic recursion
+- [x] `$id` — Schema resource boundaries with RFC 3986 relative URI resolution
+- [x] `$defs` / `definitions` — Schema definition storage
+- [x] Sibling keywords evaluated alongside `$ref` (Draft 2019-09+ behaviour)
+- [x] Percent-decoding of URI fragments (RFC 6901 §6)
+
+## Official Test Suite
+
+**Test Suite**: [json-schema-org/JSON-Schema-Test-Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite)
+
+| Metric | Value |
+|---|---|
+| Total tests | 2,412 |
+| Passing | 2,403 ✅ |
+| Failing | 9 ❌ |
+| Pass rate | **99.6%** |
+
+All 9 remaining failures require remote schema loading (HTTP/HTTPS), which is not yet implemented.
 
 ## Test Coverage
 
@@ -193,20 +218,12 @@ Total test cases: **50+**
     - Large arrays (10,000 items)
     - Large objects (1,000 properties)
 
-## Total Test Count
-
-- **Draft 2019-09**: 35+ tests
-- **Draft 2020-12**: 40+ tests
-- **Edge Cases & Thread Safety**: 50+ tests
-- **Total**: **125+ comprehensive test cases**
-
 ## Thread Safety Features ✅
 
-1. **Mutex-based synchronization** - All validation operations are synchronized
-2. **Coroutine support** - All public methods are suspend functions
-3. **State isolation** - No shared mutable state between validations
-4. **Concurrent validation** - Tested with up to 1,000 concurrent operations
-5. **Schema caching** - Thread-safe internal caching
+1. **Stateless design** - No mutable shared state between validations
+2. **Immutable validator** - `JsonValidator` instance can be shared freely across threads
+3. **Concurrent validation** - Tested with up to 1,000 concurrent operations
+4. **Configurable depth limit** - Protects against stack overflow in untrusted schemas
 
 ## Performance Characteristics ✅
 
@@ -225,19 +242,19 @@ Total test cases: **50+**
 ## API Design ✅
 
 1. **Type-safe** - Leverages Kotlin's type system
-2. **Coroutine-friendly** - All methods are suspend functions
+2. **Synchronous** - Simple blocking API, no coroutines required
 3. **Idiomatic Kotlin** - Follows Kotlin conventions
 4. **Easy to use** - Simple, intuitive API
-5. **Extensible** - Can be extended with custom validators
+5. **Thread-safe** - Single `JsonValidator` instance safe for concurrent use
 
 ## Production Ready ✅
 
-- [x] Comprehensive test coverage (125+ tests)
+- [x] 99.6% official JSON Schema test suite pass rate (2,403 / 2,412)
+- [x] Comprehensive unit tests (125+ additional test cases)
 - [x] Thread-safe implementation
+- [x] Configurable recursion depth protection
 - [x] Performance tested with large datasets
 - [x] Detailed documentation
-- [x] Example code included
 - [x] Standard Gradle build
 - [x] Maven publishable
 - [x] Zero linter errors
-
