@@ -1,13 +1,14 @@
 package org.ktson
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.shouldBe
-import io.kotest.assertions.throwables.shouldThrow
 import java.net.URISyntaxException
 
-class UriResolverTest : DescribeSpec({
+class UriResolverTest :
+    DescribeSpec({
 
 	describe("isAbsoluteUri") {
 		it("detects http and https as absolute") {
@@ -144,5 +145,3 @@ class UriResolverTest : DescribeSpec({
 		}
 	}
 })
-
-

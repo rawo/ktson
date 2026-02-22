@@ -169,9 +169,7 @@ object UriResolver {
      * @param uri The URI to process
      * @return The URI without fragment
      */
-    fun removeFragment(uri: String): String {
-        return normalizeUri(uri, removeFragment = true)
-    }
+    fun removeFragment(uri: String): String = normalizeUri(uri, removeFragment = true)
 
     /**
      * Parses a URI into components

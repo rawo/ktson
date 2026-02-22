@@ -145,7 +145,8 @@ class JsonValidator(
 
         when (schemaElement) {
             is JsonObject -> {
-                // Check for $ref first
+                // $ref, $recursiveRef, $dynamicRef are evaluated alongside sibling keywords
+                // (Draft 2019-09+ removed the Draft 7 rule that $ref short-circuits siblings)
                 val ref = schemaElement[REF]?.jsonPrimitive?.contentOrNull
                 if (ref != null) {
                     val resolvedSchema = referenceResolver.resolveRef(ref, rootSchema, schemaElement)
@@ -154,7 +155,6 @@ class JsonValidator(
                     } else {
                         errors.add(ValidationError(path, "Could not resolve reference: $ref", REF))
                     }
-                    return
                 }
 
                 // Check for $recursiveRef (2019-09)
@@ -168,7 +168,6 @@ class JsonValidator(
                     } else {
                         errors.add(ValidationError(path, "Could not resolve recursive reference: $recursiveRef", RECURSIVE_REF))
                     }
-                    return
                 }
 
                 // Check for $dynamicRef (2020-12)
@@ -182,7 +181,6 @@ class JsonValidator(
                     } else {
                         errors.add(ValidationError(path, "Could not resolve dynamic reference: $dynamicRef", DYNAMIC_REF))
                     }
-                    return
                 }
 
                 validateAgainstObjectSchema(instance, schemaElement, path, errors, version, rootSchema, depth)

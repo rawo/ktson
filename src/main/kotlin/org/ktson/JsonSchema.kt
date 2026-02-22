@@ -61,7 +61,6 @@ data class JsonSchema(
 		/**
 		 * Extracts the $id value from a schema element if present.
 		 */
-		fun extractId(element: JsonElement): String? =
-			(element as? JsonObject)?.get(SchemaKeywords.ID)?.jsonPrimitive?.contentOrNull
+		fun extractId(element: JsonElement): String? = (element as? JsonObject)?.get(SchemaKeywords.ID)?.jsonPrimitive?.contentOrNull
     }
 }

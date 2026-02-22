@@ -74,11 +74,7 @@ private suspend fun DescribeSpecContainerScope.runTestsFromDirectory(directory: 
     val filesToSkip = setOf(
         "optional",
         "refRemote.json",
-        "ref.json",
         "vocabulary.json",
-        "id.json",
-        "anchor.json",
-        "defs.json",
         "infinite-loop-detection.json",
     )
 
