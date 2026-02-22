@@ -42,6 +42,10 @@ object SchemaKeywords {
     const val DEPENDENT_REQUIRED = "dependentRequired"
     const val DEPENDENT_SCHEMAS = "dependentSchemas"
 
+    // Unevaluated keywords (2019-09 and later)
+    const val UNEVALUATED_PROPERTIES = "unevaluatedProperties"
+    const val UNEVALUATED_ITEMS = "unevaluatedItems"
+
     // Array validation
     const val ITEMS = "items"
     const val PREFIX_ITEMS = "prefixItems"

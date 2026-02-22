@@ -59,6 +59,7 @@ import org.ktson.SchemaKeywords.TYPE_NUMBER
 import org.ktson.SchemaKeywords.TYPE_OBJECT
 import org.ktson.SchemaKeywords.TYPE_STRING
 import org.ktson.SchemaKeywords.TYPE_UNKNOWN
+import org.ktson.SchemaKeywords.UNEVALUATED_PROPERTIES
 import org.ktson.SchemaKeywords.UNIQUE_ITEMS
 
 /**
@@ -300,6 +301,25 @@ class JsonValidator(
                 // If validation failed, validate against "else"
                 schema[ELSE]?.let { elseSchema ->
                     validateElement(instance, elseSchema, path, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                }
+            }
+        }
+
+        // Unevaluated properties (2019-09 and later)
+        if (instance is JsonObject) {
+            schema[UNEVALUATED_PROPERTIES]?.let { unevalPropsSchema ->
+                val evaluated = collectEvaluatedProperties(instance, schema, path, version, rootSchema, depth, resourceRoot, dynamicScope)
+                instance.keys.forEach { propName ->
+                    if (propName !in evaluated) {
+                        val propPath = if (path.isEmpty()) propName else "$path.$propName"
+                        when {
+                            unevalPropsSchema is JsonPrimitive && unevalPropsSchema.booleanOrNull == false ->
+                                errors.add(ValidationError(path, "Unevaluated property '$propName' is not allowed", UNEVALUATED_PROPERTIES))
+                            unevalPropsSchema is JsonPrimitive && unevalPropsSchema.booleanOrNull == true -> {}
+                            else ->
+                                validateElement(instance[propName]!!, unevalPropsSchema, propPath, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                        }
+                    }
                 }
             }
         }
@@ -936,6 +956,189 @@ class JsonValidator(
             1 -> {} // Valid
             else -> errors.add(ValidationError(path, "Instance matches more than one oneOf schema", ONE_OF))
         }
+    }
+
+    /**
+     * Collects the set of property names "evaluated" by a schema and its applicators.
+     * Used to determine which properties are subject to unevaluatedProperties.
+     * Annotations flow from: properties, patternProperties, additionalProperties,
+     * allOf (all branches), anyOf/oneOf (valid branches only), if/then/else, $ref, $dynamicRef.
+     * Annotations do NOT flow from: not, failed sub-schemas.
+     */
+    private fun collectEvaluatedProperties(
+        instance: JsonObject,
+        schemaElement: JsonElement,
+        path: String,
+        version: SchemaVersion,
+        rootSchema: JsonElement,
+        depth: Int,
+        resourceRoot: JsonElement,
+        dynamicScope: List<JsonElement>,
+    ): Set<String> {
+        if (schemaElement is JsonPrimitive) {
+            // Boolean schemas have no property-evaluating keywords — they evaluate nothing
+            return emptySet()
+        }
+        if (schemaElement !is JsonObject) return emptySet()
+
+        val effectiveResourceRoot =
+            if (schemaElement.containsKey(SchemaKeywords.ID)) schemaElement else resourceRoot
+        val effectiveScope =
+            if (schemaElement.containsKey(SchemaKeywords.ID)) dynamicScope + schemaElement else dynamicScope
+
+        val evaluated = mutableSetOf<String>()
+
+        // properties: all instance properties that appear in the properties schema
+        schemaElement[PROPERTIES]?.jsonObject?.let { props ->
+            evaluated.addAll(instance.keys.filter { it in props })
+        }
+
+        // patternProperties: all instance properties matching any pattern
+        schemaElement[PATTERN_PROPERTIES]?.jsonObject?.let { patternProps ->
+            patternProps.keys.forEach { pattern ->
+                evaluated.addAll(instance.keys.filter { Regex(pattern).containsMatchIn(it) })
+            }
+        }
+
+        // additionalProperties: evaluates properties not in properties/patternProperties (unless false)
+        schemaElement[ADDITIONAL_PROPERTIES]?.let { addlPropsSchema ->
+            val isFalse = addlPropsSchema is JsonPrimitive && addlPropsSchema.booleanOrNull == false
+            if (!isFalse) {
+                val definedProps = schemaElement[PROPERTIES]?.jsonObject?.keys ?: emptySet()
+                val patternPropPatterns = schemaElement[PATTERN_PROPERTIES]?.jsonObject?.keys ?: emptySet()
+                evaluated.addAll(instance.keys.filter { it !in definedProps && !matchesAnyPattern(it, patternPropPatterns) })
+            }
+        }
+
+        // $ref — resolve and collect from the referenced schema
+        schemaElement[REF]?.jsonPrimitive?.contentOrNull?.let { ref ->
+            val refHashIndex = ref.indexOf('#')
+            val refUriPart = if (refHashIndex >= 0) ref.substring(0, refHashIndex) else ref
+            val resolved =
+                if (refUriPart.isEmpty()) {
+                    referenceResolver.resolveRef(ref, effectiveResourceRoot, schemaElement)
+                } else {
+                    referenceResolver.resolveRef(ref, rootSchema, schemaElement)
+                }
+            resolved?.let {
+                evaluated.addAll(collectEvaluatedProperties(instance, it, path, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope))
+            }
+        }
+
+        // $recursiveRef — resolve with dynamic scope, collect from target
+        schemaElement[RECURSIVE_REF]?.jsonPrimitive?.contentOrNull?.let { recursiveRef ->
+            val resolved = referenceResolver.resolveRef(recursiveRef, effectiveResourceRoot, schemaElement)
+            if (resolved != null) {
+                val target =
+                    if (resolved is JsonObject && resolved[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true) {
+                        effectiveScope.firstOrNull { s ->
+                            s is JsonObject && s[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true
+                        } ?: resolved
+                    } else {
+                        resolved
+                    }
+                evaluated.addAll(collectEvaluatedProperties(instance, target, path, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope))
+            }
+        }
+
+        // $dynamicRef — resolve with dynamic anchor scope, collect from target
+        schemaElement[SchemaKeywords.DYNAMIC_REF]?.jsonPrimitive?.contentOrNull?.let { dynamicRef ->
+            val hashIndex = dynamicRef.indexOf('#')
+            val uriPart = if (hashIndex >= 0) dynamicRef.substring(0, hashIndex) else dynamicRef
+            val fragment = if (hashIndex >= 0) dynamicRef.substring(hashIndex + 1) else ""
+            val isPlainAnchorFragment = fragment.isNotEmpty() && !fragment.startsWith("/")
+            val initialTarget =
+                if (uriPart.isEmpty()) {
+                    referenceResolver.resolveRef(dynamicRef, effectiveResourceRoot, schemaElement)
+                } else {
+                    referenceResolver.resolveRef(dynamicRef, rootSchema, schemaElement)
+                }
+            if (initialTarget != null) {
+                val target =
+                    if (isPlainAnchorFragment && initialTarget is JsonObject &&
+                        initialTarget[DYNAMIC_ANCHOR]?.jsonPrimitive?.contentOrNull == fragment
+                    ) {
+                        effectiveScope.firstNotNullOfOrNull { scopeSchema ->
+                            referenceResolver.findDynamicAnchorInResource(scopeSchema, fragment)
+                        } ?: initialTarget
+                    } else {
+                        initialTarget
+                    }
+                evaluated.addAll(collectEvaluatedProperties(instance, target, path, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope))
+            }
+        }
+
+        // allOf: annotations from all branches (they must all be valid for the schema to be valid)
+        schemaElement[ALL_OF]?.jsonArray?.forEach { subSchema ->
+            evaluated.addAll(collectEvaluatedProperties(instance, subSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+        }
+
+        // anyOf: annotations only from valid branches
+        schemaElement[ANY_OF]?.jsonArray?.forEach { subSchema ->
+            val tempErrors = mutableListOf<ValidationError>()
+            validateElement(instance, subSchema, path, tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+            if (tempErrors.isEmpty()) {
+                evaluated.addAll(collectEvaluatedProperties(instance, subSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+            }
+        }
+
+        // oneOf: annotations only from the single valid branch
+        schemaElement[ONE_OF]?.jsonArray?.let { schemas ->
+            val validBranch =
+                schemas.firstOrNull { subSchema ->
+                    val tempErrors = mutableListOf<ValidationError>()
+                    validateElement(instance, subSchema, path, tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                    tempErrors.isEmpty()
+                }
+            validBranch?.let {
+                evaluated.addAll(collectEvaluatedProperties(instance, it, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+            }
+        }
+
+        // if/then/else: when if passes, collect from the if schema AND then; when if fails, collect from else
+        schemaElement[IF]?.let { ifSchema ->
+            val ifErrors = mutableListOf<ValidationError>()
+            validateElement(instance, ifSchema, path, ifErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+            if (ifErrors.isEmpty()) {
+                // if passed: its own property annotations also contribute
+                evaluated.addAll(collectEvaluatedProperties(instance, ifSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                schemaElement[THEN]?.let { thenSchema ->
+                    evaluated.addAll(collectEvaluatedProperties(instance, thenSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                }
+            } else {
+                schemaElement[ELSE]?.let { elseSchema ->
+                    evaluated.addAll(collectEvaluatedProperties(instance, elseSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                }
+            }
+        }
+
+        // dependentSchemas: collect from applicable sub-schemas
+        schemaElement[DEPENDENT_SCHEMAS]?.jsonObject?.let { depSchemas ->
+            depSchemas.forEach { (propName, depSchema) ->
+                if (propName in instance) {
+                    evaluated.addAll(collectEvaluatedProperties(instance, depSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                }
+            }
+        }
+
+        // unevaluatedProperties in a sub-schema is itself an annotation source:
+        // properties it evaluates (passing true, or passing a sub-schema) are considered evaluated
+        schemaElement[UNEVALUATED_PROPERTIES]?.let { unevalPropsSchema ->
+            val yetUnevaluated = instance.keys.filter { it !in evaluated }
+            when {
+                unevalPropsSchema is JsonPrimitive && unevalPropsSchema.booleanOrNull == true ->
+                    evaluated.addAll(yetUnevaluated)
+                unevalPropsSchema is JsonPrimitive && unevalPropsSchema.booleanOrNull == false -> {}
+                else ->
+                    yetUnevaluated.forEach { propName ->
+                        val tempErrors = mutableListOf<ValidationError>()
+                        validateElement(instance[propName]!!, unevalPropsSchema, if (path.isEmpty()) propName else "$path.$propName", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                        if (tempErrors.isEmpty()) evaluated.add(propName)
+                    }
+            }
+        }
+
+        return evaluated
     }
 
     /**
