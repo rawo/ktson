@@ -144,7 +144,7 @@ class ReferenceResolver {
     }
 
     /**
-     * Search for a schema with a matching $anchor within a single schema resource.
+     * Search for a schema with a matching $anchor or $dynamicAnchor within a single schema resource.
      * Stops at nested $id boundaries — those are separate resources and are not searched.
      */
     private fun findAnchorInResource(
@@ -154,11 +154,35 @@ class ReferenceResolver {
     ): JsonElement? {
         if (schema !is JsonObject) return null
         if (!isRoot && schema.containsKey(SchemaKeywords.ID)) return null
-        if (schema[SchemaKeywords.ANCHOR]?.jsonPrimitive?.contentOrNull == anchorName) return schema
+        val schemaAnchor = schema[SchemaKeywords.ANCHOR]?.jsonPrimitive?.contentOrNull
+        val schemaDynamicAnchor = schema[SchemaKeywords.DYNAMIC_ANCHOR]?.jsonPrimitive?.contentOrNull
+        if (schemaAnchor == anchorName || schemaDynamicAnchor == anchorName) return schema
         return schema.values.firstNotNullOfOrNull { value ->
             when (value) {
                 is JsonObject -> findAnchorInResource(value, anchorName, false)
                 is JsonArray -> value.firstNotNullOfOrNull { findAnchorInResource(it, anchorName, false) }
+                else -> null
+            }
+        }
+    }
+
+    /**
+     * Search for a schema with a matching $dynamicAnchor within a single schema resource.
+     * Only matches $dynamicAnchor (not $anchor) — used for $dynamicRef dynamic scope walking.
+     * Stops at nested $id boundaries — those are separate resources and are not searched.
+     */
+    fun findDynamicAnchorInResource(
+        schema: JsonElement,
+        anchorName: String,
+        isRoot: Boolean = true,
+    ): JsonElement? {
+        if (schema !is JsonObject) return null
+        if (!isRoot && schema.containsKey(SchemaKeywords.ID)) return null
+        if (schema[SchemaKeywords.DYNAMIC_ANCHOR]?.jsonPrimitive?.contentOrNull == anchorName) return schema
+        return schema.values.firstNotNullOfOrNull { value ->
+            when (value) {
+                is JsonObject -> findDynamicAnchorInResource(value, anchorName, false)
+                is JsonArray -> value.firstNotNullOfOrNull { findDynamicAnchorInResource(it, anchorName, false) }
                 else -> null
             }
         }

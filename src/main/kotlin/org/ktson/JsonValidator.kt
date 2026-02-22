@@ -9,6 +9,7 @@ import org.ktson.SchemaKeywords.CONST
 import org.ktson.SchemaKeywords.CONTAINS
 import org.ktson.SchemaKeywords.DEPENDENT_REQUIRED
 import org.ktson.SchemaKeywords.DEPENDENT_SCHEMAS
+import org.ktson.SchemaKeywords.DYNAMIC_ANCHOR
 import org.ktson.SchemaKeywords.DYNAMIC_REF
 import org.ktson.SchemaKeywords.ELSE
 import org.ktson.SchemaKeywords.ENUM
@@ -155,7 +156,16 @@ class JsonValidator(
                 // (Draft 2019-09+ removed the Draft 7 rule that $ref short-circuits siblings)
                 val ref = schemaElement[REF]?.jsonPrimitive?.contentOrNull
                 if (ref != null) {
-                    val resolvedSchema = referenceResolver.resolveRef(ref, rootSchema, schemaElement)
+                    val refHashIndex = ref.indexOf('#')
+                    val refUriPart = if (refHashIndex >= 0) ref.substring(0, refHashIndex) else ref
+                    // For local refs, resolve against effectiveResourceRoot (current $id boundary);
+                    // for URI-based refs, search the whole document
+                    val resolvedSchema =
+                        if (refUriPart.isEmpty()) {
+                            referenceResolver.resolveRef(ref, effectiveResourceRoot, schemaElement)
+                        } else {
+                            referenceResolver.resolveRef(ref, rootSchema, schemaElement)
+                        }
                     if (resolvedSchema != null) {
                         validateElement(instance, resolvedSchema, path, errors, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope)
                     } else {
@@ -185,11 +195,32 @@ class JsonValidator(
                 // Check for $dynamicRef (2020-12)
                 val dynamicRef = schemaElement[DYNAMIC_REF]?.jsonPrimitive?.contentOrNull
                 if (dynamicRef != null) {
-                    // For basic implementation, treat $dynamicRef like $ref
-                    // A full implementation would need to track $dynamicAnchor and dynamic scope
-                    val resolvedSchema = referenceResolver.resolveRef(dynamicRef, rootSchema, schemaElement)
-                    if (resolvedSchema != null) {
-                        validateElement(instance, resolvedSchema, path, errors, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope)
+                    val hashIndex = dynamicRef.indexOf('#')
+                    val uriPart = if (hashIndex >= 0) dynamicRef.substring(0, hashIndex) else dynamicRef
+                    val fragment = if (hashIndex >= 0) dynamicRef.substring(hashIndex + 1) else ""
+                    val isPlainAnchorFragment = fragment.isNotEmpty() && !fragment.startsWith("/")
+
+                    // For local refs resolve against effectiveResourceRoot; for URI-based search whole document
+                    val initialTarget =
+                        if (uriPart.isEmpty()) {
+                            referenceResolver.resolveRef(dynamicRef, effectiveResourceRoot, schemaElement)
+                        } else {
+                            referenceResolver.resolveRef(dynamicRef, rootSchema, schemaElement)
+                        }
+
+                    if (initialTarget != null) {
+                        val target =
+                            if (isPlainAnchorFragment && initialTarget is JsonObject &&
+                                initialTarget[DYNAMIC_ANCHOR]?.jsonPrimitive?.contentOrNull == fragment
+                            ) {
+                                // Dynamic resolution: walk scope from outermost, find first resource with $dynamicAnchor
+                                effectiveScope.firstNotNullOfOrNull { scopeSchema ->
+                                    referenceResolver.findDynamicAnchorInResource(scopeSchema, fragment)
+                                } ?: initialTarget
+                            } else {
+                                initialTarget
+                            }
+                        validateElement(instance, target, path, errors, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope)
                     } else {
                         errors.add(ValidationError(path, "Could not resolve dynamic reference: $dynamicRef", DYNAMIC_REF))
                     }
