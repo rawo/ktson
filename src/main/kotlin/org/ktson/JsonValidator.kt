@@ -110,7 +110,7 @@ class JsonValidator(
      */
     private fun validateInternal(instance: JsonElement, schema: JsonSchema, path: String): ValidationResult {
         val errors = mutableListOf<ValidationError>()
-        validateElement(instance, schema.schema, path, errors, schema.effectiveVersion, schema.schema, depth = 0)
+        validateElement(instance, schema.schema, path, errors, schema.effectiveVersion, schema.schema, depth = 0, resourceRoot = schema.schema, dynamicScope = emptyList())
 
         return if (errors.isEmpty()) {
             ValidationResult.Valid
@@ -130,6 +130,8 @@ class JsonValidator(
         version: SchemaVersion,
         rootSchema: JsonElement,
         depth: Int = 0,
+        resourceRoot: JsonElement = rootSchema,
+        dynamicScope: List<JsonElement> = emptyList(),
     ) {
         // Check depth limit to prevent stack overflow
         if (depth > maxValidationDepth) {
@@ -143,6 +145,10 @@ class JsonValidator(
             return
         }
 
+        // Update resource root and dynamic scope when entering a new schema resource (one with $id)
+        val effectiveResourceRoot = if (schemaElement is JsonObject && schemaElement.containsKey(SchemaKeywords.ID)) schemaElement else resourceRoot
+        val effectiveScope = if (schemaElement is JsonObject && schemaElement.containsKey(SchemaKeywords.ID)) dynamicScope + schemaElement else dynamicScope
+
         when (schemaElement) {
             is JsonObject -> {
                 // $ref, $recursiveRef, $dynamicRef are evaluated alongside sibling keywords
@@ -151,20 +157,26 @@ class JsonValidator(
                 if (ref != null) {
                     val resolvedSchema = referenceResolver.resolveRef(ref, rootSchema, schemaElement)
                     if (resolvedSchema != null) {
-                        validateElement(instance, resolvedSchema, path, errors, version, rootSchema, depth + 1)
+                        validateElement(instance, resolvedSchema, path, errors, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope)
                     } else {
                         errors.add(ValidationError(path, "Could not resolve reference: $ref", REF))
                     }
                 }
 
-                // Check for $recursiveRef (2019-09)
+                // Check for $recursiveRef (2019-09) — dynamic scoping behavior
                 val recursiveRef = schemaElement[RECURSIVE_REF]?.jsonPrimitive?.contentOrNull
                 if (recursiveRef != null) {
-                    // For basic implementation, treat $recursiveRef like $ref
-                    // A full implementation would need to track $recursiveAnchor and dynamic scope
-                    val resolvedSchema = referenceResolver.resolveRef(recursiveRef, rootSchema, schemaElement)
-                    if (resolvedSchema != null) {
-                        validateElement(instance, resolvedSchema, path, errors, version, rootSchema, depth + 1)
+                    val resolved = referenceResolver.resolveRef(recursiveRef, effectiveResourceRoot, schemaElement)
+                    if (resolved != null) {
+                        // If resolved schema has $recursiveAnchor: true, use outermost in dynamic scope with that flag
+                        val target = if (resolved is JsonObject && resolved[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true) {
+                            effectiveScope.firstOrNull { schema ->
+                                schema is JsonObject && schema[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true
+                            } ?: resolved
+                        } else {
+                            resolved
+                        }
+                        validateElement(instance, target, path, errors, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope)
                     } else {
                         errors.add(ValidationError(path, "Could not resolve recursive reference: $recursiveRef", RECURSIVE_REF))
                     }
@@ -177,13 +189,13 @@ class JsonValidator(
                     // A full implementation would need to track $dynamicAnchor and dynamic scope
                     val resolvedSchema = referenceResolver.resolveRef(dynamicRef, rootSchema, schemaElement)
                     if (resolvedSchema != null) {
-                        validateElement(instance, resolvedSchema, path, errors, version, rootSchema, depth + 1)
+                        validateElement(instance, resolvedSchema, path, errors, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope)
                     } else {
                         errors.add(ValidationError(path, "Could not resolve dynamic reference: $dynamicRef", DYNAMIC_REF))
                     }
                 }
 
-                validateAgainstObjectSchema(instance, schemaElement, path, errors, version, rootSchema, depth)
+                validateAgainstObjectSchema(instance, schemaElement, path, errors, version, rootSchema, depth, effectiveResourceRoot, effectiveScope)
             }
             is JsonPrimitive -> {
                 // Boolean schema
@@ -209,6 +221,8 @@ class JsonValidator(
         version: SchemaVersion,
         rootSchema: JsonElement,
         depth: Int,
+        resourceRoot: JsonElement,
+        dynamicScope: List<JsonElement>,
     ) {
         // Type validation
         schema[TYPE]?.let { typeSchema ->
@@ -230,31 +244,31 @@ class JsonValidator(
         }
 
         when (instance) {
-            is JsonObject -> validateObject(instance, schema, path, errors, version, rootSchema, depth)
-            is JsonArray -> validateArray(instance, schema, path, errors, version, rootSchema, depth)
+            is JsonObject -> validateObject(instance, schema, path, errors, version, rootSchema, depth, resourceRoot, dynamicScope)
+            is JsonArray -> validateArray(instance, schema, path, errors, version, rootSchema, depth, resourceRoot, dynamicScope)
             is JsonPrimitive -> validatePrimitive(instance, schema, path, errors, version)
         }
 
         // Combined schemas
-        schema[ALL_OF]?.jsonArray?.let { validateAllOf(instance, it, path, errors, version, rootSchema, depth) }
-        schema[ANY_OF]?.jsonArray?.let { validateAnyOf(instance, it, path, errors, version, rootSchema, depth) }
-        schema[ONE_OF]?.jsonArray?.let { validateOneOf(instance, it, path, errors, version, rootSchema, depth) }
-        schema[NOT]?.let { validateNot(instance, it, path, errors, version, rootSchema, depth) }
+        schema[ALL_OF]?.jsonArray?.let { validateAllOf(instance, it, path, errors, version, rootSchema, depth, resourceRoot, dynamicScope) }
+        schema[ANY_OF]?.jsonArray?.let { validateAnyOf(instance, it, path, errors, version, rootSchema, depth, resourceRoot, dynamicScope) }
+        schema[ONE_OF]?.jsonArray?.let { validateOneOf(instance, it, path, errors, version, rootSchema, depth, resourceRoot, dynamicScope) }
+        schema[NOT]?.let { validateNot(instance, it, path, errors, version, rootSchema, depth, resourceRoot, dynamicScope) }
 
         // Conditional schemas (2019-09 and later)
         schema[IF]?.let { ifSchema ->
             val ifErrors = mutableListOf<ValidationError>()
-            validateElement(instance, ifSchema, path, ifErrors, version, rootSchema, depth + 1)
+            validateElement(instance, ifSchema, path, ifErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
 
             if (ifErrors.isEmpty()) {
                 // If validation passed, validate against "then"
                 schema[THEN]?.let { thenSchema ->
-                    validateElement(instance, thenSchema, path, errors, version, rootSchema, depth + 1)
+                    validateElement(instance, thenSchema, path, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                 }
             } else {
                 // If validation failed, validate against "else"
                 schema[ELSE]?.let { elseSchema ->
-                    validateElement(instance, elseSchema, path, errors, version, rootSchema, depth + 1)
+                    validateElement(instance, elseSchema, path, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                 }
             }
         }
@@ -363,13 +377,15 @@ class JsonValidator(
         version: SchemaVersion,
         rootSchema: JsonElement,
         depth: Int,
+        resourceRoot: JsonElement,
+        dynamicScope: List<JsonElement>,
     ) {
         // Properties validation
         schema[PROPERTIES]?.jsonObject?.let { properties ->
             properties.forEach { (propName, propSchema) ->
                 instance[propName]?.let { propValue ->
                     val propPath = if (path.isEmpty()) propName else "$path.$propName"
-                    validateElement(propValue, propSchema, propPath, errors, version, rootSchema, depth + 1)
+                    validateElement(propValue, propSchema, propPath, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                 }
             }
         }
@@ -399,7 +415,7 @@ class JsonValidator(
                             }
                         }
                         else -> {
-                            validateElement(instance[propName]!!, additionalPropsSchema, propPath, errors, version, rootSchema, depth + 1)
+                            validateElement(instance[propName]!!, additionalPropsSchema, propPath, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                         }
                     }
                 }
@@ -412,7 +428,7 @@ class JsonValidator(
                 instance.keys.forEach { propName ->
                     if (Regex(pattern).containsMatchIn(propName)) {
                         val propPath = if (path.isEmpty()) propName else "$path.$propName"
-                        validateElement(instance[propName]!!, propSchema, propPath, errors, version, rootSchema, depth + 1)
+                        validateElement(instance[propName]!!, propSchema, propPath, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                     }
                 }
             }
@@ -437,7 +453,7 @@ class JsonValidator(
         schema[PROPERTY_NAMES]?.let { propNamesSchema ->
             instance.keys.forEach { propName ->
                 val propNameElement = JsonPrimitive(propName)
-                validateElement(propNameElement, propNamesSchema, "$path.<propertyName>", errors, version, rootSchema, depth + 1)
+                validateElement(propNameElement, propNamesSchema, "$path.<propertyName>", errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
             }
         }
 
@@ -459,7 +475,7 @@ class JsonValidator(
         schema[DEPENDENT_SCHEMAS]?.jsonObject?.let { depSchemas ->
             depSchemas.forEach { (propName, depSchema) ->
                 if (propName in instance) {
-                    validateElement(instance, depSchema, path, errors, version, rootSchema, depth + 1)
+                    validateElement(instance, depSchema, path, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                 }
             }
         }
@@ -476,6 +492,8 @@ class JsonValidator(
         version: SchemaVersion,
         rootSchema: JsonElement,
         depth: Int,
+        resourceRoot: JsonElement,
+        dynamicScope: List<JsonElement>,
     ) {
         // Prefix items (2020-12)
         val hasPrefixItems = schema.containsKey(PREFIX_ITEMS)
@@ -485,7 +503,7 @@ class JsonValidator(
                 prefixItems.forEachIndexed { index, itemSchema ->
                     if (index < instance.size) {
                         val itemPath = "$path[$index]"
-                        validateElement(instance[index], itemSchema, itemPath, errors, version, rootSchema, depth + 1)
+                        validateElement(instance[index], itemSchema, itemPath, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                     }
                 }
 
@@ -493,7 +511,7 @@ class JsonValidator(
                 schema[ITEMS]?.let { itemsSchema ->
                     for (index in prefixItems.size until instance.size) {
                         val itemPath = "$path[$index]"
-                        validateElement(instance[index], itemsSchema, itemPath, errors, version, rootSchema, depth + 1)
+                        validateElement(instance[index], itemsSchema, itemPath, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                     }
                 }
             }
@@ -505,7 +523,7 @@ class JsonValidator(
                         // Single schema for all items
                         instance.forEachIndexed { index, item ->
                             val itemPath = "$path[$index]"
-                            validateElement(item, itemsSchema, itemPath, errors, version, rootSchema, depth + 1)
+                            validateElement(item, itemsSchema, itemPath, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                         }
                     }
                     is JsonArray -> {
@@ -513,7 +531,7 @@ class JsonValidator(
                         itemsSchema.forEachIndexed { index, itemSchema ->
                             if (index < instance.size) {
                                 val itemPath = "$path[$index]"
-                                validateElement(instance[index], itemSchema, itemPath, errors, version, rootSchema, depth + 1)
+                                validateElement(instance[index], itemSchema, itemPath, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                             }
                         }
                     }
@@ -534,7 +552,7 @@ class JsonValidator(
                             }
                         }
                         else -> {
-                            validateElement(instance[index], additionalItemsSchema, itemPath, errors, version, rootSchema, depth + 1)
+                            validateElement(instance[index], additionalItemsSchema, itemPath, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                         }
                     }
                 }
@@ -546,7 +564,7 @@ class JsonValidator(
             val matchingIndices = mutableListOf<Int>()
             instance.forEachIndexed { index, item ->
                 val itemErrors = mutableListOf<ValidationError>()
-                validateElement(item, containsSchema, "$path[$index]", itemErrors, version, rootSchema, depth + 1)
+                validateElement(item, containsSchema, "$path[$index]", itemErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                 if (itemErrors.isEmpty()) {
                     matchingIndices.add(index)
                 }
@@ -811,9 +829,11 @@ class JsonValidator(
         version: SchemaVersion,
         rootSchema: JsonElement,
         depth: Int,
+        resourceRoot: JsonElement,
+        dynamicScope: List<JsonElement>,
     ) {
         schemas.forEach { schema ->
-            validateElement(instance, schema, path, errors, version, rootSchema, depth + 1)
+            validateElement(instance, schema, path, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
         }
     }
 
@@ -828,11 +848,13 @@ class JsonValidator(
         version: SchemaVersion,
         rootSchema: JsonElement,
         depth: Int,
+        resourceRoot: JsonElement,
+        dynamicScope: List<JsonElement>,
     ) {
         val allTempErrors = mutableListOf<ValidationError>()
         val anyValid = schemas.any { schema ->
             val tempErrors = mutableListOf<ValidationError>()
-            validateElement(instance, schema, path, tempErrors, version, rootSchema, depth + 1)
+            validateElement(instance, schema, path, tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
             allTempErrors.addAll(tempErrors)
             tempErrors.isEmpty()
         }
@@ -859,11 +881,13 @@ class JsonValidator(
         version: SchemaVersion,
         rootSchema: JsonElement,
         depth: Int,
+        resourceRoot: JsonElement,
+        dynamicScope: List<JsonElement>,
     ) {
         val allTempErrors = mutableListOf<ValidationError>()
         val validCount = schemas.count { schema ->
             val tempErrors = mutableListOf<ValidationError>()
-            validateElement(instance, schema, path, tempErrors, version, rootSchema, depth + 1)
+            validateElement(instance, schema, path, tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
             allTempErrors.addAll(tempErrors)
             tempErrors.isEmpty()
         }
@@ -894,9 +918,11 @@ class JsonValidator(
         version: SchemaVersion,
         rootSchema: JsonElement,
         depth: Int,
+        resourceRoot: JsonElement,
+        dynamicScope: List<JsonElement>,
     ) {
         val tempErrors = mutableListOf<ValidationError>()
-        validateElement(instance, schema, path, tempErrors, version, rootSchema, depth + 1)
+        validateElement(instance, schema, path, tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
 
         // Check if schema hit depth limit - if so, propagate that error
         val depthError = tempErrors.firstOrNull { it.keyword == "depth" }
