@@ -10,22 +10,12 @@ The **official JSON Schema Test Suite** is the industry-standard test suite used
 
 ### Overall Statistics
 
-**Total Tests Executed**: 2,412
-**Passing**: 2,403 ✅
-**Failing**: 9 ❌
-**Pass Rate**: **99.6%** 🎯
+**Total Tests Executed**: 2,653
+**Passing**: 2,653 ✅
+**Failing**: 0
+**Pass Rate**: **100%** 🎯
 
 **Last Updated**: February 2026
-
-### Failure Breakdown
-
-All 9 remaining failures require **remote schema loading** (HTTP/HTTPS), which is not yet implemented:
-
-| Category | Failures | Root Cause |
-|---|---|---|
-| `dynamicRef` | 5 | References external schemas via `localhost:1234` |
-| `ref` | 2 | References external schemas via HTTP |
-| `defs` | 2 | Meta-schema validation (fetches `json-schema.org`) |
 
 ## What's Working ✅
 
@@ -42,8 +32,15 @@ All 9 remaining failures require **remote schema loading** (HTTP/HTTPS), which i
 - ✅ Dependent required and dependent schemas
 - ✅ Property names, min/max properties
 
+### Remote Schema Loading (100% coverage)
+- ✅ Cross-document `$ref` to external schemas via loader callback
+- ✅ `localhost:1234` → local filesystem remotes directory
+- ✅ `json-schema.org` → bundled classpath meta-schemas
+- ✅ Correct `resourceRoot` tracking for fragment resolution in loaded schemas
+- ✅ Inline schemas with relative `$id` resolved to absolute URIs
+
 ### References and Anchors (100% coverage)
-- ✅ `$ref` — local JSON Pointer and anchor resolution
+- ✅ `$ref` — local and external JSON Pointer and anchor resolution
 - ✅ `$anchor` — named anchors within a schema resource
 - ✅ `$dynamicAnchor` / `$dynamicRef` — Draft 2020-12 dynamic scope resolution
 - ✅ `$recursiveAnchor` / `$recursiveRef` — Draft 2019-09 dynamic recursion
@@ -65,37 +62,30 @@ All 9 remaining failures require **remote schema loading** (HTTP/HTTPS), which i
 
 ## Known Limitations ⚠️
 
-### Remote Schema Loading
-**Impact**: 9 test failures
-**Description**: Fetching schemas via HTTP/HTTPS (e.g. `$ref: "http://localhost:1234/foo.json"`)
-**Status**: Not implemented — requires HTTP client integration and schema cache
-
 ### Optional Features (intentionally excluded)
 - `vocabulary.json` — vocabulary declaration/validation
 - `infinite-loop-detection.json` — explicit infinite-loop tests
 - `optional/*` — optional test suite features (e.g. ECMA regex dialect, idn-email)
-- `refRemote.json` — remote reference tests (blocked by HTTP client)
 
 ## Test Files Included
 
-Previously skipped files that are now fully passing:
-
-| File | Tests | Status |
-|---|---|---|
-| `ref.json` | ~90 | ✅ Passing (except 2 remote-ref tests) |
-| `anchor.json` | ~20 | ✅ Passing |
-| `defs.json` | ~8 | ✅ Passing (except 2 meta-schema tests) |
-| `id.json` | ~15 | ✅ Passing |
-| `dynamicRef.json` | ~70 | ✅ Passing (except 5 remote-ref tests) |
-| `recursiveRef.json` | ~20 | ✅ Passing |
-| `unevaluatedProperties.json` | ~90 | ✅ Passing |
-| `unevaluatedItems.json` | ~60 | ✅ Passing |
+| File | Status |
+|---|---|
+| `ref.json` | ✅ Passing |
+| `anchor.json` | ✅ Passing |
+| `defs.json` | ✅ Passing |
+| `id.json` | ✅ Passing |
+| `dynamicRef.json` | ✅ Passing |
+| `recursiveRef.json` | ✅ Passing |
+| `refRemote.json` | ✅ Passing (remote schema loading implemented) |
+| `unevaluatedProperties.json` | ✅ Passing |
+| `unevaluatedItems.json` | ✅ Passing |
 
 ## Comparison with Other Validators
 
 | Validator | Language | Pass Rate | Notes |
 |---|---|---|---|
-| **KtSON** | **Kotlin** | **99.6%** | 9 failures, all require HTTP client |
+| **KtSON** | **Kotlin** | **100%** | 0 failures, remote schema loading supported |
 | ajv | JavaScript | ~99% | Industry standard |
 | jsonschema | Python | ~99% | Full implementation |
 | everit | Java | ~98% | Full implementation |
@@ -112,15 +102,12 @@ Previously skipped files that are now fully passing:
 
 ## Future Improvements
 
-To reach 100% pass rate:
-
-1. **Remote schema loading** — HTTP client + schema cache, resolves all 9 remaining failures
-2. **Advanced format validators** — hostname, idn-email, idn-hostname, iri, iri-reference (optional)
-3. **`$vocabulary`** — meta-schema vocabulary support
+1. **Advanced format validators** — hostname, idn-email, idn-hostname, iri, iri-reference (optional)
+2. **`$vocabulary`** — meta-schema vocabulary support
 
 ---
 
 **Last Updated**: February 2026
-**Tests Executed**: 2,412
-**Pass Rate**: 99.6% (2,403 / 2,412)
-**Status**: ✅ Production-ready — only remote schema loading remains
+**Tests Executed**: 2,653
+**Pass Rate**: 100% (2,653 / 2,653)
+**Status**: ✅ Production-ready

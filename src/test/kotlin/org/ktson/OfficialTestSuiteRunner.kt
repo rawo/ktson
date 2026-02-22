@@ -18,12 +18,14 @@ class OfficialTestSuiteRunner :
     val testSuiteBase = File("../JSON-Schema-Test-Suite/tests")
 
     if (testSuiteBase.exists()) {
+        val schemaLoader = buildSchemaLoader(testSuiteBase)
+
         // Draft 2019-09 Tests
         describe("Official Test Suite: Draft 2019-09") {
             val draft201909Dir = File(testSuiteBase, "draft2019-09")
 
             if (draft201909Dir.exists()) {
-                val validator201909 = JsonValidator(formatAssertion = true)
+                val validator201909 = JsonValidator(formatAssertion = true, schemaLoader = schemaLoader)
                 runTestsFromDirectory(
                     directory = draft201909Dir,
                     version = SchemaVersion.DRAFT_2019_09,
@@ -42,7 +44,7 @@ class OfficialTestSuiteRunner :
 
             if (draft202012Dir.exists()) {
                 // In 2020-12, format is annotation by default
-                val validator202012 = JsonValidator(formatAssertion = false)
+                val validator202012 = JsonValidator(formatAssertion = false, schemaLoader = schemaLoader)
                 runTestsFromDirectory(
                     directory = draft202012Dir,
                     version = SchemaVersion.DRAFT_2020_12,
@@ -67,13 +69,36 @@ class OfficialTestSuiteRunner :
 })
 
 /**
+ * Build a schema loader that maps:
+ *  - http://localhost:1234/... → remotes/ directory next to the test suite
+ *  - https://json-schema.org/... → bundled resources in src/test/resources/schemas/
+ */
+private fun buildSchemaLoader(testSuiteBase: File): (String) -> JsonElement? {
+    val remotesBase = File(testSuiteBase.parentFile, "remotes")
+    return { uri ->
+        when {
+            uri.startsWith("http://localhost:1234/") -> {
+                val relativePath = uri.removePrefix("http://localhost:1234/")
+                val file = File(remotesBase, relativePath)
+                if (file.exists()) Json.parseToJsonElement(file.readText()) else null
+            }
+            uri.startsWith("https://json-schema.org/") -> {
+                val resourcePath = "/schemas/" + uri.removePrefix("https://json-schema.org/") + ".json"
+                OfficialTestSuiteRunner::class.java.getResourceAsStream(resourcePath)
+                    ?.use { Json.parseToJsonElement(it.bufferedReader().readText()) }
+            }
+            else -> null
+        }
+    }
+}
+
+/**
  * Recursively run tests from a directory
  */
 private suspend fun DescribeSpecContainerScope.runTestsFromDirectory(directory: File, version: SchemaVersion, validator: JsonValidator) {
-    // Skip optional tests and tests requiring $ref resolution
+    // Skip optional tests and unsupported features
     val filesToSkip = setOf(
         "optional",
-        "refRemote.json",
         "vocabulary.json",
         "infinite-loop-detection.json",
     )

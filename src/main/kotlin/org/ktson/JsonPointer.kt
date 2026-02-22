@@ -73,9 +73,77 @@ object JsonPointer {
 /**
  * Reference resolver for JSON Schema
  * Handles $ref, $recursiveRef, $dynamicRef
- * Thread-safe and stateless implementation
+ * Thread-safe implementation with optional external schema loading.
  */
-class ReferenceResolver {
+class ReferenceResolver(
+    private val schemaLoader: ((String) -> JsonElement?)? = null,
+) {
+    /** Cache of externally-loaded schemas keyed by their absolute URI. */
+    private val schemaCache = java.util.concurrent.ConcurrentHashMap<String, JsonElement>()
+
+    /**
+     * Maps externally-loaded schema elements → the URI they were loaded from.
+     * Used to resolve relative $refs within loaded schemas that have no $id.
+     */
+    private val loadedSchemaUris =
+        java.util.Collections.synchronizedMap(java.util.IdentityHashMap<JsonElement, String>())
+
+    /**
+     * Maps inline schema elements → their resolved absolute URI.
+     * Populated by [registerAbsoluteUri] for schemas with relative $id.
+     */
+    private val schemaAbsoluteUris =
+        java.util.Collections.synchronizedMap(java.util.IdentityHashMap<JsonElement, String>())
+
+    /**
+     * Register the resolved absolute URI for an inline schema element.
+     * Call this whenever validateElement enters a new resource root (schema with $id).
+     * This enables correct relative URI resolution for nested schemas with relative $id values.
+     */
+    fun registerAbsoluteUri(
+        schema: JsonElement,
+        absoluteUri: String,
+    ) {
+        if (absoluteUri.isNotEmpty()) schemaAbsoluteUris[schema] = absoluteUri
+    }
+
+    /**
+     * Returns the effective absolute base URI for [schema]:
+     *  1. Checks the [schemaAbsoluteUris] registration map (handles relative $id)
+     *  2. Checks the [loadedSchemaUris] map (handles schemas without $id loaded externally)
+     *  3. Falls back to the raw $id if it is already absolute
+     */
+    internal fun getAbsoluteUri(schema: JsonElement): String {
+        schemaAbsoluteUris[schema]?.let { return it }
+        loadedSchemaUris[schema]?.let { return it }
+        val rawId = (schema as? JsonObject)?.get(SchemaKeywords.ID)?.jsonPrimitive?.contentOrNull ?: ""
+        return if (rawId.isNotEmpty() && UriResolver.isAbsoluteUri(rawId)) rawId else ""
+    }
+
+    /**
+     * Returns the cached externally-loaded schema root for [uriPart] resolved
+     * against [baseSchema], or null if it was not loaded externally (e.g. found
+     * in-document). Used by [validateElement] to determine the correct resourceRoot
+     * when following URI-based $refs.
+     */
+    internal fun getLoadedSchemaRoot(
+        baseSchema: JsonElement,
+        uriPart: String,
+    ): JsonElement? {
+        val baseId = getAbsoluteUri(baseSchema)
+        val absoluteUri =
+            if (baseId.isNotEmpty()) {
+                try {
+                    UriResolver.resolveUri(baseId, uriPart)
+                } catch (_: Exception) {
+                    uriPart
+                }
+            } else {
+                uriPart
+            }
+        return schemaCache[absoluteUri]
+    }
+
     /**
      * Resolve a $ref reference.
      *
@@ -87,11 +155,14 @@ class ReferenceResolver {
      *  - Relative URI:        other.json  (matched against $id values in the document)
      *
      * Percent-encoded characters in the fragment are decoded per RFC 3986.
+     *
+     * @param resourceRoot the schema resource that owns the ref (used for relative URI resolution)
      */
     fun resolveRef(
         ref: String,
         rootSchema: JsonElement,
         currentSchema: JsonElement = rootSchema,
+        resourceRoot: JsonElement = rootSchema,
     ): JsonElement? {
         val hashIndex = ref.indexOf('#')
         val uriPart = if (hashIndex >= 0) ref.substring(0, hashIndex) else ref
@@ -100,13 +171,52 @@ class ReferenceResolver {
         return if (uriPart.isEmpty()) {
             resolveLocalRef(rootSchema, fragment)
         } else {
-            val targetSchema = findSchemaByUri(rootSchema, uriPart) ?: return null
+            val targetSchema = findSchemaByUri(rootSchema, uriPart)
+                ?: resolveExternalRef(resourceRoot, uriPart)
+                ?: return null
             when {
                 fragment.isEmpty() -> targetSchema
                 fragment.startsWith("/") -> JsonPointer.resolve(targetSchema, fragment)
                 else -> findAnchorInResource(targetSchema, fragment)
             }
         }
+    }
+
+    /**
+     * Attempt to load an external schema via the schemaLoader.
+     * Resolves [uriPart] against [baseSchema]'s effective absolute URI, then:
+     *  1. Returns cached result if already loaded
+     *  2. Tries to find the URI as an embedded $id within [baseSchema] itself
+     *  3. Invokes the [schemaLoader] to load from an external source
+     * Returns the loaded schema root on success; the caller applies any fragment.
+     */
+    private fun resolveExternalRef(
+        baseSchema: JsonElement,
+        uriPart: String,
+    ): JsonElement? {
+        val baseId = getAbsoluteUri(baseSchema)
+        val absoluteUri =
+            if (baseId.isNotEmpty()) {
+                try {
+                    UriResolver.resolveUri(baseId, uriPart)
+                } catch (_: Exception) {
+                    uriPart
+                }
+            } else {
+                uriPart
+            }
+
+        schemaCache[absoluteUri]?.let { return it }
+
+        // Check if the target URI is embedded within baseSchema (e.g. a nested $id sub-schema)
+        if (absoluteUri != uriPart || baseId.isNotEmpty()) {
+            findSchemaByUri(baseSchema, absoluteUri)?.let { return it }
+        }
+
+        val loaded = schemaLoader?.invoke(absoluteUri) ?: return null
+        schemaCache[absoluteUri] = loaded
+        loadedSchemaUris[loaded] = absoluteUri
+        return loaded
     }
 
     /** Resolve a reference that has no URI part — only a fragment. */
@@ -222,11 +332,15 @@ class ReferenceResolver {
         val id = element[SchemaKeywords.ID]?.jsonPrimitive?.contentOrNull
         val currentUri =
             if (id != null) {
-                try {
-                    UriResolver.resolveUri(baseUri, id)
-                } catch (_: Exception) {
-                    id
-                }
+                val resolved =
+                    try {
+                        UriResolver.resolveUri(baseUri, id)
+                    } catch (_: Exception) {
+                        id
+                    }
+                // Register the resolved absolute URI so relative $refs within this sub-schema work
+                registerAbsoluteUri(element, resolved)
+                resolved
             } else {
                 baseUri
             }
@@ -239,4 +353,15 @@ class ReferenceResolver {
             }
         }
     }
+
+    /**
+     * Returns the target schema resource for a URI-based [uriPart] (without applying any fragment).
+     * Searches [rootSchema] first, then tries external loading via [resourceRoot].
+     * Used by [validateElement] to determine the correct [resourceRoot] when following URI-based $refs.
+     */
+    internal fun resolveUriToResource(
+        uriPart: String,
+        rootSchema: JsonElement,
+        resourceRoot: JsonElement,
+    ): JsonElement? = findSchemaByUri(rootSchema, uriPart) ?: resolveExternalRef(resourceRoot, uriPart)
 }

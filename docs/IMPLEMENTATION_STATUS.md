@@ -2,8 +2,8 @@
 
 ## Current State
 
-**Pass Rate**: 99.6% (2,403 / 2,412 official suite tests)
-**Failures**: 9 — all require remote schema loading (HTTP/HTTPS)
+**Pass Rate**: 100% (2,653 / 2,653 official suite tests)
+**Failures**: 0
 
 ## What's Implemented ✅
 
@@ -30,6 +30,13 @@
 - `unevaluatedItems` — annotation-based, contains annotation (matching indices only)
 - Correct scoping: cousins/uncles cannot contribute annotations to a nested unevaluated check
 
+### Remote Schema Loading ✅
+- Pluggable `schemaLoader: ((String) -> JsonElement?)?` on `JsonValidator`
+- Thread-safe schema cache (`ConcurrentHashMap`)
+- Correct `resourceRoot` tracking when following cross-document refs
+- Absolute URI registration for inline schemas with relative `$id`
+- Bundled meta-schemas for Draft 2019-09 and Draft 2020-12
+
 ### Infrastructure
 - Draft 2019-09 and 2020-12 version detection and dispatch
 - Configurable recursion depth limit (default 1000)
@@ -37,15 +44,6 @@
 - Thread-safe stateless design
 
 ## What's Not Implemented ⚠️
-
-### Remote Schema Loading (9 remaining failures)
-**Status**: Not implemented
-**Effort**: Medium (HTTP client + schema cache + integration)
-
-Needed for:
-- `$ref: "http://..."` — fetching external schemas
-- `$ref: "other.json"` — cross-document references when documents aren't bundled
-- Meta-schema validation (fetches `https://json-schema.org/...`)
 
 ### Optional / Low-Priority
 - Advanced format validators: hostname, idn-email, idn-hostname, iri, iri-reference, json-pointer, relative-json-pointer, regex (currently silently ignored)
@@ -65,4 +63,5 @@ Needed for:
 | After `$dynamicRef` dynamic scope | — | 154 |
 | After `$ref` resource-boundary scoping | — | 148 |
 | After `unevaluatedProperties` | — | 56 |
-| After `unevaluatedItems` | **99.6%** | **9** |
+| After `unevaluatedItems` | 99.6% | 9 |
+| After remote schema loading | **100%** | **0** |

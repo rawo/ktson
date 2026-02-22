@@ -71,8 +71,9 @@ class JsonValidator(
     // Draft 2020-12 uses annotation by default
     private val formatAssertion: Boolean = true,
     private val maxValidationDepth: Int = 1000,
+    private val schemaLoader: ((String) -> JsonElement?)? = null,
 ) {
-    private val referenceResolver = ReferenceResolver()
+    private val referenceResolver = ReferenceResolver(schemaLoader)
 
     /**
      * Validates a JSON instance against a JSON schema
@@ -152,6 +153,26 @@ class JsonValidator(
         val effectiveResourceRoot = if (schemaElement is JsonObject && schemaElement.containsKey(SchemaKeywords.ID)) schemaElement else resourceRoot
         val effectiveScope = if (schemaElement is JsonObject && schemaElement.containsKey(SchemaKeywords.ID)) dynamicScope + schemaElement else dynamicScope
 
+        // Register the absolute URI for new resource roots so relative $id and missing-$id schemas
+        // resolve subsequent relative $refs correctly (e.g. base URI change, nested remote refs).
+        if (schemaElement is JsonObject && schemaElement.containsKey(SchemaKeywords.ID)) {
+            val rawId = schemaElement[SchemaKeywords.ID]?.jsonPrimitive?.contentOrNull ?: ""
+            if (rawId.isNotEmpty()) {
+                val parentUri = referenceResolver.getAbsoluteUri(resourceRoot)
+                val absoluteId =
+                    if (parentUri.isNotEmpty()) {
+                        try {
+                            UriResolver.resolveUri(parentUri, rawId)
+                        } catch (_: Exception) {
+                            rawId
+                        }
+                    } else {
+                        rawId
+                    }
+                referenceResolver.registerAbsoluteUri(schemaElement, absoluteId)
+            }
+        }
+
         when (schemaElement) {
             is JsonObject -> {
                 // $ref, $recursiveRef, $dynamicRef are evaluated alongside sibling keywords
@@ -164,12 +185,21 @@ class JsonValidator(
                     // for URI-based refs, search the whole document
                     val resolvedSchema =
                         if (refUriPart.isEmpty()) {
-                            referenceResolver.resolveRef(ref, effectiveResourceRoot, schemaElement)
+                            referenceResolver.resolveRef(ref, effectiveResourceRoot, schemaElement, effectiveResourceRoot)
                         } else {
-                            referenceResolver.resolveRef(ref, rootSchema, schemaElement)
+                            referenceResolver.resolveRef(ref, rootSchema, schemaElement, effectiveResourceRoot)
                         }
                     if (resolvedSchema != null) {
-                        validateElement(instance, resolvedSchema, path, errors, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope)
+                        // For URI-based refs, use the target schema resource as the new resourceRoot
+                        // so local refs within it (#/..., #anchor) resolve against the correct document.
+                        val newResourceRoot =
+                            if (refUriPart.isNotEmpty()) {
+                                referenceResolver.resolveUriToResource(refUriPart, rootSchema, effectiveResourceRoot)
+                                    ?: effectiveResourceRoot
+                            } else {
+                                effectiveResourceRoot
+                            }
+                        validateElement(instance, resolvedSchema, path, errors, version, rootSchema, depth + 1, newResourceRoot, effectiveScope)
                     } else {
                         errors.add(ValidationError(path, "Could not resolve reference: $ref", REF))
                     }
@@ -178,7 +208,7 @@ class JsonValidator(
                 // Check for $recursiveRef (2019-09) — dynamic scoping behavior
                 val recursiveRef = schemaElement[RECURSIVE_REF]?.jsonPrimitive?.contentOrNull
                 if (recursiveRef != null) {
-                    val resolved = referenceResolver.resolveRef(recursiveRef, effectiveResourceRoot, schemaElement)
+                    val resolved = referenceResolver.resolveRef(recursiveRef, effectiveResourceRoot, schemaElement, effectiveResourceRoot)
                     if (resolved != null) {
                         // If resolved schema has $recursiveAnchor: true, use outermost in dynamic scope with that flag
                         val target = if (resolved is JsonObject && resolved[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true) {
@@ -205,9 +235,9 @@ class JsonValidator(
                     // For local refs resolve against effectiveResourceRoot; for URI-based search whole document
                     val initialTarget =
                         if (uriPart.isEmpty()) {
-                            referenceResolver.resolveRef(dynamicRef, effectiveResourceRoot, schemaElement)
+                            referenceResolver.resolveRef(dynamicRef, effectiveResourceRoot, schemaElement, effectiveResourceRoot)
                         } else {
-                            referenceResolver.resolveRef(dynamicRef, rootSchema, schemaElement)
+                            referenceResolver.resolveRef(dynamicRef, rootSchema, schemaElement, effectiveResourceRoot)
                         }
 
                     if (initialTarget != null) {

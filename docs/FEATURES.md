@@ -85,6 +85,7 @@
 
 ### References and Anchors ✅
 - [x] `$ref` — JSON Pointer and named anchor resolution, respects `$id` resource boundaries
+- [x] `$ref` — External schema loading via pluggable `schemaLoader` callback
 - [x] `$anchor` — Named anchors within a schema resource
 - [x] `$dynamicAnchor` / `$dynamicRef` — Draft 2020-12 dynamic scope resolution
 - [x] `$recursiveAnchor` / `$recursiveRef` — Draft 2019-09 dynamic recursion
@@ -99,12 +100,10 @@
 
 | Metric | Value |
 |---|---|
-| Total tests | 2,412 |
-| Passing | 2,403 ✅ |
-| Failing | 9 ❌ |
-| Pass rate | **99.6%** |
-
-All 9 remaining failures require remote schema loading (HTTP/HTTPS), which is not yet implemented.
+| Total tests | 2,653 |
+| Passing | 2,653 ✅ |
+| Failing | 0 |
+| Pass rate | **100%** |
 
 ## Test Coverage
 
@@ -249,8 +248,8 @@ Total test cases: **50+**
 
 ## Production Ready ✅
 
-- [x] 99.6% official JSON Schema test suite pass rate (2,403 / 2,412)
-- [x] Comprehensive unit tests (125+ additional test cases)
+- [x] 100% official JSON Schema test suite pass rate (2,653 / 2,653)
+- [x] Comprehensive unit tests (179+ additional test cases)
 - [x] Thread-safe implementation
 - [x] Configurable recursion depth protection
 - [x] Performance tested with large datasets

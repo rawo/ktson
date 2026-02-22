@@ -8,7 +8,7 @@ KtSON is a JSON Schema validator for Kotlin with comprehensive support for JSON 
 
 **Package**: `org.ktson`
 **Tech Stack**: Kotlin 2.2.20, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
-**Status**: Pre-release (0.0.1-SNAPSHOT), 92.8% official test suite coverage
+**Status**: Pre-release (0.0.1-SNAPSHOT), 100% official test suite coverage (2,653/2,653)
 
 ## Common Commands
 
@@ -106,7 +106,7 @@ validate()
 - **Draft201909ValidationTest.kt** - 47 tests for Draft 2019-09 features
 - **Draft202012ValidationTest.kt** - 54 tests for Draft 2020-12 features
 - **EdgeCaseAndThreadSafetyTest.kt** - 39 edge case and concurrency tests
-- **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (2,376 tests)
+- **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (2,653 tests)
 - **PerformanceTest.kt** - 6 performance tests (excluded from default test run)
 
 Test memory configuration: min 512MB, max 2GB heap
@@ -134,10 +134,7 @@ val validator = JsonValidator(
 **Recommendation**: Use default (1000) for most cases. Lower for untrusted schemas (e.g., 100-500).
 
 ### 2. Unsupported Features
-- `unevaluatedProperties` and `unevaluatedItems` (Draft 2020-12) - causes most test failures
-- Remote schema references (HTTP/HTTPS) - only local `#/...` refs supported
-- Full `$dynamicRef` dynamic scoping
-- Advanced format validators (hostname, idn-email, etc.)
+- Advanced format validators (hostname, idn-email, idn-hostname, iri, iri-reference, regex)
 
 ### 3. Other Notes
 - API is synchronous (migrated from async coroutines)
@@ -165,10 +162,13 @@ val validator = JsonValidator(
 5. Maintain thread safety (avoid mutable shared state)
 
 ### Reference Resolution
-- `$ref` resolution uses `ReferenceResolver` inner class
-- Only fragment references supported: `#/...`, `#/$defs/...`
-- Reference cycle detection exists (100-depth limit)
-- When adding new ref types, update `ReferenceResolver.resolveReference()`
+- `$ref` resolution uses `ReferenceResolver` in `JsonPointer.kt`
+- Fragment references (`#/...`, `#/$defs/...`) and external URIs supported
+- External schemas resolved via `schemaLoader: ((String) -> JsonElement?)?` on `JsonValidator`
+- Schema cache: `ConcurrentHashMap<String, JsonElement>` keyed by absolute URI
+- Absolute URI tracking: `IdentityHashMap<JsonElement, String>` for schemas with relative `$id`
+- `resourceRoot` passed through recursive calls so fragment refs resolve in the correct document
+- When adding new ref types, update `ReferenceResolver` in `JsonPointer.kt`
 
 ### Format Validation
 - Format validation controlled by `formatAssertion` constructor parameter (default: true)
@@ -181,7 +181,7 @@ val validator = JsonValidator(
 ### Documentation
 - `docs/STACK_OVERFLOW_RISK_ANALYSIS.md` - **Read this before production deployment**
 - `docs/IMPLEMENTATION_STATUS.md` - Feature completeness tracking
-- `docs/OFFICIAL_TEST_SUITE_RESULTS.md` - Detailed test results (92.8% pass rate)
+- `docs/OFFICIAL_TEST_SUITE_RESULTS.md` - Detailed test results (100% pass rate)
 - `docs/TESTING.md` - Testing methodology
 - `docs/FEATURES.md` - Complete feature list
 

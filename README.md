@@ -3,7 +3,7 @@
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.20-blue.svg)](https://kotlinlang.org)
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Test Coverage](https://img.shields.io/badge/Official%20Test%20Suite-92.8%25-brightgreen.svg)](docs/OFFICIAL_TEST_SUITE_RESULTS.md)
+[![Test Coverage](https://img.shields.io/badge/Official%20Test%20Suite-100%25-brightgreen.svg)](docs/OFFICIAL_TEST_SUITE_RESULTS.md)
 
 JSON Schema validator for Kotlin with comprehensive support for JSON Schema Draft 2019-09 and 2020-12.
 
@@ -41,9 +41,11 @@ Most of the code refactoring were performed by AI agent with supervision and cod
 - Array constraints (items, prefixItems, contains, uniqueItems, minItems, maxItems)
 
 ✅ **Advanced Schema Features**
-- Schema references (`$ref`) with local and fragment support
+- Schema references (`$ref`) with local, fragment, and external schema support
+- Pluggable remote schema loading (`schemaLoader` callback)
 - Schema combiners (allOf, anyOf, oneOf, not)
 - Conditional validation (if/then/else)
+- Unevaluated properties and items (Draft 2020-12)
 - Property name validation
 - Dependent schemas and required properties
 
@@ -254,19 +256,15 @@ For more examples, see [docs/REF_USAGE_EXAMPLES.md](docs/REF_USAGE_EXAMPLES.md) 
 | Type Validation | ✅ Complete | 100% |
 | String Validation | ✅ Complete | 100% (including Unicode codepoints) |
 | Numeric Validation | ✅ Complete | 100% |
-| Object Validation | ✅ Complete | 95% |
-| Array Validation | ✅ Complete | 95% |
+| Object Validation | ✅ Complete | 100% |
+| Array Validation | ✅ Complete | 100% |
 | Schema Combiners | ✅ Complete | 100% |
 | Conditional Validation | ✅ Complete | 100% |
-| References ($ref) | ✅ Complete | Local references only |
+| References ($ref) | ✅ Complete | Local and external (via schemaLoader) |
+| Unevaluated Keywords | ✅ Complete | 100% |
+| Remote Schema Loading | ✅ Complete | Pluggable schemaLoader callback |
 | Format Validation | ⚠️ Partial | Basic formats (email, URI, date, time, IPv4, IPv6, UUID) |
-| **Official Test Suite** | ✅ 92.8% | **2,205/2,376 passing** |
-
-**Not Implemented:**
-- `unevaluatedProperties` and `unevaluatedItems` (Draft 2020-12 features)
-- Remote schema references (HTTP/HTTPS)
-- Full `$recursiveRef` and `$dynamicRef` dynamic scoping
-- Some advanced format validators
+| **Official Test Suite** | ✅ **100%** | **2,653/2,653 passing** |
 
 See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed feature breakdown.
 
@@ -275,21 +273,11 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 1. **~~Stack Overflow Risk~~** ✅ **RESOLVED**
    - ✅ Global recursion depth limiting implemented (default: 1000 levels)
    - ✅ Configurable via `maxValidationDepth` constructor parameter
-   - ✅ Thread-safe implementation
-   - ✅ Covers all recursive validation paths
    - See [docs/STACK_OVERFLOW_RISK_ANALYSIS.md](docs/STACK_OVERFLOW_RISK_ANALYSIS.md) for historical analysis
 
-2. **Remote References**
-   - Only local references (`#/...`) are supported
-   - HTTP/HTTPS schema references are not implemented
-
-3. **Advanced Draft 2020-12 Features**
-   - `unevaluatedProperties` and `unevaluatedItems` not supported
-   - Full dynamic scoping for `$dynamicRef` not implemented
-
-4. **Format Validation**
+2. **Format Validation**
    - Basic assertion mode only
-   - Limited format validators (no regex-heavy formats like hostname)
+   - Limited format validators (no regex-heavy formats like hostname, idn-email, iri)
 
 ## Project Status
 
@@ -298,16 +286,16 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 ### Test Coverage
 
-- **Custom Tests**: 155 tests (100% passing)
+- **Custom Tests**: 179 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
-  - Depth limit protection: 15 tests
+  - Depth limit protection: 14 tests
+  - URI resolver: 25 tests
 
-- **Official JSON Schema Test Suite**: 2,376 tests
-  - ✅ Passing: 2,205 (92.8%)
-  - ❌ Failing: 171 (7.2%)
-  - Primary failures: `unevaluatedProperties` and `unevaluatedItems`
+- **Official JSON Schema Test Suite**: 2,653 tests
+  - ✅ Passing: 2,653 (100%)
+  - ❌ Failing: 0
 
 - **Performance Tests**: 6 tests (100% passing)
   - Tested with schemas up to 50MB
@@ -316,27 +304,25 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 ### Recent Changes
 
-- ✅ **Stack overflow protection implemented** (configurable depth limiting)
+- ✅ **Remote schema loading implemented** (pluggable `schemaLoader` callback)
+- ✅ **100% official test suite pass rate** (2,653/2,653 tests)
+- ✅ `unevaluatedProperties` and `unevaluatedItems` implemented
+- ✅ `$dynamicRef` / `$dynamicAnchor` full dynamic scope resolution
+- ✅ `$recursiveRef` / `$recursiveAnchor` dynamic recursion
+- ✅ Stack overflow protection (configurable depth limiting)
 - ✅ Converted from async to synchronous API
 - ✅ Package migrated from `com.ktson` to `org.ktson`
-- ✅ Upgraded to Kotlin 2.2.20 and Java 21
-- ✅ Added Ktlint for code quality
-- ✅ Extracted schema keywords to constants
-- ✅ Performance test suite added
-- ✅ Thread-safe ReferenceResolver (stateless implementation)
 
 ### Roadmap
 
 **Before 1.0 Release:**
 - [x] ~~Implement recursion depth limiting~~ ✅ **COMPLETED**
-- [x] ~~Add configurable validation limits~~ ✅ **COMPLETED**
-- [ ] Implement `unevaluatedProperties` and `unevaluatedItems`
-- [ ] Add more format validators
+- [x] ~~Implement `unevaluatedProperties` and `unevaluatedItems`~~ ✅ **COMPLETED**
+- [x] ~~Remote schema reference support~~ ✅ **COMPLETED**
+- [ ] Add more format validators (hostname, idn-email, iri, regex)
 - [ ] Improve error messages
 
 **Future Enhancements:**
-- [ ] Remote schema reference support
-- [ ] Full `$dynamicRef` dynamic scoping
 - [ ] Schema caching improvements
 - [ ] Streaming validation for large datasets
 - [ ] GraalVM native image support
@@ -440,4 +426,4 @@ SOFTWARE.
 
 ---
 
-**Note**: This is a pre-release version. While the validator is functional and passes 92.8% of official tests, it has known limitations (particularly around recursion depth) that should be addressed before production use with untrusted schemas. See [STACK_OVERFLOW_RISK_ANALYSIS.md](docs/STACK_OVERFLOW_RISK_ANALYSIS.md) for details.
+**Note**: This is a pre-release version. The validator passes 100% of the official JSON Schema Test Suite. Recursion depth protection is implemented (default limit: 1000). See [STACK_OVERFLOW_RISK_ANALYSIS.md](docs/STACK_OVERFLOW_RISK_ANALYSIS.md) for details on depth limiting.
