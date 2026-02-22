@@ -59,6 +59,7 @@ import org.ktson.SchemaKeywords.TYPE_NUMBER
 import org.ktson.SchemaKeywords.TYPE_OBJECT
 import org.ktson.SchemaKeywords.TYPE_STRING
 import org.ktson.SchemaKeywords.TYPE_UNKNOWN
+import org.ktson.SchemaKeywords.UNEVALUATED_ITEMS
 import org.ktson.SchemaKeywords.UNEVALUATED_PROPERTIES
 import org.ktson.SchemaKeywords.UNIQUE_ITEMS
 
@@ -318,6 +319,25 @@ class JsonValidator(
                             unevalPropsSchema is JsonPrimitive && unevalPropsSchema.booleanOrNull == true -> {}
                             else ->
                                 validateElement(instance[propName]!!, unevalPropsSchema, propPath, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Unevaluated items (2019-09 and later)
+        if (instance is JsonArray) {
+            schema[UNEVALUATED_ITEMS]?.let { unevalItemsSchema ->
+                val evaluated = collectEvaluatedIndices(instance, schema, path, version, rootSchema, depth, resourceRoot, dynamicScope)
+                instance.indices.forEach { index ->
+                    if (index !in evaluated) {
+                        val itemPath = "$path[$index]"
+                        when {
+                            unevalItemsSchema is JsonPrimitive && unevalItemsSchema.booleanOrNull == false ->
+                                errors.add(ValidationError(path, "Unevaluated item at index $index is not allowed", UNEVALUATED_ITEMS))
+                            unevalItemsSchema is JsonPrimitive && unevalItemsSchema.booleanOrNull == true -> {}
+                            else ->
+                                validateElement(instance[index], unevalItemsSchema, itemPath, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                         }
                     }
                 }
@@ -956,6 +976,203 @@ class JsonValidator(
             1 -> {} // Valid
             else -> errors.add(ValidationError(path, "Instance matches more than one oneOf schema", ONE_OF))
         }
+    }
+
+    /**
+     * Collects the set of array indices "evaluated" by a schema and its applicators.
+     * Used to determine which items are subject to unevaluatedItems.
+     * Annotation sources: prefixItems, items, additionalItems, contains (matching items when valid),
+     * allOf (all branches), anyOf/oneOf (valid branches only), if/then/else, $ref, $dynamicRef,
+     * and nested unevaluatedItems sub-schemas.
+     */
+    private fun collectEvaluatedIndices(
+        instance: JsonArray,
+        schemaElement: JsonElement,
+        path: String,
+        version: SchemaVersion,
+        rootSchema: JsonElement,
+        depth: Int,
+        resourceRoot: JsonElement,
+        dynamicScope: List<JsonElement>,
+    ): Set<Int> {
+        if (schemaElement is JsonPrimitive) return emptySet()
+        if (schemaElement !is JsonObject) return emptySet()
+
+        val effectiveResourceRoot = if (schemaElement.containsKey(SchemaKeywords.ID)) schemaElement else resourceRoot
+        val effectiveScope = if (schemaElement.containsKey(SchemaKeywords.ID)) dynamicScope + schemaElement else dynamicScope
+
+        val evaluated = mutableSetOf<Int>()
+
+        // prefixItems: evaluates indices 0 until min(prefixItems.size, instance.size)
+        schemaElement[PREFIX_ITEMS]?.jsonArray?.let { prefixItems ->
+            for (i in 0 until minOf(prefixItems.size, instance.size)) evaluated.add(i)
+        }
+
+        // items:
+        //  - as single schema without prefixItems: evaluates ALL indices
+        //  - as single schema with prefixItems: evaluates remaining indices after prefixItems
+        //  - as array (tuple, 2019-09): evaluates indices 0..tuple.size-1
+        schemaElement[ITEMS]?.let { itemsSchema ->
+            when {
+                itemsSchema is JsonArray -> {
+                    for (i in 0 until minOf(itemsSchema.size, instance.size)) evaluated.add(i)
+                }
+                schemaElement.containsKey(PREFIX_ITEMS) -> {
+                    val prefixCount = schemaElement[PREFIX_ITEMS]!!.jsonArray.size
+                    for (i in prefixCount until instance.size) evaluated.add(i)
+                }
+                else -> {
+                    for (i in instance.indices) evaluated.add(i)
+                }
+            }
+        }
+
+        // additionalItems (2019-09): evaluates indices beyond the items tuple (unless false)
+        if (schemaElement.containsKey(ITEMS) && schemaElement[ITEMS] is JsonArray) {
+            schemaElement[ADDITIONAL_ITEMS]?.let { addlItemsSchema ->
+                val isFalse = addlItemsSchema is JsonPrimitive && addlItemsSchema.booleanOrNull == false
+                if (!isFalse) {
+                    val tupleSize = (schemaElement[ITEMS] as JsonArray).size
+                    for (i in tupleSize until instance.size) evaluated.add(i)
+                }
+            }
+        }
+
+        // contains: evaluates matching indices, but ONLY when contains validates
+        schemaElement[CONTAINS]?.let { containsSchema ->
+            val minContains = schemaElement[SchemaKeywords.MIN_CONTAINS]?.jsonPrimitive?.let {
+                it.doubleOrNull?.toInt() ?: it.intOrNull ?: 1
+            } ?: 1
+
+            val matchingIndices = mutableListOf<Int>()
+            instance.forEachIndexed { index, item ->
+                val tempErrors = mutableListOf<ValidationError>()
+                validateElement(item, containsSchema, "$path[$index]", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                if (tempErrors.isEmpty()) matchingIndices.add(index)
+            }
+            // Annotation only produced when contains validates (minContains satisfied)
+            if (matchingIndices.size >= minContains) {
+                evaluated.addAll(matchingIndices)
+            }
+        }
+
+        // $ref
+        schemaElement[REF]?.jsonPrimitive?.contentOrNull?.let { ref ->
+            val refHashIndex = ref.indexOf('#')
+            val refUriPart = if (refHashIndex >= 0) ref.substring(0, refHashIndex) else ref
+            val resolved = if (refUriPart.isEmpty()) {
+                referenceResolver.resolveRef(ref, effectiveResourceRoot, schemaElement)
+            } else {
+                referenceResolver.resolveRef(ref, rootSchema, schemaElement)
+            }
+            resolved?.let {
+                evaluated.addAll(collectEvaluatedIndices(instance, it, path, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope))
+            }
+        }
+
+        // $recursiveRef
+        schemaElement[RECURSIVE_REF]?.jsonPrimitive?.contentOrNull?.let { recursiveRef ->
+            val resolved = referenceResolver.resolveRef(recursiveRef, effectiveResourceRoot, schemaElement)
+            if (resolved != null) {
+                val target =
+                    if (resolved is JsonObject && resolved[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true) {
+                        effectiveScope.firstOrNull { s ->
+                            s is JsonObject && s[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true
+                        } ?: resolved
+                    } else {
+                        resolved
+                    }
+                evaluated.addAll(collectEvaluatedIndices(instance, target, path, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope))
+            }
+        }
+
+        // $dynamicRef
+        schemaElement[SchemaKeywords.DYNAMIC_REF]?.jsonPrimitive?.contentOrNull?.let { dynamicRef ->
+            val hashIndex = dynamicRef.indexOf('#')
+            val uriPart = if (hashIndex >= 0) dynamicRef.substring(0, hashIndex) else dynamicRef
+            val fragment = if (hashIndex >= 0) dynamicRef.substring(hashIndex + 1) else ""
+            val isPlainAnchorFragment = fragment.isNotEmpty() && !fragment.startsWith("/")
+            val initialTarget =
+                if (uriPart.isEmpty()) {
+                    referenceResolver.resolveRef(dynamicRef, effectiveResourceRoot, schemaElement)
+                } else {
+                    referenceResolver.resolveRef(dynamicRef, rootSchema, schemaElement)
+                }
+            if (initialTarget != null) {
+                val target =
+                    if (isPlainAnchorFragment && initialTarget is JsonObject &&
+                        initialTarget[DYNAMIC_ANCHOR]?.jsonPrimitive?.contentOrNull == fragment
+                    ) {
+                        effectiveScope.firstNotNullOfOrNull { scopeSchema ->
+                            referenceResolver.findDynamicAnchorInResource(scopeSchema, fragment)
+                        } ?: initialTarget
+                    } else {
+                        initialTarget
+                    }
+                evaluated.addAll(collectEvaluatedIndices(instance, target, path, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope))
+            }
+        }
+
+        // allOf: all branches always contribute
+        schemaElement[ALL_OF]?.jsonArray?.forEach { subSchema ->
+            evaluated.addAll(collectEvaluatedIndices(instance, subSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+        }
+
+        // anyOf: only valid branches contribute
+        schemaElement[ANY_OF]?.jsonArray?.forEach { subSchema ->
+            val tempErrors = mutableListOf<ValidationError>()
+            validateElement(instance, subSchema, path, tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+            if (tempErrors.isEmpty()) {
+                evaluated.addAll(collectEvaluatedIndices(instance, subSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+            }
+        }
+
+        // oneOf: only the single valid branch contributes
+        schemaElement[ONE_OF]?.jsonArray?.let { schemas ->
+            val validBranch =
+                schemas.firstOrNull { subSchema ->
+                    val tempErrors = mutableListOf<ValidationError>()
+                    validateElement(instance, subSchema, path, tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                    tempErrors.isEmpty()
+                }
+            validBranch?.let {
+                evaluated.addAll(collectEvaluatedIndices(instance, it, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+            }
+        }
+
+        // if/then/else: when if passes collect from if AND then; when fails collect from else
+        schemaElement[IF]?.let { ifSchema ->
+            val ifErrors = mutableListOf<ValidationError>()
+            validateElement(instance, ifSchema, path, ifErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+            if (ifErrors.isEmpty()) {
+                evaluated.addAll(collectEvaluatedIndices(instance, ifSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                schemaElement[THEN]?.let { thenSchema ->
+                    evaluated.addAll(collectEvaluatedIndices(instance, thenSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                }
+            } else {
+                schemaElement[ELSE]?.let { elseSchema ->
+                    evaluated.addAll(collectEvaluatedIndices(instance, elseSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                }
+            }
+        }
+
+        // unevaluatedItems in a sub-schema is itself an annotation source
+        schemaElement[UNEVALUATED_ITEMS]?.let { unevalItemsSchema ->
+            val yetUnevaluated = instance.indices.filter { it !in evaluated }
+            when {
+                unevalItemsSchema is JsonPrimitive && unevalItemsSchema.booleanOrNull == true ->
+                    evaluated.addAll(yetUnevaluated)
+                unevalItemsSchema is JsonPrimitive && unevalItemsSchema.booleanOrNull == false -> {}
+                else ->
+                    yetUnevaluated.forEach { index ->
+                        val tempErrors = mutableListOf<ValidationError>()
+                        validateElement(instance[index], unevalItemsSchema, "$path[$index]", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                        if (tempErrors.isEmpty()) evaluated.add(index)
+                    }
+            }
+        }
+
+        return evaluated
     }
 
     /**
