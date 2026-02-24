@@ -55,6 +55,7 @@ The **official JSON Schema Test Suite** is the industry-standard test suite used
 
 ### Format Validation
 - ✅ email, uri, date, time, date-time, ipv4, ipv6, uuid
+- ✅ hostname, idn-email, iri, iri-reference, regex
 
 ### Draft Support
 - ✅ Draft 2019-09 — full local test suite coverage
@@ -102,7 +103,7 @@ The **official JSON Schema Test Suite** is the industry-standard test suite used
 
 ## Future Improvements
 
-1. **Advanced format validators** — hostname, idn-email, idn-hostname, iri, iri-reference (optional)
+1. **Additional format validators** — idn-hostname, json-pointer, relative-json-pointer, uri-reference (optional)
 2. **`$vocabulary`** — meta-schema vocabulary support
 
 ---

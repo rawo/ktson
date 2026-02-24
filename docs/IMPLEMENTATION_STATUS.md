@@ -9,7 +9,7 @@
 
 ### Core Keywords (all drafts)
 - Type, const, enum, boolean schemas
-- String: minLength, maxLength, pattern, format (8 formats)
+- String: minLength, maxLength, pattern, format (13 formats)
 - Numeric: minimum, maximum, exclusiveMinimum, exclusiveMaximum, multipleOf
 - Object: properties, required, additionalProperties, patternProperties, minProperties, maxProperties, propertyNames, dependentRequired, dependentSchemas
 - Array: items, prefixItems, additionalItems, minItems, maxItems, uniqueItems, contains, minContains, maxContains
@@ -46,7 +46,7 @@
 ## What's Not Implemented ⚠️
 
 ### Optional / Low-Priority
-- Advanced format validators: hostname, idn-email, idn-hostname, iri, iri-reference, json-pointer, relative-json-pointer, regex (currently silently ignored)
+- Additional format validators: idn-hostname, json-pointer, relative-json-pointer, uri-reference, uri-template (silently ignored)
 - `$vocabulary` — custom vocabulary declaration
 - ECMA-262 regex dialect (optional test suite)
 

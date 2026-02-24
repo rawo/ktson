@@ -134,7 +134,7 @@ val validator = JsonValidator(
 **Recommendation**: Use default (1000) for most cases. Lower for untrusted schemas (e.g., 100-500).
 
 ### 2. Unsupported Features
-- Advanced format validators (hostname, idn-email, idn-hostname, iri, iri-reference, regex)
+- Remaining format validators: idn-hostname, json-pointer, relative-json-pointer, uri-reference, uri-template
 
 ### 3. Other Notes
 - API is synchronous (migrated from async coroutines)
@@ -172,7 +172,7 @@ val validator = JsonValidator(
 
 ### Format Validation
 - Format validation controlled by `formatAssertion` constructor parameter (default: true)
-- Currently supported: email, uri, date, time, date-time, ipv4, ipv6, uuid
+- Currently supported: email, uri, date, time, date-time, ipv4, ipv6, uuid, hostname, idn-email, iri, iri-reference, regex
 - Formats are validated in `validateFormat()` method
 - Add new formats by extending the when expression in `validateFormat()`
 

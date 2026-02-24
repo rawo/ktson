@@ -32,6 +32,11 @@
   - [x] ipv4
   - [x] ipv6
   - [x] uuid
+  - [x] hostname
+  - [x] idn-email
+  - [x] iri
+  - [x] iri-reference
+  - [x] regex
 
 ### Numeric Validation ✅
 - [x] `minimum` - Minimum value (inclusive)
