@@ -92,6 +92,11 @@ object SchemaKeywords {
     const val FORMAT_IPV4 = "ipv4"
     const val FORMAT_IPV6 = "ipv6"
     const val FORMAT_UUID = "uuid"
+    const val FORMAT_HOSTNAME = "hostname"
+    const val FORMAT_IDN_EMAIL = "idn-email"
+    const val FORMAT_IRI = "iri"
+    const val FORMAT_IRI_REFERENCE = "iri-reference"
+    const val FORMAT_REGEX = "regex"
 
     // Boolean schemas
     const val SCHEMA_FALSE = "false"

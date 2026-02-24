@@ -19,8 +19,13 @@ import org.ktson.SchemaKeywords.FORMAT
 import org.ktson.SchemaKeywords.FORMAT_DATE
 import org.ktson.SchemaKeywords.FORMAT_DATE_TIME
 import org.ktson.SchemaKeywords.FORMAT_EMAIL
+import org.ktson.SchemaKeywords.FORMAT_HOSTNAME
+import org.ktson.SchemaKeywords.FORMAT_IDN_EMAIL
 import org.ktson.SchemaKeywords.FORMAT_IPV4
 import org.ktson.SchemaKeywords.FORMAT_IPV6
+import org.ktson.SchemaKeywords.FORMAT_IRI
+import org.ktson.SchemaKeywords.FORMAT_IRI_REFERENCE
+import org.ktson.SchemaKeywords.FORMAT_REGEX
 import org.ktson.SchemaKeywords.FORMAT_TIME
 import org.ktson.SchemaKeywords.FORMAT_URI
 import org.ktson.SchemaKeywords.FORMAT_UUID
@@ -823,12 +828,50 @@ class JsonValidator(
             FORMAT_IPV4 -> value.matches(Regex("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"))
             FORMAT_IPV6 -> value.matches(Regex("^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$"))
             FORMAT_UUID -> value.matches(Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"))
+            FORMAT_HOSTNAME -> isValidHostname(value)
+            FORMAT_IDN_EMAIL -> {
+                val atIdx = value.lastIndexOf('@')
+                atIdx > 0 && atIdx < value.length - 1
+            }
+            FORMAT_IRI -> isValidIri(value)
+            FORMAT_IRI_REFERENCE -> !value.contains('\\')
+            FORMAT_REGEX -> try {
+                Regex(value)
+                true
+            } catch (_: Exception) {
+                false
+            }
             else -> true // Unknown formats are ignored
         }
 
         if (!valid) {
             errors.add(ValidationError(path, "String does not match format: $format", FORMAT))
         }
+    }
+
+    private fun isValidHostname(value: String): Boolean {
+        if (value.isEmpty()) return false
+        val labels = value.split('.')
+        return labels.all { label ->
+            label.isNotEmpty() &&
+                label.length <= 63 &&
+                label.matches(Regex("[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?"))
+        }
+    }
+
+    private fun isValidIri(value: String): Boolean {
+        if (value.contains('\\')) return false
+        if (!value.matches(Regex("[a-zA-Z][a-zA-Z0-9+\\-.]*:.*"))) return false
+        val slashSlash = value.indexOf("://")
+        if (slashSlash >= 0) {
+            val afterSlashes = value.substring(slashSlash + 3)
+            val authorityEnd = afterSlashes.indexOfFirst { it == '/' || it == '?' || it == '#' }
+                .takeIf { it >= 0 } ?: afterSlashes.length
+            val authority = afterSlashes.substring(0, authorityEnd)
+            val hostPart = if ('@' in authority) authority.substringAfterLast('@') else authority
+            if (hostPart.count { it == ':' } > 1 && '[' !in hostPart) return false
+        }
+        return true
     }
 
     /**
