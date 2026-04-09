@@ -321,14 +321,14 @@ class JsonValidator(
         // Const validation
         schema[CONST]?.let { constValue ->
             if (!jsonEquals(instance, constValue)) {
-                errors.add(ValidationError(path, "Value must be const: $constValue", CONST))
+                errors.add(ValidationError(path, "Value must be const: $constValue, but was: $instance", CONST))
             }
         }
 
         // Enum validation
         schema[ENUM]?.jsonArray?.let { enumValues ->
             if (enumValues.none { jsonEquals(it, instance) }) {
-                errors.add(ValidationError(path, "Value must be one of: $enumValues", ENUM))
+                errors.add(ValidationError(path, "Value $instance is not one of: $enumValues", ENUM))
             }
         }
 
@@ -1097,8 +1097,24 @@ class JsonValidator(
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
     ) {
-        schemas.forEach { schema ->
-            validateElement(instance, schema, path, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+        schemas.forEachIndexed { index, schema ->
+            val branchErrors = mutableListOf<ValidationError>()
+            validateElement(instance, schema, path, branchErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+            if (branchErrors.isNotEmpty()) {
+                val depthError = branchErrors.firstOrNull { it.keyword == "depth" }
+                if (depthError != null) {
+                    errors.add(depthError)
+                } else {
+                    errors.add(
+                        ValidationError(
+                            path,
+                            "Instance does not match allOf schema at index $index",
+                            ALL_OF,
+                            causes = branchErrors,
+                        ),
+                    )
+                }
+            }
         }
     }
 
@@ -1116,21 +1132,31 @@ class JsonValidator(
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
     ) {
-        val allTempErrors = mutableListOf<ValidationError>()
-        val anyValid = schemas.any { schema ->
+        val branchErrors = mutableListOf<ValidationError>()
+        val anyValid = schemas.mapIndexed { index, schema ->
             val tempErrors = mutableListOf<ValidationError>()
             validateElement(instance, schema, path, tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
-            allTempErrors.addAll(tempErrors)
+            if (tempErrors.isNotEmpty()) {
+                branchErrors.add(
+                    ValidationError(path, "Branch $index failed", ANY_OF, causes = tempErrors),
+                )
+            }
             tempErrors.isEmpty()
-        }
+        }.any { it }
 
         if (!anyValid) {
-            // Check if any schema hit depth limit - if so, propagate that error
-            val depthError = allTempErrors.firstOrNull { it.keyword == "depth" }
+            val depthError = branchErrors.flatMap { it.causes }.firstOrNull { it.keyword == "depth" }
             if (depthError != null) {
                 errors.add(depthError)
             } else {
-                errors.add(ValidationError(path, "Instance does not match any of the schemas", ANY_OF))
+                errors.add(
+                    ValidationError(
+                        path,
+                        "Instance does not match any of the ${schemas.size} anyOf schemas",
+                        ANY_OF,
+                        causes = branchErrors,
+                    ),
+                )
             }
         }
     }
@@ -1149,26 +1175,42 @@ class JsonValidator(
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
     ) {
-        val allTempErrors = mutableListOf<ValidationError>()
-        val validCount = schemas.count { schema ->
+        val branchErrors = mutableListOf<ValidationError>()
+        val validCount = schemas.mapIndexed { index, schema ->
             val tempErrors = mutableListOf<ValidationError>()
             validateElement(instance, schema, path, tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
-            allTempErrors.addAll(tempErrors)
+            if (tempErrors.isNotEmpty()) {
+                branchErrors.add(
+                    ValidationError(path, "Branch $index failed", ONE_OF, causes = tempErrors),
+                )
+            }
             tempErrors.isEmpty()
-        }
+        }.count { it }
 
         when (validCount) {
             0 -> {
-                // Check if any schema hit depth limit - if so, propagate that error
-                val depthError = allTempErrors.firstOrNull { it.keyword == "depth" }
+                val depthError = branchErrors.flatMap { it.causes }.firstOrNull { it.keyword == "depth" }
                 if (depthError != null) {
                     errors.add(depthError)
                 } else {
-                    errors.add(ValidationError(path, "Instance does not match any of the oneOf schemas", ONE_OF))
+                    errors.add(
+                        ValidationError(
+                            path,
+                            "Instance does not match any of the ${schemas.size} oneOf schemas",
+                            ONE_OF,
+                            causes = branchErrors,
+                        ),
+                    )
                 }
             }
             1 -> {} // Valid
-            else -> errors.add(ValidationError(path, "Instance matches more than one oneOf schema", ONE_OF))
+            else -> errors.add(
+                ValidationError(
+                    path,
+                    "Instance matches $validCount of ${schemas.size} oneOf schemas, expected exactly 1",
+                    ONE_OF,
+                ),
+            )
         }
     }
 

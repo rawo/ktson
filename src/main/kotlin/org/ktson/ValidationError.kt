@@ -8,12 +8,20 @@ data class ValidationError(
     val message: String,
     val keyword: String? = null,
     val schemaPath: String? = null,
+    val causes: List<ValidationError> = emptyList(),
 ) {
-    override fun toString(): String = buildString {
-            append("Validation error at '$path': $message")
-            keyword?.let { append(" (keyword: $it)") }
-            schemaPath?.let { append(" (schema path: $it)") }
+    override fun toString(): String = buildString { appendError(this@ValidationError, indent = 0) }
+
+    private fun StringBuilder.appendError(error: ValidationError, indent: Int) {
+        append("  ".repeat(indent))
+        append("Validation error at '${error.path}': ${error.message}")
+        error.keyword?.let { append(" (keyword: $it)") }
+        error.schemaPath?.let { append(" (schema path: $it)") }
+        error.causes.forEach { cause ->
+            append("\n")
+            appendError(cause, indent + 1)
         }
+    }
 }
 
 /**
