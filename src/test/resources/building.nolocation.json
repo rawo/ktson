@@ -1,0 +1,48 @@
+{
+  "building": {
+    "hiring": false,
+    "medical": 0,
+    "fuseGenerator": "ROLE_SELECT_NO",
+    "machineBackup": false,
+    "otherPrograms": 0,
+    "typeClassKnown": true,
+    "operatingSystem": 0,
+    "typeTransaction": "DATA_COLLECTION_CONTRACT",
+    "machineAuxiliary": false,
+    "inventoryHeadline": {
+      "samples": false,
+      "cashDesks": false,
+      "showcases": false,
+      "chilledGoods": false,
+      "thingsOutside": false,
+      "companyOwnerInventory": true
+    },
+    "masterTransaction": 0,
+    "supplyEngineering": 0,
+    "electronicsTotal33": 0,
+    "machineAlternative": false,
+    "ownershipBuildings": {
+      "companyIsOwnerPlot": true,
+      "companyIsOwnerBuilding": true
+    },
+    "buildingAccessories": {},
+    "foundationEnclosure": false,
+    "individuallPrograms": 0,
+    "replacementPossible": false,
+    "residentialProperty": false,
+    "massStandardPrograms": 0,
+    "softwareDataCarriers": 0,
+    "copyProtectedSoftware": 0,
+    "imageSoundEngineering": 0,
+    "removableDataCarriers": 0,
+    "dokumentUploadBuilding": [],
+    "cablesUndergroundCables": 0,
+    "electronicsTotalHardware": 0,
+    "typesettingReproTechnique": 0,
+    "dokumentUploadConstruction": [],
+    "metrologyTestingTechnology": 0,
+    "dataCommunicationTechnology": 0,
+    "electronicsTotalSoftwareData": 0,
+    "organisationalFireProtectionHeadline": {}
+  }
+}

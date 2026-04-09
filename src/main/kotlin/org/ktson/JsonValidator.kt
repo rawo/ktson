@@ -210,7 +210,22 @@ class JsonValidator(
                             } else {
                                 effectiveResourceRoot
                             }
-                        validateElement(instance, resolvedSchema, path, errors, version, rootSchema, depth + 1, newResourceRoot, effectiveScope)
+                        // When crossing into a new resource (different $id boundary) via a URI-based $ref,
+                        // register that resource in the dynamic scope so $dynamicRef can find its anchors.
+                        // This handles cases where the ref points to a sub-schema of the resource (not the root),
+                        // which would otherwise never trigger the $id-based scope update in validateElement.
+                        val refScope =
+                            if (refUriPart.isNotEmpty() &&
+                                newResourceRoot !== effectiveResourceRoot &&
+                                newResourceRoot is JsonObject &&
+                                newResourceRoot.containsKey(SchemaKeywords.ID) &&
+                                !effectiveScope.contains(newResourceRoot)
+                            ) {
+                                effectiveScope + newResourceRoot
+                            } else {
+                                effectiveScope
+                            }
+                        validateElement(instance, resolvedSchema, path, errors, version, rootSchema, depth + 1, newResourceRoot, refScope)
                     } else {
                         errors.add(ValidationError(path, "Could not resolve reference: $ref", REF))
                     }
@@ -538,7 +553,7 @@ class JsonValidator(
         schema[PATTERN_PROPERTIES]?.jsonObject?.let { patternProps ->
             patternProps.forEach { (pattern, propSchema) ->
                 instance.keys.forEach { propName ->
-                    if (Regex(pattern).containsMatchIn(propName)) {
+                    if (Regex(translatePatternToJava(pattern)).containsMatchIn(propName)) {
                         val propPath = if (path.isEmpty()) propName else "$path.$propName"
                         validateElement(instance[propName]!!, propSchema, propPath, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                     }
@@ -807,7 +822,7 @@ class JsonValidator(
 
         // Pattern
         schema[PATTERN]?.jsonPrimitive?.contentOrNull?.let { pattern ->
-            if (!Regex(pattern).containsMatchIn(value)) {
+            if (!translatePatternToJava(pattern).let { Regex(it).containsMatchIn(value) }) {
                 errors.add(ValidationError(path, "String does not match pattern: $pattern", PATTERN))
             }
         }
@@ -1647,7 +1662,56 @@ class JsonValidator(
         }
     }
 
+    private fun translatePatternToJava(pattern: String): String = pattern.replace(Regex("""\\([pP])\{([^}]+)}""")) { match ->
+            val flag = match.groupValues[1]
+            val name = match.groupValues[2]
+            val javaName = UNICODE_CATEGORY_NAMES[name] ?: name
+            "\\$flag{$javaName}"
+        }
+
     companion object {
+        // Maps ECMAScript Unicode category long names to Java short names for \p{} in patterns
+        private val UNICODE_CATEGORY_NAMES =
+            mapOf(
+                "Letter" to "L",
+                "Lowercase_Letter" to "Ll",
+                "Uppercase_Letter" to "Lu",
+                "Titlecase_Letter" to "Lt",
+                "Modifier_Letter" to "Lm",
+                "Other_Letter" to "Lo",
+                "Mark" to "M",
+                "Nonspacing_Mark" to "Mn",
+                "Spacing_Mark" to "Mc",
+                "Enclosing_Mark" to "Me",
+                "Number" to "N",
+                "Decimal_Number" to "Nd",
+                "Letter_Number" to "Nl",
+                "Other_Number" to "No",
+                "Punctuation" to "P",
+                "Connector_Punctuation" to "Pc",
+                "Dash_Punctuation" to "Pd",
+                "Open_Punctuation" to "Ps",
+                "Close_Punctuation" to "Pe",
+                "Initial_Punctuation" to "Pi",
+                "Final_Punctuation" to "Pf",
+                "Other_Punctuation" to "Po",
+                "Symbol" to "S",
+                "Math_Symbol" to "Sm",
+                "Currency_Symbol" to "Sc",
+                "Modifier_Symbol" to "Sk",
+                "Other_Symbol" to "So",
+                "Separator" to "Z",
+                "Space_Separator" to "Zs",
+                "Line_Separator" to "Zl",
+                "Paragraph_Separator" to "Zp",
+                "Other" to "C",
+                "Control" to "Cc",
+                "Format" to "Cf",
+                "Surrogate" to "Cs",
+                "Private_Use" to "Co",
+                "Unassigned" to "Cn",
+            )
+
         // Characters DISALLOWED in IDN labels per RFC 5892
         private val IDNA_DISALLOWED_CHARS =
             setOf(

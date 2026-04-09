@@ -171,9 +171,25 @@ class ReferenceResolver(
         return if (uriPart.isEmpty()) {
             resolveLocalRef(rootSchema, fragment)
         } else {
-            val targetSchema = findSchemaByUri(rootSchema, uriPart)
-                ?: resolveExternalRef(resourceRoot, uriPart)
-                ?: return null
+            val targetSchema =
+                findSchemaByUri(rootSchema, uriPart)
+                    // Resolve relative URI against current resource root's base, then search globally.
+                    // This handles e.g. $ref: "./bar.json" inside a nested schema with $id: "nested/foo.json".
+                    ?: run {
+                        val baseId = getAbsoluteUri(resourceRoot)
+                        if (baseId.isNotEmpty()) {
+                            try {
+                                val absoluteUri = UriResolver.resolveUri(baseId, uriPart)
+                                if (absoluteUri != uriPart) findSchemaByUri(rootSchema, absoluteUri) else null
+                            } catch (_: Exception) {
+                                null
+                            }
+                        } else {
+                            null
+                        }
+                    }
+                    ?: resolveExternalRef(resourceRoot, uriPart)
+                    ?: return null
             when {
                 fragment.isEmpty() -> targetSchema
                 fragment.startsWith("/") -> JsonPointer.resolve(targetSchema, fragment)

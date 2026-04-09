@@ -1,0 +1,13 @@
+{
+  "vehicle": {
+    "TransportMeans": "MOTOR_VEHICLE",
+    "licensePlateNumber": "AB-CD-1234",
+    "vehicleType": "1",
+    "licensePlateKind": "FZV_A_EXPORT",
+    "dokumentUploadVehicle": [],
+    "holderDiffPolicyholder": false,
+    "fzgDetails": {
+      "someOptionalField": "value"
+    }
+  }
+}

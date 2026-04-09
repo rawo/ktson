@@ -1,0 +1,9 @@
+{
+  "vehicle": {
+    "TransportMeans": "MOTOR_VEHICLE",
+    "vehicleType": "1",
+    "licensePlateKind": "FZV_A_EXPORT",
+    "dokumentUploadVehicle": [],
+    "holderDiffPolicyholder": false
+  }
+}
