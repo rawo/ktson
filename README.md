@@ -263,7 +263,7 @@ For more examples, see [docs/REF_USAGE_EXAMPLES.md](docs/REF_USAGE_EXAMPLES.md) 
 | References ($ref) | ✅ Complete | Local and external (via schemaLoader) |
 | Unevaluated Keywords | ✅ Complete | 100% |
 | Remote Schema Loading | ✅ Complete | Pluggable schemaLoader callback |
-| Format Validation | ⚠️ Partial | email, URI, date, time, IPv4, IPv6, UUID, hostname, idn-email, IRI, regex |
+| Format Validation | ⚠️ Partial | email, URI, date, time, IPv4, IPv6, UUID, hostname, idn-email, IRI, iri-reference, regex, idn-hostname, json-pointer, relative-json-pointer, uri-reference, uri-template, duration |
 | **Official Test Suite** | ✅ **100%** | **2,653/2,653 passing** |
 
 See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed feature breakdown.
@@ -277,7 +277,7 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 2. **Format Validation**
    - Assertion mode only (no annotation-only mode yet)
-   - Some formats still unvalidated: idn-hostname, json-pointer, relative-json-pointer, uri-reference
+   - `idn-hostname` validation is partial (covers common rules, not full RFC 5892 IDNA compliance)
 
 ## Project Status
 
@@ -319,7 +319,7 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 - [x] ~~Implement recursion depth limiting~~ ✅ **COMPLETED**
 - [x] ~~Implement `unevaluatedProperties` and `unevaluatedItems`~~ ✅ **COMPLETED**
 - [x] ~~Remote schema reference support~~ ✅ **COMPLETED**
-- [ ] Add more format validators (hostname, idn-email, iri, regex)
+- [x] ~~Add more format validators (hostname, idn-email, iri, regex)~~ ✅ **COMPLETED** (also: idn-hostname, json-pointer, relative-json-pointer, uri-reference, uri-template, duration)
 - [ ] Improve error messages
 
 **Future Enhancements:**

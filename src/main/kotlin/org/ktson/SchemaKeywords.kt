@@ -94,9 +94,15 @@ object SchemaKeywords {
     const val FORMAT_UUID = "uuid"
     const val FORMAT_HOSTNAME = "hostname"
     const val FORMAT_IDN_EMAIL = "idn-email"
+    const val FORMAT_IDN_HOSTNAME = "idn-hostname"
     const val FORMAT_IRI = "iri"
     const val FORMAT_IRI_REFERENCE = "iri-reference"
+    const val FORMAT_JSON_POINTER = "json-pointer"
+    const val FORMAT_RELATIVE_JSON_POINTER = "relative-json-pointer"
     const val FORMAT_REGEX = "regex"
+    const val FORMAT_URI_REFERENCE = "uri-reference"
+    const val FORMAT_URI_TEMPLATE = "uri-template"
+    const val FORMAT_DURATION = "duration"
 
     // Boolean schemas
     const val SCHEMA_FALSE = "false"

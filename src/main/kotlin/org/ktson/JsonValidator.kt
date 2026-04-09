@@ -18,16 +18,22 @@ import org.ktson.SchemaKeywords.EXCLUSIVE_MINIMUM
 import org.ktson.SchemaKeywords.FORMAT
 import org.ktson.SchemaKeywords.FORMAT_DATE
 import org.ktson.SchemaKeywords.FORMAT_DATE_TIME
+import org.ktson.SchemaKeywords.FORMAT_DURATION
 import org.ktson.SchemaKeywords.FORMAT_EMAIL
 import org.ktson.SchemaKeywords.FORMAT_HOSTNAME
 import org.ktson.SchemaKeywords.FORMAT_IDN_EMAIL
+import org.ktson.SchemaKeywords.FORMAT_IDN_HOSTNAME
 import org.ktson.SchemaKeywords.FORMAT_IPV4
 import org.ktson.SchemaKeywords.FORMAT_IPV6
 import org.ktson.SchemaKeywords.FORMAT_IRI
 import org.ktson.SchemaKeywords.FORMAT_IRI_REFERENCE
+import org.ktson.SchemaKeywords.FORMAT_JSON_POINTER
 import org.ktson.SchemaKeywords.FORMAT_REGEX
+import org.ktson.SchemaKeywords.FORMAT_RELATIVE_JSON_POINTER
 import org.ktson.SchemaKeywords.FORMAT_TIME
 import org.ktson.SchemaKeywords.FORMAT_URI
+import org.ktson.SchemaKeywords.FORMAT_URI_REFERENCE
+import org.ktson.SchemaKeywords.FORMAT_URI_TEMPLATE
 import org.ktson.SchemaKeywords.FORMAT_UUID
 import org.ktson.SchemaKeywords.IF
 import org.ktson.SchemaKeywords.ITEMS
@@ -835,6 +841,12 @@ class JsonValidator(
             }
             FORMAT_IRI -> isValidIri(value)
             FORMAT_IRI_REFERENCE -> !value.contains('\\')
+            FORMAT_IDN_HOSTNAME -> isValidIdnHostname(value)
+            FORMAT_JSON_POINTER -> value.isEmpty() || (value.startsWith("/") && !value.contains(Regex("~(?![01])")))
+            FORMAT_RELATIVE_JSON_POINTER -> isValidRelativeJsonPointer(value)
+            FORMAT_URI_REFERENCE -> !value.contains('\\')
+            FORMAT_URI_TEMPLATE -> isValidUriTemplate(value)
+            FORMAT_DURATION -> isValidDuration(value)
             FORMAT_REGEX -> try {
                 Regex(value)
                 true
@@ -872,6 +884,100 @@ class JsonValidator(
             if (hostPart.count { it == ':' } > 1 && '[' !in hostPart) return false
         }
         return true
+    }
+
+    private fun isValidIdnHostname(value: String): Boolean {
+        if (value.isEmpty()) return false
+        // Split on all recognized label separators (RFC 3490)
+        val labels = value.split('.', '\u3002', '\uFF0E', '\uFF61')
+        if (labels.any { it.isEmpty() }) return false
+        for (label in labels) {
+            // Max 63 bytes in UTF-8
+            if (label.toByteArray(Charsets.UTF_8).size > 63) return false
+            // Must not start or end with hyphen
+            if (label.startsWith('-') || label.endsWith('-')) return false
+            // Must not have '--' in 3rd and 4th position (unless valid xn-- Punycode prefix)
+            if (label.length >= 4 && label[2] == '-' && label[3] == '-' && !label.startsWith("xn--", ignoreCase = true)) return false
+            // Must not start with a combining mark (Mn, Mc, Me categories)
+            val firstChar = label[0]
+            val type = Character.getType(firstChar)
+            if (type == Character.NON_SPACING_MARK.toInt() ||
+                type == Character.COMBINING_SPACING_MARK.toInt() ||
+                type == Character.ENCLOSING_MARK.toInt()
+            ) {
+                return false
+            }
+            // Check for known DISALLOWED characters per RFC 5892
+            if (label.any { it in IDNA_DISALLOWED_CHARS }) return false
+            // ASCII-only labels: same rules as regular hostname (alphanumeric + hyphen)
+            if (label.all { it.code < 128 }) {
+                if (!label.matches(Regex("[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?"))) return false
+            }
+        }
+        return true
+    }
+
+    private fun isValidRelativeJsonPointer(value: String): Boolean {
+        if (value.isEmpty()) return false
+        var i = 0
+        when {
+            value[i] == '0' -> i = 1
+            value[i].isDigit() -> {
+                while (i < value.length && value[i].isDigit()) i++
+            }
+            else -> return false
+        }
+        val suffix = value.substring(i)
+        return when {
+            suffix == "#" -> true
+            suffix.isEmpty() -> true
+            suffix.startsWith("/") -> !suffix.contains(Regex("~(?![01])"))
+            else -> false
+        }
+    }
+
+    private fun isValidUriTemplate(value: String): Boolean {
+        var inExpression = false
+        for (c in value) {
+            when (c) {
+                '{' -> {
+                    if (inExpression) return false
+                    inExpression = true
+                }
+                '}' -> {
+                    if (!inExpression) return false
+                    inExpression = false
+                }
+            }
+        }
+        return !inExpression
+    }
+
+    private fun isValidDuration(value: String): Boolean {
+        if (!value.startsWith("P")) return false
+        if (value.length == 1) return false
+        if (value.any { it.code > 127 }) return false
+        // Weeks-only: P<n>W (cannot be combined with other units)
+        if (Regex("^P\\d+W$").matches(value)) return true
+        if ('W' in value) return false
+        val rest = value.substring(1)
+        val tIdx = rest.indexOf('T')
+        val datePart = if (tIdx >= 0) rest.substring(0, tIdx) else rest
+        val timePart = if (tIdx >= 0) rest.substring(tIdx + 1) else null
+        if (timePart != null && timePart.isEmpty()) return false
+        val hasDate = if (datePart.isNotEmpty()) {
+            if (!Regex("^(\\d+Y)?(\\d+M)?(\\d+D)?$").matches(datePart)) return false
+            true
+        } else {
+            false
+        }
+        val hasTime = if (timePart != null) {
+            if (!Regex("^(\\d+H)?(\\d+M)?(\\d+S)?$").matches(timePart)) return false
+            true
+        } else {
+            false
+        }
+        return hasDate || hasTime
     }
 
     /**
@@ -1539,5 +1645,22 @@ class JsonValidator(
                 errors.add(ValidationError(path, "Schema must be an object or boolean", SCHEMA))
             }
         }
+    }
+
+    companion object {
+        // Characters DISALLOWED in IDN labels per RFC 5892
+        private val IDNA_DISALLOWED_CHARS =
+            setOf(
+                '\u0640', // ARABIC TATWEEL
+                '\u07FA', // NKO LAJANYALAN
+                '\u302E', // HANGUL SINGLE DOT TONE MARK
+                '\u302F', // HANGUL DOUBLE DOT TONE MARK
+                '\u3031', // VERTICAL KANA REPEAT MARK
+                '\u3032', // VERTICAL KANA REPEAT WITH VOICED ITERATION MARK
+                '\u3033', // VERTICAL KANA REPEAT MARK UPPER HALF
+                '\u3034', // VERTICAL KANA REPEAT WITH VOICED ITERATION MARK UPPER HALF
+                '\u3035', // VERTICAL KANA REPEAT MARK LOWER HALF
+                '\u303B', // VERTICAL IDEOGRAPHIC ITERATION MARK
+            )
     }
 }
