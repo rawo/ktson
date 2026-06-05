@@ -848,7 +848,7 @@ class JsonValidator(
             FORMAT_EMAIL -> value.matches(REGEX_EMAIL)
             FORMAT_URI -> value.matches(REGEX_URI)
             FORMAT_DATE -> isValidDate(value)
-            FORMAT_TIME -> value.matches(REGEX_TIME)
+            FORMAT_TIME -> isValidTime(value)
             FORMAT_DATE_TIME -> value.matches(REGEX_DATE_TIME)
             FORMAT_IPV4 -> value.matches(REGEX_IPV4)
             FORMAT_IPV6 -> value.matches(REGEX_IPV6)
@@ -894,6 +894,43 @@ class JsonValidator(
             else -> return false
         }
         return day in 1..maxDay
+    }
+
+    private fun isValidTime(value: String): Boolean {
+        if (!value.matches(REGEX_TIME)) return false
+        val hour = value.substring(0, 2).toInt()
+        val minute = value.substring(3, 5).toInt()
+        val second = value.substring(6, 8).toInt()
+        if (hour > 23 || minute > 59 || second > 60) return false
+
+        // Locate timezone start (after optional fractional seconds)
+        var i = 8
+        while (i < value.length && (value[i] == '.' || value[i].isDigit())) i++
+        val tzStr = value.substring(i)
+
+        val offsetSign: Int
+        val offsetHour: Int
+        val offsetMinute: Int
+        if (tzStr.equals("Z", ignoreCase = true)) {
+            offsetSign = 1
+            offsetHour = 0
+            offsetMinute = 0
+        } else {
+            offsetSign = if (tzStr[0] == '+') 1 else -1
+            offsetHour = tzStr.substring(1, 3).toInt()
+            offsetMinute = tzStr.substring(4, 6).toInt()
+            if (offsetHour > 23 || offsetMinute > 59) return false
+        }
+
+        if (second == 60) {
+            // Leap second valid only when UTC time is 23:59
+            val localMinutes = hour * 60 + minute
+            val offsetTotalMinutes = offsetHour * 60 + offsetMinute
+            val utcMinutes = (localMinutes - offsetSign * offsetTotalMinutes).mod(1440)
+            if (utcMinutes != 23 * 60 + 59) return false
+        }
+
+        return true
     }
 
     private fun isValidHostname(value: String): Boolean {
@@ -1736,7 +1773,7 @@ class JsonValidator(
         private val REGEX_EMAIL = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}$")
         private val REGEX_URI = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*")
         private val REGEX_DATE = Regex("^\\d{4}-\\d{2}-\\d{2}$")
-        private val REGEX_TIME = Regex("^\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?$")
+        private val REGEX_TIME = Regex("^\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$")
         private val REGEX_DATE_TIME = Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$")
         private val REGEX_IPV4 = Regex("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$")
         private val REGEX_IPV6 = Regex("^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$")

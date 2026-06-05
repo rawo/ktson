@@ -125,6 +125,30 @@ class FormatValidationTest :
         it("date-time string is invalid") { runTest { invalid("2020-11-28T23:55:45Z", "date") } }
     }
 
+    describe("time format") {
+        it("valid time with Z") { runTest { valid("08:30:06Z", "time") } }
+        it("valid time with positive offset") { runTest { valid("08:30:06+00:20", "time") } }
+        it("valid time with negative offset") { runTest { valid("08:30:06-08:00", "time") } }
+        it("valid time with fractional seconds") { runTest { valid("23:20:50.52Z", "time") } }
+        it("lowercase z is valid") { runTest { valid("08:30:06z", "time") } }
+        it("valid leap second Zulu") { runTest { valid("23:59:60Z", "time") } }
+        it("valid leap second zero offset") { runTest { valid("23:59:60+00:00", "time") } }
+        it("valid leap second positive offset") { runTest { valid("01:29:60+01:30", "time") } }
+        it("valid leap second negative offset") { runTest { valid("15:59:60-08:00", "time") } }
+
+        it("no timezone is invalid") { runTest { invalid("12:00:00", "time") } }
+        it("hour 24 is invalid") { runTest { invalid("24:00:00Z", "time") } }
+        it("minute 60 is invalid") { runTest { invalid("00:60:00Z", "time") } }
+        it("second 61 is invalid") { runTest { invalid("00:00:61Z", "time") } }
+        it("invalid leap second wrong hour") { runTest { invalid("22:59:60Z", "time") } }
+        it("invalid leap second wrong minute") { runTest { invalid("23:58:60Z", "time") } }
+        it("offset hour 24 is invalid") { runTest { invalid("01:02:03+24:00", "time") } }
+        it("offset minute 60 is invalid") { runTest { invalid("01:02:03+00:60", "time") } }
+        it("Z and numeric offset together is invalid") { runTest { invalid("01:02:03Z+00:30", "time") } }
+        it("non-padded time is invalid") { runTest { invalid("8:3:6Z", "time") } }
+        it("date-time string is invalid for time format") { runTest { invalid("2020-11-28T23:55:45Z", "time") } }
+    }
+
     describe("idn-hostname format") {
         it("ASCII hostname is valid") { runTest { valid("hostname", "idn-hostname") } }
         it("hostname with hyphen is valid") { runTest { valid("host-name", "idn-hostname") } }
