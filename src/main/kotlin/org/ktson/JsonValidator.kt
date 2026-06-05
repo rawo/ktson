@@ -73,6 +73,7 @@ import org.ktson.SchemaKeywords.TYPE_UNKNOWN
 import org.ktson.SchemaKeywords.UNEVALUATED_ITEMS
 import org.ktson.SchemaKeywords.UNEVALUATED_PROPERTIES
 import org.ktson.SchemaKeywords.UNIQUE_ITEMS
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Main JSON Schema validator with thread-safe synchronous validation
@@ -85,6 +86,9 @@ class JsonValidator(
     private val schemaLoader: ((String) -> JsonElement?)? = null,
 ) {
     private val referenceResolver = ReferenceResolver(schemaLoader)
+    private val patternCache = ConcurrentHashMap<String, Regex>()
+
+    private fun compiledPattern(pattern: String): Regex = patternCache.computeIfAbsent(pattern) { Regex(translatePatternToJava(it)) }
 
     /**
      * Validates a JSON instance against a JSON schema
@@ -553,7 +557,7 @@ class JsonValidator(
         schema[PATTERN_PROPERTIES]?.jsonObject?.let { patternProps ->
             patternProps.forEach { (pattern, propSchema) ->
                 instance.keys.forEach { propName ->
-                    if (Regex(translatePatternToJava(pattern)).containsMatchIn(propName)) {
+                    if (compiledPattern(pattern).containsMatchIn(propName)) {
                         val propPath = if (path.isEmpty()) propName else "$path.$propName"
                         validateElement(instance[propName]!!, propSchema, propPath, errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                     }
@@ -822,7 +826,7 @@ class JsonValidator(
 
         // Pattern
         schema[PATTERN]?.jsonPrimitive?.contentOrNull?.let { pattern ->
-            if (!translatePatternToJava(pattern).let { Regex(it).containsMatchIn(value) }) {
+            if (!compiledPattern(pattern).containsMatchIn(value)) {
                 errors.add(ValidationError(path, "String does not match pattern: $pattern", PATTERN))
             }
         }
@@ -1449,7 +1453,7 @@ class JsonValidator(
         // patternProperties: all instance properties matching any pattern
         schemaElement[PATTERN_PROPERTIES]?.jsonObject?.let { patternProps ->
             patternProps.keys.forEach { pattern ->
-                evaluated.addAll(instance.keys.filter { Regex(pattern).containsMatchIn(it) })
+                evaluated.addAll(instance.keys.filter { compiledPattern(pattern).containsMatchIn(it) })
             }
         }
 
@@ -1623,7 +1627,7 @@ class JsonValidator(
     /**
      * Checks if a property name matches any pattern
      */
-    private fun matchesAnyPattern(propName: String, patterns: Set<String>): Boolean = patterns.any { Regex(it).containsMatchIn(propName) }
+    private fun matchesAnyPattern(propName: String, patterns: Set<String>): Boolean = patterns.any { compiledPattern(it).containsMatchIn(propName) }
 
     /**
      * Validates the structure of a schema itself
