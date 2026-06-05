@@ -286,12 +286,14 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 ### Test Coverage
 
-- **Custom Tests**: 179 tests (100% passing)
+- **Custom Tests**: 396 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
   - Depth limit protection: 14 tests
   - URI resolver: 25 tests
+  - Format validation: 203 tests
+  - Error messages: 14 tests
 
 - **Official JSON Schema Test Suite**: 2,653 tests
   - ✅ Passing: 2,653 (100%)
@@ -304,6 +306,8 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 ### Recent Changes
 
+- ✅ **RFC 3986-compliant `uri` format validator** (scheme, forbidden chars, percent-encoding, authority)
+- ✅ **Improved `uri-reference` format validator** (rejects non-ASCII and invalid percent-encoding)
 - ✅ **Remote schema loading implemented** (pluggable `schemaLoader` callback)
 - ✅ **100% official test suite pass rate** (2,653/2,653 tests)
 - ✅ `unevaluatedProperties` and `unevaluatedItems` implemented
