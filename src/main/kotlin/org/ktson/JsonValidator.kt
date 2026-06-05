@@ -845,7 +845,7 @@ class JsonValidator(
      */
     private fun validateFormat(value: String, format: String, path: String, errors: MutableList<ValidationError>) {
         val valid = when (format) {
-            FORMAT_EMAIL -> value.matches(REGEX_EMAIL)
+            FORMAT_EMAIL -> isValidEmail(value)
             FORMAT_URI -> value.matches(REGEX_URI)
             FORMAT_DATE -> isValidDate(value)
             FORMAT_TIME -> isValidTime(value)
@@ -969,6 +969,36 @@ class JsonValidator(
     }
 
     private fun isValidIPv6Group(s: String): Boolean = s.length in 1..4 && s.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
+
+    private fun isValidEmail(value: String): Boolean {
+        if (value.isEmpty()) return false
+        return if (value.startsWith('"')) {
+            val closeQuote = value.indexOf('"', 1)
+            if (closeQuote < 0 || closeQuote + 1 >= value.length || value[closeQuote + 1] != '@') return false
+            val domain = value.substring(closeQuote + 2)
+            domain.isNotEmpty() && isValidEmailDomain(domain)
+        } else {
+            val atIdx = value.lastIndexOf('@')
+            if (atIdx <= 0) return false
+            val local = value.substring(0, atIdx)
+            val domain = value.substring(atIdx + 1)
+            domain.isNotEmpty() && isValidEmailLocalUnquoted(local) && isValidEmailDomain(domain)
+        }
+    }
+
+    private fun isValidEmailLocalUnquoted(local: String): Boolean {
+        if (local.startsWith('.') || local.endsWith('.')) return false
+        if (local.contains("..")) return false
+        return local.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it in EMAIL_LOCAL_SPECIAL_CHARS }
+    }
+
+    private fun isValidEmailDomain(domain: String): Boolean {
+        if (domain.startsWith('[') && domain.endsWith(']')) {
+            val inner = domain.substring(1, domain.length - 1)
+            return if (inner.startsWith("IPv6:")) isValidIPv6(inner.substring(5)) else inner.matches(REGEX_IPV4)
+        }
+        return isValidHostname(domain)
+    }
 
     private fun isValidHostname(value: String): Boolean {
         if (value.isEmpty()) return false
@@ -1807,8 +1837,8 @@ class JsonValidator(
 
     companion object {
         private val REGEX_UNICODE_CATEGORY = Regex("""\\([pP])\{([^}]+)}""")
-        private val REGEX_EMAIL = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}$")
-        private val REGEX_URI = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*")
+        private val EMAIL_LOCAL_SPECIAL_CHARS = setOf('.', '!', '#', '$', '%', '&', '\'', '*', '+', '-', '/', '=', '?', '^', '_', '`', '{', '|', '}', '~')
+private val REGEX_URI = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*")
         private val REGEX_DATE = Regex("^\\d{4}-\\d{2}-\\d{2}$")
         private val REGEX_TIME = Regex("^\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$")
         private val REGEX_DATE_TIME = Regex("^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$")

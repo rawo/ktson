@@ -217,4 +217,28 @@ class FormatValidationTest :
         it("leading whitespace is invalid") { runTest { invalid("  ::1", "ipv6") } }
         it("trailing whitespace is invalid") { runTest { invalid("::1  ", "ipv6") } }
     }
+
+    describe("email format") {
+        it("standard email is valid") { runTest { valid("joe.bloggs@example.com", "email") } }
+        it("tilde in local part is valid") { runTest { valid("te~st@example.com", "email") } }
+        it("tilde before local part is valid") { runTest { valid("~test@example.com", "email") } }
+        it("tilde after local part is valid") { runTest { valid("test~@example.com", "email") } }
+        it("quoted string with space is valid") { runTest { valid("\"joe bloggs\"@example.com", "email") } }
+        it("quoted string with double dot is valid") { runTest { valid("\"joe..bloggs\"@example.com", "email") } }
+        it("quoted string with at-sign is valid") { runTest { valid("\"joe@bloggs\"@example.com", "email") } }
+        it("IPv4 address literal domain is valid") { runTest { valid("joe.bloggs@[127.0.0.1]", "email") } }
+        it("IPv6 address literal domain is valid") { runTest { valid("joe.bloggs@[IPv6:::1]", "email") } }
+        it("two separated dots in local part are valid") { runTest { valid("te.s.t@example.com", "email") } }
+
+        it("no at-sign is invalid") { runTest { invalid("2962", "email") } }
+        it("leading dot in local part is invalid") { runTest { invalid(".test@example.com", "email") } }
+        it("trailing dot in local part is invalid") { runTest { invalid("test.@example.com", "email") } }
+        it("consecutive dots in local part are invalid") { runTest { invalid("te..st@example.com", "email") } }
+        it("invalid char in domain is invalid") { runTest { invalid("joe.bloggs@invalid=domain.com", "email") } }
+        it("invalid IPv4 literal domain is invalid") { runTest { invalid("joe.bloggs@[127.0.0.300]", "email") } }
+        it("two emails is invalid") { runTest { invalid("user1@oceania.org, user2@oceania.org", "email") } }
+        it("no local part is invalid") { runTest { invalid("@example.com", "email") } }
+        it("no domain is invalid") { runTest { invalid("joe.bloggs@", "email") } }
+        it("unquoted space in local part is invalid") { runTest { invalid("joe bloggs@example.com", "email") } }
+    }
 })
