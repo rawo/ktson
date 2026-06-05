@@ -1704,7 +1704,7 @@ class JsonValidator(
         }
     }
 
-    private fun translatePatternToJava(pattern: String): String = pattern.replace(Regex("""\\([pP])\{([^}]+)}""")) { match ->
+    private fun translatePatternToJava(pattern: String): String = pattern.replace(REGEX_UNICODE_CATEGORY) { match ->
             val flag = match.groupValues[1]
             val name = match.groupValues[2]
             val javaName = UNICODE_CATEGORY_NAMES[name] ?: name
@@ -1712,6 +1712,7 @@ class JsonValidator(
         }
 
     companion object {
+        private val REGEX_UNICODE_CATEGORY = Regex("""\\([pP])\{([^}]+)}""")
         private val REGEX_EMAIL = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}$")
         private val REGEX_URI = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*")
         private val REGEX_DATE = Regex("^\\d{4}-\\d{2}-\\d{2}$")
