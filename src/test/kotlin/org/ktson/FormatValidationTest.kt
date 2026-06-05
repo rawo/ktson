@@ -186,4 +186,35 @@ class FormatValidationTest :
         it("starts with enclosing mark is invalid") { runTest { invalid("\u0488hello", "idn-hostname") } }
         it("contains Arabic tatweel is invalid") { runTest { invalid("\u0640\u07FA", "idn-hostname") } }
     }
+
+    describe("ipv6 format") {
+        it("full 8-group address is valid") { runTest { valid("1:2:3:4:5:6:7:8", "ipv6") } }
+        it("loopback ::1 is valid") { runTest { valid("::1", "ipv6") } }
+        it("all-zeros :: is valid") { runTest { valid("::", "ipv6") } }
+        it("trailing double colon is valid") { runTest { valid("d6::", "ipv6") } }
+        it("leading double colon with groups is valid") { runTest { valid("::42:ff:1", "ipv6") } }
+        it("double colon in middle is valid") { runTest { valid("1:d6::42", "ipv6") } }
+        it("trailing 4 hex is valid") { runTest { valid("::abef", "ipv6") } }
+        it("mixed format with IPv4 tail is valid") { runTest { valid("1::d6:192.168.0.1", "ipv6") } }
+        it("mixed format with double colons between sections is valid") { runTest { valid("1:2::192.168.0.1", "ipv6") } }
+        it("IPv4-mapped address is valid") { runTest { valid("::ffff:192.168.0.1", "ipv6") } }
+        it("long valid mixed ipv6 is valid") { runTest { valid("1000:1000:1000:1000:1000:1000:255.255.255.255", "ipv6") } }
+
+        it("5 hex digits in group is invalid") { runTest { invalid("12345::", "ipv6") } }
+        it("trailing 5 hex symbols is invalid") { runTest { invalid("::abcef", "ipv6") } }
+        it("too many groups is invalid") { runTest { invalid("1:1:1:1:1:1:1:1:1:1:1:1:1:1:1:1", "ipv6") } }
+        it("illegal characters is invalid") { runTest { invalid("::laptop", "ipv6") } }
+        it("missing leading octet is invalid") { runTest { invalid(":2:3:4:5:6:7:8", "ipv6") } }
+        it("missing trailing octet is invalid") { runTest { invalid("1:2:3:4:5:6:7:", "ipv6") } }
+        it("two double colons is invalid") { runTest { invalid("1::d6::42", "ipv6") } }
+        it("triple colon is invalid") { runTest { invalid("1:2:3:4:5:::8", "ipv6") } }
+        it("insufficient octets without double colons is invalid") { runTest { invalid("1:2:3:4:5:6:7", "ipv6") } }
+        it("IPv4 address is not IPv6") { runTest { invalid("127.0.0.1", "ipv6") } }
+        it("IPv4 segment must have 4 octets is invalid") { runTest { invalid("1:2:3:4:1.2.3", "ipv6") } }
+        it("netmask is not part of IPv6 is invalid") { runTest { invalid("fe80::/64", "ipv6") } }
+        it("IPv4 octet out of range is invalid") { runTest { invalid("1::2:192.168.256.1", "ipv6") } }
+        it("hex octet in IPv4 is invalid") { runTest { invalid("1::2:192.168.ff.1", "ipv6") } }
+        it("leading whitespace is invalid") { runTest { invalid("  ::1", "ipv6") } }
+        it("trailing whitespace is invalid") { runTest { invalid("::1  ", "ipv6") } }
+    }
 })

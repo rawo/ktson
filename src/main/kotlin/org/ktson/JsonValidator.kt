@@ -851,7 +851,7 @@ class JsonValidator(
             FORMAT_TIME -> isValidTime(value)
             FORMAT_DATE_TIME -> isValidDateTime(value)
             FORMAT_IPV4 -> value.matches(REGEX_IPV4)
-            FORMAT_IPV6 -> value.matches(REGEX_IPV6)
+            FORMAT_IPV6 -> isValidIPv6(value)
             FORMAT_UUID -> value.matches(REGEX_UUID)
             FORMAT_HOSTNAME -> isValidHostname(value)
             FORMAT_IDN_EMAIL -> {
@@ -938,6 +938,37 @@ class JsonValidator(
         val tIdx = value.indexOfFirst { it == 'T' || it == 't' }
         return isValidDate(value.substring(0, tIdx)) && isValidTime(value.substring(tIdx + 1))
     }
+
+    private fun isValidIPv6(value: String): Boolean {
+        if (value.isEmpty()) return false
+        val hasMixed = '.' in value
+        if (hasMixed) {
+            val lastColon = value.lastIndexOf(':')
+            if (lastColon < 0) return false
+            val ipv4Part = value.substring(lastColon + 1)
+            if (!ipv4Part.matches(REGEX_IPV4)) return false
+            // Replace IPv4 tail with two placeholder hex groups and validate as pure IPv6
+            return isValidPureIPv6Part(value.substring(0, lastColon) + ":0:0")
+        }
+        return isValidPureIPv6Part(value)
+    }
+
+    private fun isValidPureIPv6Part(s: String): Boolean {
+        if (":::" in s) return false
+        val hasCompress = "::" in s
+        if (hasCompress && s.windowed(2).count { it == "::" } > 1) return false
+        return if (hasCompress) {
+            val sides = s.split("::")
+            val left = if (sides[0].isEmpty()) emptyList() else sides[0].split(":")
+            val right = if (sides[1].isEmpty()) emptyList() else sides[1].split(":")
+            left.size + right.size < 8 && (left + right).all { isValidIPv6Group(it) }
+        } else {
+            val groups = s.split(":")
+            groups.size == 8 && groups.all { isValidIPv6Group(it) }
+        }
+    }
+
+    private fun isValidIPv6Group(s: String): Boolean = s.length in 1..4 && s.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
 
     private fun isValidHostname(value: String): Boolean {
         if (value.isEmpty()) return false
@@ -1782,8 +1813,7 @@ class JsonValidator(
         private val REGEX_TIME = Regex("^\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$")
         private val REGEX_DATE_TIME = Regex("^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$")
         private val REGEX_IPV4 = Regex("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$")
-        private val REGEX_IPV6 = Regex("^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$")
-        private val REGEX_UUID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+private val REGEX_UUID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
         private val REGEX_JSON_POINTER_INVALID_TILDE = Regex("~(?![01])")
         private val REGEX_HOSTNAME_LABEL = Regex("[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?")
         private val REGEX_IRI_SCHEME = Regex("[a-zA-Z][a-zA-Z0-9+\\-.]*:.*")
