@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag is on master
+        run: |
+          git fetch origin master
+          TAG_COMMIT=$(git rev-list -n 1 "${{ github.ref_name }}")
+          if ! git merge-base --is-ancestor "$TAG_COMMIT" origin/master; then
+            echo "::error::Tag ${{ github.ref_name }} is not on master branch, skipping release."
+            exit 1
+          fi
+
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT_TAG="${{ github.ref_name }}"
+          PREV_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName // empty' 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            COMMITS=$(git log "$CURRENT_TAG" --pretty=format:"%s" --no-merges)
+          else
+            COMMITS=$(git log "${PREV_TAG}..${CURRENT_TAG}" --pretty=format:"%s" --no-merges)
+          fi
+
+          FEATURES=$(echo "$COMMITS" \
+            | grep -E '^feat(\([^)]+\))?!?:' \
+            | sed -E 's/^feat\(([^)]+)\)!?: /\*\*\1\*\*: /' \
+            | sed -E 's/^feat!?: //' \
+            | sed 's/^/- /' \
+            || true)
+
+          FIXES=$(echo "$COMMITS" \
+            | grep -E '^fix(\([^)]+\))?!?:' \
+            | sed -E 's/^fix\(([^)]+)\)!?: /\*\*\1\*\*: /' \
+            | sed -E 's/^fix!?: //' \
+            | sed 's/^/- /' \
+            || true)
+
+          {
+            if [ -n "$FEATURES" ]; then
+              echo "## What's New"
+              echo "$FEATURES"
+              echo ""
+            fi
+            if [ -n "$FIXES" ]; then
+              echo "## Bug Fixes"
+              echo "$FIXES"
+              echo ""
+            fi
+            if [ -z "$FEATURES" ] && [ -z "$FIXES" ]; then
+              echo "No notable changes."
+            fi
+          } > release_notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes-file release_notes.md
