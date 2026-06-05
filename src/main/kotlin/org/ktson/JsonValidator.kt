@@ -808,19 +808,19 @@ class JsonValidator(
     ) {
         // Min/Max length (support decimal values per spec)
         // Note: JSON Schema counts Unicode codepoints, not UTF-16 code units
+        val codepointLength: Int by lazy { value.codepointLength() }
+
         schema[MIN_LENGTH]?.jsonPrimitive?.let { minLengthValue ->
             val minLength = minLengthValue.doubleOrNull?.toInt() ?: minLengthValue.intOrNull ?: 0
-            val length = value.codepointLength()
-            if (length < minLength) {
-                errors.add(ValidationError(path, "String length is $length codepoints, minimum is $minLength", MIN_LENGTH))
+            if (codepointLength < minLength) {
+                errors.add(ValidationError(path, "String length is $codepointLength codepoints, minimum is $minLength", MIN_LENGTH))
             }
         }
 
         schema[MAX_LENGTH]?.jsonPrimitive?.let { maxLengthValue ->
             val maxLength = maxLengthValue.doubleOrNull?.toInt() ?: maxLengthValue.intOrNull ?: Int.MAX_VALUE
-            val length = value.codepointLength()
-            if (length > maxLength) {
-                errors.add(ValidationError(path, "String length is $length codepoints, maximum is $maxLength", MAX_LENGTH))
+            if (codepointLength > maxLength) {
+                errors.add(ValidationError(path, "String length is $codepointLength codepoints, maximum is $maxLength", MAX_LENGTH))
             }
         }
 
