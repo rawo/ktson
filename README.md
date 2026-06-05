@@ -76,7 +76,7 @@ Most of the code refactoring were performed by AI agent with supervision and cod
 
 ```kotlin
 dependencies {
-    implementation("org.ktson:ktson:0.0.1-SNAPSHOT")
+    implementation("org.ktson:ktson:1.0.0")
 }
 ```
 
@@ -84,7 +84,7 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'org.ktson:ktson:0.0.1-SNAPSHOT'
+    implementation 'org.ktson:ktson:1.0.0'
 }
 ```
 
@@ -94,7 +94,7 @@ dependencies {
 <dependency>
     <groupId>org.ktson</groupId>
     <artifactId>ktson</artifactId>
-    <version>0.0.2-SNAPSHOT</version>
+    <version>1.0.0</version>
 </dependency>
 ```
 
@@ -281,8 +281,8 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 ## Project Status
 
-**Version**: 0.0.1-SNAPSHOT  
-**Status**: ⚠️ Pre-release (Beta)
+**Version**: 1.0.0  
+**Status**: ✅ Stable
 
 ### Test Coverage
 

@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "org.ktson"
-version = "0.0.2-SNAPSHOT"
+version = "1.0.0"
 
 repositories {
     mavenCentral()
