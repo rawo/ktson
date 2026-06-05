@@ -104,6 +104,27 @@ class FormatValidationTest :
         it("digit without unit is invalid") { runTest { invalid("P1", "duration") } }
     }
 
+    describe("date format") {
+        it("valid date") { runTest { valid("1963-06-19", "date") } }
+        it("31 days in January is valid") { runTest { valid("2020-01-31", "date") } }
+        it("28 days in non-leap February is valid") { runTest { valid("2021-02-28", "date") } }
+        it("29 days in leap February is valid") { runTest { valid("2020-02-29", "date") } }
+        it("30 days in April is valid") { runTest { valid("2020-04-30", "date") } }
+        it("31 days in December is valid") { runTest { valid("2020-12-31", "date") } }
+
+        it("32 days in January is invalid") { runTest { invalid("2020-01-32", "date") } }
+        it("29 days in non-leap February is invalid") { runTest { invalid("2021-02-29", "date") } }
+        it("30 days in leap February is invalid") { runTest { invalid("2020-02-30", "date") } }
+        it("31 days in April is invalid") { runTest { invalid("2020-04-31", "date") } }
+        it("month 13 is invalid") { runTest { invalid("2020-13-01", "date") } }
+        it("month 00 is invalid") { runTest { invalid("2020-00-01", "date") } }
+        it("day 00 is invalid") { runTest { invalid("2020-01-00", "date") } }
+        it("non-padded month is invalid") { runTest { invalid("1998-1-20", "date") } }
+        it("non-padded day is invalid") { runTest { invalid("1998-01-1", "date") } }
+        it("slash-separated is invalid") { runTest { invalid("06/19/1963", "date") } }
+        it("date-time string is invalid") { runTest { invalid("2020-11-28T23:55:45Z", "date") } }
+    }
+
     describe("idn-hostname format") {
         it("ASCII hostname is valid") { runTest { valid("hostname", "idn-hostname") } }
         it("hostname with hyphen is valid") { runTest { valid("host-name", "idn-hostname") } }

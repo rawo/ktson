@@ -847,7 +847,7 @@ class JsonValidator(
         val valid = when (format) {
             FORMAT_EMAIL -> value.matches(REGEX_EMAIL)
             FORMAT_URI -> value.matches(REGEX_URI)
-            FORMAT_DATE -> value.matches(REGEX_DATE)
+            FORMAT_DATE -> isValidDate(value)
             FORMAT_TIME -> value.matches(REGEX_TIME)
             FORMAT_DATE_TIME -> value.matches(REGEX_DATE_TIME)
             FORMAT_IPV4 -> value.matches(REGEX_IPV4)
@@ -878,6 +878,22 @@ class JsonValidator(
         if (!valid) {
             errors.add(ValidationError(path, "String does not match format: $format", FORMAT))
         }
+    }
+
+    private fun isValidDate(value: String): Boolean {
+        if (!value.matches(REGEX_DATE)) return false
+        val parts = value.split('-')
+        val year = parts[0].toInt()
+        val month = parts[1].toInt()
+        val day = parts[2].toInt()
+        if (month < 1 || month > 12) return false
+        val maxDay = when (month) {
+            1, 3, 5, 7, 8, 10, 12 -> 31
+            4, 6, 9, 11 -> 30
+            2 -> if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) 29 else 28
+            else -> return false
+        }
+        return day in 1..maxDay
     }
 
     private fun isValidHostname(value: String): Boolean {
