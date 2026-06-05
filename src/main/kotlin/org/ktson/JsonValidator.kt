@@ -841,14 +841,14 @@ class JsonValidator(
      */
     private fun validateFormat(value: String, format: String, path: String, errors: MutableList<ValidationError>) {
         val valid = when (format) {
-            FORMAT_EMAIL -> value.matches(Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}$"))
-            FORMAT_URI -> value.matches(Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*"))
-            FORMAT_DATE -> value.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$"))
-            FORMAT_TIME -> value.matches(Regex("^\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?$"))
-            FORMAT_DATE_TIME -> value.matches(Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"))
-            FORMAT_IPV4 -> value.matches(Regex("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"))
-            FORMAT_IPV6 -> value.matches(Regex("^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$"))
-            FORMAT_UUID -> value.matches(Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"))
+            FORMAT_EMAIL -> value.matches(REGEX_EMAIL)
+            FORMAT_URI -> value.matches(REGEX_URI)
+            FORMAT_DATE -> value.matches(REGEX_DATE)
+            FORMAT_TIME -> value.matches(REGEX_TIME)
+            FORMAT_DATE_TIME -> value.matches(REGEX_DATE_TIME)
+            FORMAT_IPV4 -> value.matches(REGEX_IPV4)
+            FORMAT_IPV6 -> value.matches(REGEX_IPV6)
+            FORMAT_UUID -> value.matches(REGEX_UUID)
             FORMAT_HOSTNAME -> isValidHostname(value)
             FORMAT_IDN_EMAIL -> {
                 val atIdx = value.lastIndexOf('@')
@@ -857,7 +857,7 @@ class JsonValidator(
             FORMAT_IRI -> isValidIri(value)
             FORMAT_IRI_REFERENCE -> !value.contains('\\')
             FORMAT_IDN_HOSTNAME -> isValidIdnHostname(value)
-            FORMAT_JSON_POINTER -> value.isEmpty() || (value.startsWith("/") && !value.contains(Regex("~(?![01])")))
+            FORMAT_JSON_POINTER -> value.isEmpty() || (value.startsWith("/") && !value.contains(REGEX_JSON_POINTER_INVALID_TILDE))
             FORMAT_RELATIVE_JSON_POINTER -> isValidRelativeJsonPointer(value)
             FORMAT_URI_REFERENCE -> !value.contains('\\')
             FORMAT_URI_TEMPLATE -> isValidUriTemplate(value)
@@ -882,13 +882,13 @@ class JsonValidator(
         return labels.all { label ->
             label.isNotEmpty() &&
                 label.length <= 63 &&
-                label.matches(Regex("[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?"))
+                label.matches(REGEX_HOSTNAME_LABEL)
         }
     }
 
     private fun isValidIri(value: String): Boolean {
         if (value.contains('\\')) return false
-        if (!value.matches(Regex("[a-zA-Z][a-zA-Z0-9+\\-.]*:.*"))) return false
+        if (!value.matches(REGEX_IRI_SCHEME)) return false
         val slashSlash = value.indexOf("://")
         if (slashSlash >= 0) {
             val afterSlashes = value.substring(slashSlash + 3)
@@ -926,7 +926,7 @@ class JsonValidator(
             if (label.any { it in IDNA_DISALLOWED_CHARS }) return false
             // ASCII-only labels: same rules as regular hostname (alphanumeric + hyphen)
             if (label.all { it.code < 128 }) {
-                if (!label.matches(Regex("[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?"))) return false
+                if (!label.matches(REGEX_HOSTNAME_LABEL)) return false
             }
         }
         return true
@@ -946,7 +946,7 @@ class JsonValidator(
         return when {
             suffix == "#" -> true
             suffix.isEmpty() -> true
-            suffix.startsWith("/") -> !suffix.contains(Regex("~(?![01])"))
+            suffix.startsWith("/") -> !suffix.contains(REGEX_JSON_POINTER_INVALID_TILDE)
             else -> false
         }
     }
@@ -973,7 +973,7 @@ class JsonValidator(
         if (value.length == 1) return false
         if (value.any { it.code > 127 }) return false
         // Weeks-only: P<n>W (cannot be combined with other units)
-        if (Regex("^P\\d+W$").matches(value)) return true
+        if (REGEX_DURATION_WEEKS.matches(value)) return true
         if ('W' in value) return false
         val rest = value.substring(1)
         val tIdx = rest.indexOf('T')
@@ -981,13 +981,13 @@ class JsonValidator(
         val timePart = if (tIdx >= 0) rest.substring(tIdx + 1) else null
         if (timePart != null && timePart.isEmpty()) return false
         val hasDate = if (datePart.isNotEmpty()) {
-            if (!Regex("^(\\d+Y)?(\\d+M)?(\\d+D)?$").matches(datePart)) return false
+            if (!REGEX_DURATION_DATE.matches(datePart)) return false
             true
         } else {
             false
         }
         val hasTime = if (timePart != null) {
-            if (!Regex("^(\\d+H)?(\\d+M)?(\\d+S)?$").matches(timePart)) return false
+            if (!REGEX_DURATION_TIME.matches(timePart)) return false
             true
         } else {
             false
@@ -1712,6 +1712,21 @@ class JsonValidator(
         }
 
     companion object {
+        private val REGEX_EMAIL = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}$")
+        private val REGEX_URI = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*")
+        private val REGEX_DATE = Regex("^\\d{4}-\\d{2}-\\d{2}$")
+        private val REGEX_TIME = Regex("^\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?$")
+        private val REGEX_DATE_TIME = Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$")
+        private val REGEX_IPV4 = Regex("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$")
+        private val REGEX_IPV6 = Regex("^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$")
+        private val REGEX_UUID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+        private val REGEX_JSON_POINTER_INVALID_TILDE = Regex("~(?![01])")
+        private val REGEX_HOSTNAME_LABEL = Regex("[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?")
+        private val REGEX_IRI_SCHEME = Regex("[a-zA-Z][a-zA-Z0-9+\\-.]*:.*")
+        private val REGEX_DURATION_WEEKS = Regex("^P\\d+W$")
+        private val REGEX_DURATION_DATE = Regex("^(\\d+Y)?(\\d+M)?(\\d+D)?$")
+        private val REGEX_DURATION_TIME = Regex("^(\\d+H)?(\\d+M)?(\\d+S)?$")
+
         // Maps ECMAScript Unicode category long names to Java short names for \p{} in patterns
         private val UNICODE_CATEGORY_NAMES =
             mapOf(
