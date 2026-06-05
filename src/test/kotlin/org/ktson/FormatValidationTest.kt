@@ -55,18 +55,6 @@ class FormatValidationTest :
         it("leading zero followed by digits with hash is invalid") { runTest { invalid("01#", "relative-json-pointer") } }
     }
 
-    describe("uri-reference format") {
-        it("absolute URI is valid") { runTest { valid("http://foo.bar/?baz=qux#quux", "uri-reference") } }
-        it("protocol-relative URI is valid") { runTest { valid("//foo.bar/?baz=qux#quux", "uri-reference") } }
-        it("absolute path is valid") { runTest { valid("/abc", "uri-reference") } }
-        it("relative path is valid") { runTest { valid("abc", "uri-reference") } }
-        it("fragment-only is valid") { runTest { valid("#fragment", "uri-reference") } }
-        it("empty string is valid") { runTest { valid("", "uri-reference") } }
-
-        it("backslash path is invalid") { runTest { invalid("\\\\WINDOWS\\fileshare", "uri-reference") } }
-        it("fragment with backslash is invalid") { runTest { invalid("#frag\\ment", "uri-reference") } }
-    }
-
     describe("uri-template format") {
         it("valid template with expressions") { runTest { valid("http://example.com/{term:1}/{term}", "uri-template") } }
         it("template without variables is valid") { runTest { valid("http://example.com/dictionary", "uri-template") } }
@@ -261,5 +249,19 @@ class FormatValidationTest :
         it("incomplete percent-encoding is invalid") { runTest { invalid("http://example.com/path%2", "uri") } }
         it("non-hex percent-encoding is invalid") { runTest { invalid("http://example.com/path%GG", "uri") } }
         it("numeric scheme start is invalid") { runTest { invalid("1http://example.com", "uri") } }
+    }
+
+    describe("uri-reference format") {
+        it("absolute URI is valid") { runTest { valid("http://foo.bar/?baz=qux#quux", "uri-reference") } }
+        it("protocol-relative reference is valid") { runTest { valid("//foo.bar/?baz=qux#quux", "uri-reference") } }
+        it("root-relative path is valid") { runTest { valid("/abc", "uri-reference") } }
+        it("relative path is valid") { runTest { valid("abc", "uri-reference") } }
+        it("fragment-only is valid") { runTest { valid("#fragment", "uri-reference") } }
+        it("empty string is valid") { runTest { valid("", "uri-reference") } }
+
+        it("backslash UNC path is invalid") { runTest { invalid("\\\\WINDOWS\\fileshare", "uri-reference") } }
+        it("backslash in fragment is invalid") { runTest { invalid("#frag\\ment", "uri-reference") } }
+        it("backslash in path is invalid") { runTest { invalid("https://example.org/foobar\\.txt", "uri-reference") } }
+        it("non-ASCII character is invalid") { runTest { invalid("/foobar®.txt", "uri-reference") } }
     }
 })

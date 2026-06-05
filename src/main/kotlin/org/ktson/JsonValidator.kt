@@ -863,7 +863,7 @@ class JsonValidator(
             FORMAT_IDN_HOSTNAME -> isValidIdnHostname(value)
             FORMAT_JSON_POINTER -> value.isEmpty() || (value.startsWith("/") && !value.contains(REGEX_JSON_POINTER_INVALID_TILDE))
             FORMAT_RELATIVE_JSON_POINTER -> isValidRelativeJsonPointer(value)
-            FORMAT_URI_REFERENCE -> !value.contains('\\')
+            FORMAT_URI_REFERENCE -> isValidUriReference(value)
             FORMAT_URI_TEMPLATE -> isValidUriTemplate(value)
             FORMAT_DURATION -> isValidDuration(value)
             FORMAT_REGEX -> try {
@@ -1054,6 +1054,23 @@ class JsonValidator(
     }
 
     private fun isHexChar(c: Char) = c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F'
+
+    private fun isValidUriReference(value: String): Boolean {
+        val forbiddenChars = setOf(' ', '"', '<', '>', '{', '}', '^', '`', '|', '\\')
+        var i = 0
+        while (i < value.length) {
+            val c = value[i]
+            if (c in forbiddenChars || c.code > 127) return false
+            if (c == '%') {
+                if (i + 2 >= value.length) return false
+                if (!isHexChar(value[i + 1]) || !isHexChar(value[i + 2])) return false
+                i += 3
+            } else {
+                i++
+            }
+        }
+        return true
+    }
 
     private fun isValidHostname(value: String): Boolean {
         if (value.isEmpty()) return false
