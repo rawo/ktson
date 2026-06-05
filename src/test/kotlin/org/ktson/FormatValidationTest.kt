@@ -149,6 +149,24 @@ class FormatValidationTest :
         it("date-time string is invalid for time format") { runTest { invalid("2020-11-28T23:55:45Z", "time") } }
     }
 
+    describe("date-time format") {
+        it("valid date-time with Z") { runTest { valid("1963-06-19T08:30:06Z", "date-time") } }
+        it("valid date-time with fractional seconds") { runTest { valid("1963-06-19T08:30:06.283185Z", "date-time") } }
+        it("valid date-time with plus offset") { runTest { valid("1937-01-01T12:00:27.87+00:20", "date-time") } }
+        it("valid date-time with minus offset") { runTest { valid("1990-12-31T15:59:50.123-08:00", "date-time") } }
+        it("valid date-time with leap second UTC") { runTest { valid("1998-12-31T23:59:60Z", "date-time") } }
+        it("valid date-time with leap second minus offset") { runTest { valid("1998-12-31T15:59:60.123-08:00", "date-time") } }
+        it("case-insensitive T and Z") { runTest { valid("1963-06-19t08:30:06.283185z", "date-time") } }
+
+        it("past leap second is invalid") { runTest { invalid("1998-12-31T23:59:61Z", "date-time") } }
+        it("leap second on wrong minute is invalid") { runTest { invalid("1998-12-31T23:58:60Z", "date-time") } }
+        it("leap second on wrong hour is invalid") { runTest { invalid("1998-12-31T22:59:60Z", "date-time") } }
+        it("invalid day in date-time is invalid") { runTest { invalid("1990-02-31T15:59:59.123-08:00", "date-time") } }
+        it("invalid offset in date-time is invalid") { runTest { invalid("1990-12-31T15:59:59-24:00", "date-time") } }
+        it("hour 24 in date-time is invalid") { runTest { invalid("1990-12-31T24:00:00Z", "date-time") } }
+        it("Z after numeric offset is invalid") { runTest { invalid("1963-06-19T08:30:06.28123+01:00Z", "date-time") } }
+    }
+
     describe("idn-hostname format") {
         it("ASCII hostname is valid") { runTest { valid("hostname", "idn-hostname") } }
         it("hostname with hyphen is valid") { runTest { valid("host-name", "idn-hostname") } }

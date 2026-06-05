@@ -849,7 +849,7 @@ class JsonValidator(
             FORMAT_URI -> value.matches(REGEX_URI)
             FORMAT_DATE -> isValidDate(value)
             FORMAT_TIME -> isValidTime(value)
-            FORMAT_DATE_TIME -> value.matches(REGEX_DATE_TIME)
+            FORMAT_DATE_TIME -> isValidDateTime(value)
             FORMAT_IPV4 -> value.matches(REGEX_IPV4)
             FORMAT_IPV6 -> value.matches(REGEX_IPV6)
             FORMAT_UUID -> value.matches(REGEX_UUID)
@@ -931,6 +931,12 @@ class JsonValidator(
         }
 
         return true
+    }
+
+    private fun isValidDateTime(value: String): Boolean {
+        if (!value.matches(REGEX_DATE_TIME)) return false
+        val tIdx = value.indexOfFirst { it == 'T' || it == 't' }
+        return isValidDate(value.substring(0, tIdx)) && isValidTime(value.substring(tIdx + 1))
     }
 
     private fun isValidHostname(value: String): Boolean {
@@ -1774,7 +1780,7 @@ class JsonValidator(
         private val REGEX_URI = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*")
         private val REGEX_DATE = Regex("^\\d{4}-\\d{2}-\\d{2}$")
         private val REGEX_TIME = Regex("^\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$")
-        private val REGEX_DATE_TIME = Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$")
+        private val REGEX_DATE_TIME = Regex("^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$")
         private val REGEX_IPV4 = Regex("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$")
         private val REGEX_IPV6 = Regex("^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$")
         private val REGEX_UUID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
