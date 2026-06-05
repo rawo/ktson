@@ -846,7 +846,7 @@ class JsonValidator(
     private fun validateFormat(value: String, format: String, path: String, errors: MutableList<ValidationError>) {
         val valid = when (format) {
             FORMAT_EMAIL -> isValidEmail(value)
-            FORMAT_URI -> value.matches(REGEX_URI)
+            FORMAT_URI -> isValidUri(value)
             FORMAT_DATE -> isValidDate(value)
             FORMAT_TIME -> isValidTime(value)
             FORMAT_DATE_TIME -> isValidDateTime(value)
@@ -999,6 +999,61 @@ class JsonValidator(
         }
         return isValidHostname(domain)
     }
+
+    private fun isValidUri(value: String): Boolean {
+        val schemeEnd = value.indexOf(':')
+        if (schemeEnd <= 0) return false
+        val scheme = value.substring(0, schemeEnd)
+        if (scheme[0] !in 'a'..'z' && scheme[0] !in 'A'..'Z') return false
+        if (scheme.any { !it.isLetterOrDigit() && it != '+' && it != '-' && it != '.' }) return false
+        val forbiddenChars = setOf(' ', '"', '<', '>', '{', '}', '^', '`', '|', '\\')
+        if (value.any { it in forbiddenChars || it.code > 127 }) return false
+        val rest = value.substring(schemeEnd + 1)
+        var i = 0
+        while (i < rest.length) {
+            if (rest[i] == '%') {
+                if (i + 2 >= rest.length) return false
+                if (!isHexChar(rest[i + 1]) || !isHexChar(rest[i + 2])) return false
+                i += 3
+            } else {
+                i++
+            }
+        }
+        if (rest.startsWith("//")) {
+            val afterSlashes = rest.substring(2)
+            val pathStart = afterSlashes.indexOfFirst { it == '/' || it == '?' || it == '#' }.takeIf { it >= 0 } ?: afterSlashes.length
+            val authority = afterSlashes.substring(0, pathStart)
+            if (!isValidUriAuthority(authority)) return false
+        }
+        return true
+    }
+
+    private fun isValidUriAuthority(authority: String): Boolean {
+        val atIdx = authority.lastIndexOf('@')
+        val hostAndPort = if (atIdx >= 0) {
+            val userinfo = authority.substring(0, atIdx)
+            if ('[' in userinfo || ']' in userinfo) return false
+            authority.substring(atIdx + 1)
+        } else {
+            authority
+        }
+        val portStr = if (hostAndPort.startsWith('[')) {
+            val bracketClose = hostAndPort.indexOf(']')
+            if (bracketClose < 0) return false
+            if (bracketClose + 1 < hostAndPort.length && hostAndPort[bracketClose + 1] == ':') {
+                hostAndPort.substring(bracketClose + 2)
+            } else {
+                null
+            }
+        } else {
+            val colonIdx = hostAndPort.lastIndexOf(':')
+            if (colonIdx >= 0) hostAndPort.substring(colonIdx + 1) else null
+        }
+        if (portStr != null && portStr.any { !it.isDigit() }) return false
+        return true
+    }
+
+    private fun isHexChar(c: Char) = c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F'
 
     private fun isValidHostname(value: String): Boolean {
         if (value.isEmpty()) return false
@@ -1838,7 +1893,6 @@ class JsonValidator(
     companion object {
         private val REGEX_UNICODE_CATEGORY = Regex("""\\([pP])\{([^}]+)}""")
         private val EMAIL_LOCAL_SPECIAL_CHARS = setOf('.', '!', '#', '$', '%', '&', '\'', '*', '+', '-', '/', '=', '?', '^', '_', '`', '{', '|', '}', '~')
-private val REGEX_URI = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*")
         private val REGEX_DATE = Regex("^\\d{4}-\\d{2}-\\d{2}$")
         private val REGEX_TIME = Regex("^\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$")
         private val REGEX_DATE_TIME = Regex("^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$")

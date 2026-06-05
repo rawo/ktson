@@ -241,4 +241,25 @@ class FormatValidationTest :
         it("no domain is invalid") { runTest { invalid("joe.bloggs@", "email") } }
         it("unquoted space in local part is invalid") { runTest { invalid("joe bloggs@example.com", "email") } }
     }
+
+    describe("uri format") {
+        it("simple http URI is valid") { runTest { valid("http://example.com", "uri") } }
+        it("https URI with path is valid") { runTest { valid("https://example.com/path/to/resource", "uri") } }
+        it("URI with query and fragment is valid") { runTest { valid("https://example.com/path?q=1#frag", "uri") } }
+        it("URI with port is valid") { runTest { valid("http://example.com:8080/", "uri") } }
+        it("URI with userinfo is valid") { runTest { valid("http://user@example.com/", "uri") } }
+        it("URI with percent-encoded char is valid") { runTest { valid("http://example.com/path%20with%20spaces", "uri") } }
+        it("urn scheme is valid") { runTest { valid("urn:isbn:0451450523", "uri") } }
+        it("ftp scheme is valid") { runTest { valid("ftp://ftp.example.com/file.txt", "uri") } }
+        it("URI with IPv6 host is valid") { runTest { valid("http://[::1]/", "uri") } }
+
+        it("relative URI is invalid") { runTest { invalid("/relative/path", "uri") } }
+        it("no scheme is invalid") { runTest { invalid("example.com", "uri") } }
+        it("space in URI is invalid") { runTest { invalid("http://example.com/path with spaces", "uri") } }
+        it("backslash in URI is invalid") { runTest { invalid("http://example.com/path\\file", "uri") } }
+        it("non-ASCII char is invalid") { runTest { invalid("http://example.com/pàth", "uri") } }
+        it("incomplete percent-encoding is invalid") { runTest { invalid("http://example.com/path%2", "uri") } }
+        it("non-hex percent-encoding is invalid") { runTest { invalid("http://example.com/path%GG", "uri") } }
+        it("numeric scheme start is invalid") { runTest { invalid("1http://example.com", "uri") } }
+    }
 })
