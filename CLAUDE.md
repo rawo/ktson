@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 KtSON is a JSON Schema validator for Kotlin with comprehensive support for JSON Schema Draft 2019-09 and 2020-12. The project is a **playground for testing AI agents** in programming, with most code refactoring performed by AI with human supervision.
 
 **Package**: `org.ktson`
-**Tech Stack**: Kotlin 2.2.20, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
+**Tech Stack**: Kotlin 2.4.0, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
 **Status**: Pre-release (0.0.1-SNAPSHOT), 100% official test suite coverage (2,653/2,653)
 
 ## Common Commands
