@@ -8,7 +8,7 @@ KtSON is a JSON Schema validator for Kotlin with comprehensive support for JSON 
 
 **Package**: `org.ktson`
 **Tech Stack**: Kotlin 2.4.0, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
-**Status**: Pre-release (0.0.1-SNAPSHOT), 100% official test suite coverage (2,653/2,653)
+**Status**: 1.0.0, 100% official test suite coverage
 
 ## Common Commands
 
@@ -57,7 +57,7 @@ KtSON is a JSON Schema validator for Kotlin with comprehensive support for JSON 
 
 The validator architecture is straightforward with minimal abstractions:
 
-1. **JsonValidator** (`JsonValidator.kt`) - Main validation engine (~40KB)
+1. **JsonValidator** (`JsonValidator.kt`) - Main validation engine (~90KB)
    - Thread-safe synchronous validation
    - Contains all validation logic in a single class
    - Uses `ReferenceResolver` inner class for `$ref` resolution
@@ -80,7 +80,12 @@ The validator architecture is straightforward with minimal abstractions:
 
 5. **JsonPointer** (`JsonPointer.kt`) - JSON Pointer (RFC 6901) implementation
    - Resolves paths like `/properties/name` or `#/$defs/address`
-   - Used by reference resolver
+   - Also contains the `ReferenceResolver` class used for `$ref` resolution
+
+6. **UriResolver** (`UriResolver.kt`) - RFC 3986 URI resolution
+   - Resolves reference URIs against base URIs, used when following `$id`/`$ref` chains
+
+7. **SchemaVersion** (`SchemaVersion.kt`) - Enum of supported drafts (`DRAFT_2019_09`, `DRAFT_2020_12`)
 
 ### Validation Flow
 
@@ -99,15 +104,31 @@ validate()
       → Validates conditionals (if/then/else) → recursive
 ```
 
-**CRITICAL**: The validator has **23 recursive call points** in `validateElement()`. See "Known Limitations" below.
+**CRITICAL**: `validateElement()` has **32 recursive call sites** (plus one entry point from `validateInternal()`). See "Known Limitations" below.
 
 ### Test Structure
 
 - **Draft201909ValidationTest.kt** - 47 tests for Draft 2019-09 features
 - **Draft202012ValidationTest.kt** - 54 tests for Draft 2020-12 features
 - **EdgeCaseAndThreadSafetyTest.kt** - 39 edge case and concurrency tests
-- **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (2,653 tests)
+- **FormatValidationTest.kt** - 203 tests covering all supported format validators
+- **UriResolverTest.kt** - 25 tests for RFC 3986 URI resolution
+- **DepthLimitTest.kt** - 14 tests for `maxValidationDepth` protection
+- **ErrorMessageTest.kt** - 14 tests for error message content (path, keyword, schema path)
+- **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (draft2019-09 + draft2020-12)
 - **PerformanceTest.kt** - 6 performance tests (excluded from default test run)
+
+The official suite is **not vendored** - it must be cloned as a sibling of this project:
+
+```bash
+git clone https://github.com/json-schema-org/JSON-Schema-Test-Suite.git ../JSON-Schema-Test-Suite
+```
+
+Without it, `OfficialTestSuiteRunner` prints a warning and passes locally, but **fails** when `CI` is set.
+
+CI fetches the suite pinned to a SHA - `TEST_SUITE_REF` in `.github/workflows/build.yml` - so upstream additions cannot turn a build red on their own. Bump that SHA periodically; keep the local clone near it (`git -C ../JSON-Schema-Test-Suite fetch && git checkout <ref>`) or local and CI results will diverge.
+
+Skipped in the official suite: `vocabulary.json`, `infinite-loop-detection.json`, and the `optional/` directory. At the pinned SHA that is 2,082 of 4,630 assertions in the two draft directories; the 2,548 that do run pass 100%.
 
 Test memory configuration: min 512MB, max 2GB heap
 
@@ -129,12 +150,12 @@ val validator = JsonValidator(
 - Deeply nested schemas (properties, arrays)
 - Circular `$ref` references
 - Complex combiner nesting (allOf/anyOf/oneOf)
-- All 21 recursive validation paths
+- All recursive validation paths
 
 **Recommendation**: Use default (1000) for most cases. Lower for untrusted schemas (e.g., 100-500).
 
-### 2. Unsupported Features
-- Remaining format validators: idn-hostname, json-pointer, relative-json-pointer, uri-reference, uri-template
+### 2. Partial Support
+- `idn-hostname` is a partial implementation (not full RFC 5892 IDNA compliance)
 
 ### 3. Other Notes
 - API is synchronous (migrated from async coroutines)
@@ -155,7 +176,7 @@ val validator = JsonValidator(
 4. Thread safety is critical - use `EdgeCaseAndThreadSafetyTest` as reference
 
 ### When Modifying Validation Logic
-1. Changes to `validateElement()` affect 23 recursive call sites
+1. Changes to `validateElement()` affect 32 recursive call sites
 2. Test against both Draft 2019-09 and 2020-12 test suites
 3. Consider stack depth implications for recursive changes
 4. Update error messages to include keyword and schema path
@@ -172,7 +193,8 @@ val validator = JsonValidator(
 
 ### Format Validation
 - Format validation controlled by `formatAssertion` constructor parameter (default: true)
-- Currently supported: email, uri, date, time, date-time, ipv4, ipv6, uuid, hostname, idn-email, iri, iri-reference, regex
+- Currently supported (19): email, uri, uri-reference, uri-template, date, time, date-time, duration, ipv4, ipv6, uuid, hostname, idn-hostname, idn-email, iri, iri-reference, json-pointer, relative-json-pointer, regex
+- Helper validators (`isValidHostname()`, `isValidIri()`, `isValidIdnHostname()`, `isValidRelativeJsonPointer()`, `isValidUriTemplate()`, `isValidDuration()`, ...) live in `JsonValidator.kt`
 - Formats are validated in `validateFormat()` method
 - Add new formats by extending the when expression in `validateFormat()`
 
@@ -187,5 +209,5 @@ val validator = JsonValidator(
 
 ### Configuration
 - `build.gradle.kts` - Gradle build configuration with test memory settings
-- Performance tests excluded from default test task (line 33-35)
-- ktlint version 1.7.1 configured (line 79-88)
+- Performance tests excluded from default test task via `excludeTestsMatching("org.ktson.PerformanceTest")`
+- ktlint version 1.7.1 configured in the `ktlint { }` block
