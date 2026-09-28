@@ -59,10 +59,14 @@ class OfficialTestSuiteRunner :
     } else {
         describe("Test Suite Not Found") {
             it("should have test suite at ${testSuiteBase.absolutePath}") {
-                println("WARNING: JSON Schema Test Suite not found")
-                println("Expected location: ${testSuiteBase.absolutePath}")
-                println("Please clone the test suite or skip this test class")
-                // Don't fail - just skip
+                val message = buildString {
+                    appendLine("JSON Schema Test Suite not found at ${testSuiteBase.absolutePath}")
+                    appendLine("Clone it next to this project:")
+                    appendLine("  git clone https://github.com/json-schema-org/JSON-Schema-Test-Suite.git ../JSON-Schema-Test-Suite")
+                }
+                // On CI a missing suite means the official tests silently did not run, so fail loudly.
+                check(System.getenv("CI") == null) { message }
+                println("WARNING: $message")
             }
         }
     }

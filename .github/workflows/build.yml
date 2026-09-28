@@ -17,6 +17,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout JSON Schema Test Suite
+        # The OfficialTestSuiteRunner expects the suite as a sibling of the project.
+        # Pinned so upstream additions cannot turn this build red on their own.
+        # Bump TEST_SUITE_REF to the latest main SHA from time to time.
+        env:
+          TEST_SUITE_REF: 5b0ee1613e45fcc2bddac00e07c19cd49b00d8a8 # main @ 2026-09-21
+        run: |
+          SUITE_DIR="${{ github.workspace }}/../JSON-Schema-Test-Suite"
+          git init -q "$SUITE_DIR"
+          git -C "$SUITE_DIR" remote add origin https://github.com/json-schema-org/JSON-Schema-Test-Suite.git
+          git -C "$SUITE_DIR" fetch -q --depth 1 origin "$TEST_SUITE_REF"
+          git -C "$SUITE_DIR" checkout -q FETCH_HEAD
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
