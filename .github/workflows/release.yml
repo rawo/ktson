@@ -35,37 +35,62 @@ jobs:
           PREV_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName // empty' 2>/dev/null || echo "")
 
           if [ -z "$PREV_TAG" ]; then
-            COMMITS=$(git log "$CURRENT_TAG" --pretty=format:"%s" --no-merges)
+            RANGE="$CURRENT_TAG"
           else
-            COMMITS=$(git log "${PREV_TAG}..${CURRENT_TAG}" --pretty=format:"%s" --no-merges)
+            RANGE="${PREV_TAG}..${CURRENT_TAG}"
           fi
 
-          FEATURES=$(echo "$COMMITS" \
-            | grep -E '^feat(\([^)]+\))?!?:' \
-            | sed -E 's/^feat\(([^)]+)\)!?: /\*\*\1\*\*: /' \
-            | sed -E 's/^feat!?: //' \
-            | sed 's/^/- /' \
-            || true)
+          BREAKING=""
+          FEATURES=""
+          FIXES=""
 
-          FIXES=$(echo "$COMMITS" \
-            | grep -E '^fix(\([^)]+\))?!?:' \
-            | sed -E 's/^fix\(([^)]+)\)!?: /\*\*\1\*\*: /' \
-            | sed -E 's/^fix!?: //' \
-            | sed 's/^/- /' \
-            || true)
+          # Conventional Commits: type(scope)!: subject, plus BREAKING CHANGE: footers.
+          # tformat (not format) terminates every record, so the oldest commit is not dropped.
+          while IFS= read -r -d '' commit; do
+            subject=$(printf '%s' "$commit" | head -n 1)
+            body=$(printf '%s' "$commit" | tail -n +2)
+
+            type=$(printf '%s' "$subject" | sed -n -E 's/^([a-z]+)(\([^)]*\))?!?:.*/\1/p')
+            [ -n "$type" ] || continue
+
+            # keep the scope as a bold label, drop the rest of the prefix
+            description=$(printf '%s' "$subject" | sed -E 's/^[a-z]+\(([^)]+)\)!?: /**\1**: /; s/^[a-z]+!?: //')
+
+            # a footer may wrap over several lines, so take everything from the marker onwards
+            breaking_footer=$(printf '%s' "$body" \
+              | awk '/^BREAKING[ -]CHANGE:/ { found = 1; sub(/^BREAKING[ -]CHANGE: */, "") } found' \
+              | tr '\n' ' ' | sed -E 's/  +/ /g; s/ +$//')
+
+            if printf '%s' "$subject" | grep -qE '^[a-z]+(\([^)]*\))?!:' || [ -n "$breaking_footer" ]; then
+              # a breaking change is listed once, under Breaking Changes, whatever its type
+              BREAKING="${BREAKING}- ${description}"$'\n'
+              [ -n "$breaking_footer" ] && BREAKING="${BREAKING}  ${breaking_footer}"$'\n'
+              continue
+            fi
+
+            case "$type" in
+              feat) FEATURES="${FEATURES}- ${description}"$'\n' ;;
+              fix) FIXES="${FIXES}- ${description}"$'\n' ;;
+            esac
+          done < <(git log "$RANGE" --no-merges -z --pretty=tformat:'%s%n%b')
 
           {
+            if [ -n "$BREAKING" ]; then
+              echo "## Breaking Changes"
+              printf '%s' "$BREAKING"
+              echo ""
+            fi
             if [ -n "$FEATURES" ]; then
               echo "## What's New"
-              echo "$FEATURES"
+              printf '%s' "$FEATURES"
               echo ""
             fi
             if [ -n "$FIXES" ]; then
               echo "## Bug Fixes"
-              echo "$FIXES"
+              printf '%s' "$FIXES"
               echo ""
             fi
-            if [ -z "$FEATURES" ] && [ -z "$FIXES" ]; then
+            if [ -z "${BREAKING}${FEATURES}${FIXES}" ]; then
               echo "No notable changes."
             fi
           } > release_notes.md

@@ -174,6 +174,16 @@ and some invalid instances are reported valid. See `docs/SPEC_ARBITRARY_PRECISIO
 
 ## Development Guidelines
 
+### Commit Messages
+Release notes are generated from the commit log, so commits must follow Conventional Commits:
+- `feat: ...` and `fix: ...` become the **What's New** and **Bug Fixes** sections; a scope
+  (`feat(format): ...`) is rendered as a bold label. Other types (`chore`, `docs`, `ci`, `test`,
+  `refactor`) are not listed.
+- **Mark breaking changes**, or they will not appear: either `!` after the type
+  (`feat(errors)!: ...`) or a `BREAKING CHANGE: ...` footer in the body. Either one moves the
+  commit into a **Breaking Changes** section, whatever its type, and the footer text is included.
+  Verdict changes in a validator count as breaking even when the API is untouched.
+
 ### Code Style
 - Use ktlint with IntelliJ IDEA default Kotlin conventions
 - Always run `./gradlew ktlintFormat` before committing
