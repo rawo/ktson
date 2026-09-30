@@ -846,32 +846,24 @@ class JsonValidator(
     private fun validateFormat(value: String, format: String, path: String, errors: MutableList<ValidationError>) {
         val valid = when (format) {
             FORMAT_EMAIL -> isValidEmail(value)
-            FORMAT_URI -> isValidUri(value)
+            FORMAT_URI -> isValidUriLike(value, requireScheme = true, allowUcs = false)
             FORMAT_DATE -> isValidDate(value)
             FORMAT_TIME -> isValidTime(value)
             FORMAT_DATE_TIME -> isValidDateTime(value)
-            FORMAT_IPV4 -> value.matches(REGEX_IPV4)
+            FORMAT_IPV4 -> isValidIPv4(value)
             FORMAT_IPV6 -> isValidIPv6(value)
             FORMAT_UUID -> value.matches(REGEX_UUID)
             FORMAT_HOSTNAME -> isValidHostname(value)
-            FORMAT_IDN_EMAIL -> {
-                val atIdx = value.lastIndexOf('@')
-                atIdx > 0 && atIdx < value.length - 1
-            }
-            FORMAT_IRI -> isValidIri(value)
-            FORMAT_IRI_REFERENCE -> !value.contains('\\')
+            FORMAT_IDN_EMAIL -> isValidIdnEmail(value)
+            FORMAT_IRI -> isValidUriLike(value, requireScheme = true, allowUcs = true)
+            FORMAT_IRI_REFERENCE -> isValidUriLike(value, requireScheme = false, allowUcs = true)
             FORMAT_IDN_HOSTNAME -> isValidIdnHostname(value)
             FORMAT_JSON_POINTER -> value.isEmpty() || (value.startsWith("/") && !value.contains(REGEX_JSON_POINTER_INVALID_TILDE))
             FORMAT_RELATIVE_JSON_POINTER -> isValidRelativeJsonPointer(value)
-            FORMAT_URI_REFERENCE -> isValidUriReference(value)
+            FORMAT_URI_REFERENCE -> isValidUriLike(value, requireScheme = false, allowUcs = false)
             FORMAT_URI_TEMPLATE -> isValidUriTemplate(value)
             FORMAT_DURATION -> isValidDuration(value)
-            FORMAT_REGEX -> try {
-                Regex(value)
-                true
-            } catch (_: Exception) {
-                false
-            }
+            FORMAT_REGEX -> isValidEcmaRegex(value)
             else -> true // Unknown formats are ignored
         }
 
@@ -939,6 +931,22 @@ class JsonValidator(
         return isValidDate(value.substring(0, tIdx)) && isValidTime(value.substring(tIdx + 1))
     }
 
+    /**
+     * RFC 2673 dotted-quad. Leading zeros are rejected: they read as octal in
+     * most resolvers, so "192.168.0.01" is not the same address as written.
+     */
+    private fun isValidIPv4(value: String): Boolean {
+        val parts = value.split('.')
+        if (parts.size != 4) return false
+        return parts.all { part ->
+            part.isNotEmpty() &&
+                part.length <= 3 &&
+                part.all { it in '0'..'9' } &&
+                (part.length == 1 || part[0] != '0') &&
+                part.toInt() <= 255
+        }
+    }
+
     private fun isValidIPv6(value: String): Boolean {
         if (value.isEmpty()) return false
         val hasMixed = '.' in value
@@ -946,7 +954,7 @@ class JsonValidator(
             val lastColon = value.lastIndexOf(':')
             if (lastColon < 0) return false
             val ipv4Part = value.substring(lastColon + 1)
-            if (!ipv4Part.matches(REGEX_IPV4)) return false
+            if (!isValidIPv4(ipv4Part)) return false
             // Replace IPv4 tail with two placeholder hex groups and validate as pure IPv6
             return isValidPureIPv6Part(value.substring(0, lastColon) + ":0:0")
         }
@@ -973,10 +981,10 @@ class JsonValidator(
     private fun isValidEmail(value: String): Boolean {
         if (value.isEmpty()) return false
         return if (value.startsWith('"')) {
-            val closeQuote = value.indexOf('"', 1)
-            if (closeQuote < 0 || closeQuote + 1 >= value.length || value[closeQuote + 1] != '@') return false
+            val closeQuote = findClosingQuote(value) ?: return false
+            if (closeQuote + 1 >= value.length || value[closeQuote + 1] != '@') return false
             val domain = value.substring(closeQuote + 2)
-            domain.isNotEmpty() && isValidEmailDomain(domain)
+            isValidEmailLocalQuoted(value.substring(1, closeQuote)) && domain.isNotEmpty() && isValidEmailDomain(domain)
         } else {
             val atIdx = value.lastIndexOf('@')
             if (atIdx <= 0) return false
@@ -984,6 +992,36 @@ class JsonValidator(
             val domain = value.substring(atIdx + 1)
             domain.isNotEmpty() && isValidEmailLocalUnquoted(local) && isValidEmailDomain(domain)
         }
+    }
+
+    /** Index of the quote closing a quoted local part, honouring backslash escapes. */
+    private fun findClosingQuote(value: String): Int? {
+        var i = 1
+        while (i < value.length) {
+            when (value[i]) {
+                '\\' -> i += 2
+                '"' -> return i
+                else -> i++
+            }
+        }
+        return null
+    }
+
+    private fun isValidEmailLocalQuoted(local: String): Boolean {
+        var i = 0
+        while (i < local.length) {
+            val c = local[i]
+            if (c == '\\') {
+                // quoted-pair may only escape an ASCII VCHAR or WSP
+                val escaped = local.getOrNull(i + 1) ?: return false
+                if (escaped.code > 127 || (escaped.code < 0x20 && escaped != '\t')) return false
+                i += 2
+            } else {
+                if (c == '"' || c.code == 0x7F || (c.code < 0x20 && c != '\t')) return false
+                i++
+            }
+        }
+        return true
     }
 
     private fun isValidEmailLocalUnquoted(local: String): Boolean {
@@ -995,134 +1033,483 @@ class JsonValidator(
     private fun isValidEmailDomain(domain: String): Boolean {
         if (domain.startsWith('[') && domain.endsWith(']')) {
             val inner = domain.substring(1, domain.length - 1)
-            return if (inner.startsWith("IPv6:")) isValidIPv6(inner.substring(5)) else inner.matches(REGEX_IPV4)
+            return if (inner.startsWith("IPv6:", ignoreCase = true)) isValidIPv6(inner.substring(5)) else isValidIPv4(inner)
         }
         return isValidHostname(domain)
     }
 
-    private fun isValidUri(value: String): Boolean {
-        val schemeEnd = value.indexOf(':')
-        if (schemeEnd <= 0) return false
-        val scheme = value.substring(0, schemeEnd)
-        if (scheme[0] !in 'a'..'z' && scheme[0] !in 'A'..'Z') return false
-        if (scheme.any { !it.isLetterOrDigit() && it != '+' && it != '-' && it != '.' }) return false
-        val forbiddenChars = setOf(' ', '"', '<', '>', '{', '}', '^', '`', '|', '\\')
-        if (value.any { it in forbiddenChars || it.code > 127 }) return false
-        val rest = value.substring(schemeEnd + 1)
-        var i = 0
-        while (i < rest.length) {
-            if (rest[i] == '%') {
-                if (i + 2 >= rest.length) return false
-                if (!isHexChar(rest[i + 1]) || !isHexChar(rest[i + 2])) return false
-                i += 3
-            } else {
-                i++
-            }
-        }
+    /**
+     * Shared RFC 3986 / RFC 3987 validation behind the uri, uri-reference, iri and
+     * iri-reference formats.
+     *
+     * @param requireScheme true for the absolute forms (uri, iri)
+     * @param allowUcs true for the IRI forms, which additionally allow non-ASCII characters
+     */
+    private fun isValidUriLike(value: String, requireScheme: Boolean, allowUcs: Boolean): Boolean {
+        val schemeEnd = schemeLength(value)
+        if (schemeEnd == null && requireScheme) return false
+        val rest = if (schemeEnd != null) value.substring(schemeEnd + 1) else value
+
+        val authority: String?
+        val afterAuthority: String
         if (rest.startsWith("//")) {
-            val afterSlashes = rest.substring(2)
-            val pathStart = afterSlashes.indexOfFirst { it == '/' || it == '?' || it == '#' }.takeIf { it >= 0 } ?: afterSlashes.length
-            val authority = afterSlashes.substring(0, pathStart)
-            if (!isValidUriAuthority(authority)) return false
+            val body = rest.substring(2)
+            val end = body.indexOfFirst { it == '/' || it == '?' || it == '#' }.takeIf { it >= 0 } ?: body.length
+            authority = body.substring(0, end)
+            afterAuthority = body.substring(end)
+        } else {
+            authority = null
+            afterAuthority = rest
+        }
+
+        if (authority != null && !isValidUriAuthority(authority, allowUcs)) return false
+        // Square brackets delimit an IP-literal host and are illegal anywhere else
+        if (!isValidUriCharacters(afterAuthority, allowUcs)) return false
+
+        // A relative-path reference whose first segment contains a colon would be
+        // read as a scheme, so RFC 3986 forbids it
+        if (schemeEnd == null && authority == null && !value.startsWith("/")) {
+            val path = value.substringBefore('#').substringBefore('?')
+            if (':' in path.substringBefore('/')) return false
         }
         return true
     }
 
-    private fun isValidUriAuthority(authority: String): Boolean {
-        val atIdx = authority.lastIndexOf('@')
-        val hostAndPort = if (atIdx >= 0) {
-            val userinfo = authority.substring(0, atIdx)
-            if ('[' in userinfo || ']' in userinfo) return false
-            authority.substring(atIdx + 1)
-        } else {
-            authority
-        }
-        val portStr = if (hostAndPort.startsWith('[')) {
-            val bracketClose = hostAndPort.indexOf(']')
-            if (bracketClose < 0) return false
-            if (bracketClose + 1 < hostAndPort.length && hostAndPort[bracketClose + 1] == ':') {
-                hostAndPort.substring(bracketClose + 2)
-            } else {
-                null
-            }
-        } else {
-            val colonIdx = hostAndPort.lastIndexOf(':')
-            if (colonIdx >= 0) hostAndPort.substring(colonIdx + 1) else null
-        }
-        if (portStr != null && portStr.any { !it.isDigit() }) return false
-        return true
+    /** Length of the leading `scheme:` if the value starts with a valid scheme, else null. */
+    private fun schemeLength(value: String): Int? {
+        val colon = value.indexOf(':')
+        if (colon <= 0) return null
+        val scheme = value.substring(0, colon)
+        if (scheme[0] !in 'a'..'z' && scheme[0] !in 'A'..'Z') return null
+        if (scheme.any { it !in 'a'..'z' && it !in 'A'..'Z' && it !in '0'..'9' && it != '+' && it != '-' && it != '.' }) return null
+        return colon
     }
 
-    private fun isHexChar(c: Char) = c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F'
-
-    private fun isValidUriReference(value: String): Boolean {
-        val forbiddenChars = setOf(' ', '"', '<', '>', '{', '}', '^', '`', '|', '\\')
+    /** Characters legal outside an authority, with percent-encoding required to be complete triplets. */
+    private fun isValidUriCharacters(value: String, allowUcs: Boolean): Boolean {
         var i = 0
         while (i < value.length) {
             val c = value[i]
-            if (c in forbiddenChars || c.code > 127) return false
-            if (c == '%') {
-                if (i + 2 >= value.length) return false
-                if (!isHexChar(value[i + 1]) || !isHexChar(value[i + 2])) return false
-                i += 3
-            } else {
-                i++
+            when {
+                c == '%' -> {
+                    if (i + 2 >= value.length || !isHexChar(value[i + 1]) || !isHexChar(value[i + 2])) return false
+                    i += 3
+                }
+                c.code > 127 -> {
+                    if (!allowUcs) return false
+                    i++
+                }
+                c in URI_FORBIDDEN_CHARS || c.code <= 0x20 || c.code == 0x7F -> return false
+                else -> i++
             }
         }
         return true
     }
 
-    private fun isValidHostname(value: String): Boolean {
-        if (value.isEmpty()) return false
-        val labels = value.split('.')
-        return labels.all { label ->
-            label.isNotEmpty() &&
-                label.length <= 63 &&
-                label.matches(REGEX_HOSTNAME_LABEL)
+    private fun isValidUriAuthority(authority: String, allowUcs: Boolean): Boolean {
+        // userinfo may not contain an unencoded at-sign, so at most one may appear
+        if (authority.count { it == '@' } > 1) return false
+        val userinfo = authority.substringBeforeLast('@', "")
+        if ('[' in userinfo || ']' in userinfo) return false
+        if (!isValidUriCharacters(userinfo, allowUcs)) return false
+
+        val hostAndPort = authority.substringAfterLast('@')
+        val port: String?
+        if (hostAndPort.startsWith('[')) {
+            val close = hostAndPort.indexOf(']')
+            if (close < 0) return false
+            val host = hostAndPort.substring(1, close)
+            if (!isValidIPv6(host) && !isValidIpvFuture(host)) return false
+            val after = hostAndPort.substring(close + 1)
+            port = when {
+                after.isEmpty() -> null
+                after.startsWith(':') -> after.substring(1)
+                else -> return false
+            }
+        } else {
+            val colon = hostAndPort.lastIndexOf(':')
+            val host = if (colon >= 0) hostAndPort.substring(0, colon) else hostAndPort
+            port = if (colon >= 0) hostAndPort.substring(colon + 1) else null
+            // a reg-name cannot contain a colon; an IPv6 host must be bracketed
+            if ('[' in host || ']' in host || ':' in host) return false
+            if (!isValidUriCharacters(host, allowUcs)) return false
         }
+        return port == null || port.all { it in '0'..'9' }
     }
 
-    private fun isValidIri(value: String): Boolean {
-        if (value.contains('\\')) return false
-        if (!value.matches(REGEX_IRI_SCHEME)) return false
-        val slashSlash = value.indexOf("://")
-        if (slashSlash >= 0) {
-            val afterSlashes = value.substring(slashSlash + 3)
-            val authorityEnd = afterSlashes.indexOfFirst { it == '/' || it == '?' || it == '#' }
-                .takeIf { it >= 0 } ?: afterSlashes.length
-            val authority = afterSlashes.substring(0, authorityEnd)
-            val hostPart = if ('@' in authority) authority.substringAfterLast('@') else authority
-            if (hostPart.count { it == ':' } > 1 && '[' !in hostPart) return false
+    private fun isValidIpvFuture(host: String): Boolean = host.length >= 3 &&
+            (host[0] == 'v' || host[0] == 'V') &&
+            host.drop(1).substringBefore('.').let { it.isNotEmpty() && it.all { c -> isHexChar(c) } } &&
+            '.' in host.drop(1)
+
+    private fun isHexChar(c: Char) = c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F'
+
+    private fun isValidHostname(value: String): Boolean {
+        if (value.isEmpty() || value.length > MAX_HOSTNAME_LENGTH) return false
+        if (value.any { it.code > 127 }) return false
+        val labels = value.split('.')
+        if (labels.any { it.isEmpty() || it.length > MAX_LABEL_LENGTH || !it.matches(REGEX_HOSTNAME_LABEL) }) return false
+
+        // An A-label is only a hostname if its Punycode decodes to a valid U-label
+        val decoded = labels.map { label ->
+            if (label.startsWith(ACE_PREFIX, ignoreCase = true)) {
+                val lower = label.lowercase()
+                val uLabel = punycodeDecode(lower.substring(ACE_PREFIX.length)) ?: return false
+                if (ACE_PREFIX + punycodeEncode(uLabel) != lower) return false
+                uLabel
+            } else {
+                label
+            }
         }
-        return true
+        val bidiDomain = decoded.any { label -> label.codePoints().anyMatch { isRtlCodePoint(it) } }
+        return decoded.withIndex().all { (i, uLabel) ->
+            uLabel == labels[i] || isValidULabel(uLabel, bidiDomain)
+        }
     }
 
     private fun isValidIdnHostname(value: String): Boolean {
         if (value.isEmpty()) return false
-        // Split on all recognized label separators (RFC 3490)
-        val labels = value.split('.', '\u3002', '\uFF0E', '\uFF61')
+        val mapped = idnaMap(value)
+        val labels = mapped.split('.', '。')
         if (labels.any { it.isEmpty() }) return false
-        for (label in labels) {
-            // Max 63 bytes in UTF-8
-            if (label.toByteArray(Charsets.UTF_8).size > 63) return false
-            // Must not start or end with hyphen
-            if (label.startsWith('-') || label.endsWith('-')) return false
-            // Must not have '--' in 3rd and 4th position (unless valid xn-- Punycode prefix)
-            if (label.length >= 4 && label[2] == '-' && label[3] == '-' && !label.startsWith("xn--", ignoreCase = true)) return false
-            // Must not start with a combining mark (Mn, Mc, Me categories)
-            val firstChar = label[0]
-            val type = Character.getType(firstChar)
-            if (type == Character.NON_SPACING_MARK.toInt() ||
-                type == Character.COMBINING_SPACING_MARK.toInt() ||
-                type == Character.ENCLOSING_MARK.toInt()
-            ) {
-                return false
+
+        val uLabels = labels.map { label ->
+            if (label.startsWith(ACE_PREFIX)) {
+                val uLabel = punycodeDecode(label.substring(ACE_PREFIX.length)) ?: return false
+                // A-labels must be canonical: re-encoding has to reproduce the label exactly
+                if (ACE_PREFIX + punycodeEncode(uLabel) != label) return false
+                uLabel
+            } else {
+                label
             }
-            // Check for known DISALLOWED characters per RFC 5892
-            if (label.any { it in IDNA_DISALLOWED_CHARS }) return false
-            // ASCII-only labels: same rules as regular hostname (alphanumeric + hyphen)
-            if (label.all { it.code < 128 }) {
-                if (!label.matches(REGEX_HOSTNAME_LABEL)) return false
+        }
+        // Both length limits are defined on the A-label form of each label
+        val encodedLengths = uLabels.map { uLabel ->
+            val aLabel = if (uLabel.all { it.code < 128 }) uLabel else ACE_PREFIX + punycodeEncode(uLabel)
+            if (aLabel.length > MAX_LABEL_LENGTH) return false
+            aLabel.length
+        }
+        if (encodedLengths.sum() + encodedLengths.size - 1 > MAX_HOSTNAME_LENGTH) return false
+
+        val bidiDomain = uLabels.any { label -> label.codePoints().anyMatch { isRtlCodePoint(it) } }
+        return uLabels.all { isValidULabel(it, bidiDomain) }
+    }
+
+    /**
+     * UTS 46 mapping: drop the ignorable code points, then normalise and case-fold, so that
+     * fullwidth and uppercase spellings of a name are accepted as the name itself.
+     */
+    private fun idnaMap(value: String): String {
+        val withoutIgnored = buildString {
+            value.codePoints().forEach { cp -> if (!isIdnaIgnored(cp)) appendCodePoint(cp) }
+        }
+        return java.text.Normalizer.normalize(withoutIgnored, java.text.Normalizer.Form.NFKC).lowercase()
+    }
+
+    private fun isIdnaIgnored(cp: Int): Boolean = cp == 0x00AD || // SOFT HYPHEN
+            cp == 0x034F || // COMBINING GRAPHEME JOINER
+            cp == 0x200B || // ZERO WIDTH SPACE
+            cp == 0x2060 || // WORD JOINER
+            cp == 0xFEFF || // ZERO WIDTH NO-BREAK SPACE
+            cp in 0x180B..0x180D || // MONGOLIAN FREE VARIATION SELECTORS
+            cp in 0xFE00..0xFE0F || // VARIATION SELECTORS
+            cp in 0xE0100..0xE01EF // VARIATION SELECTORS SUPPLEMENT
+
+    /**
+     * Validates a Unicode label against the parts of RFC 5892 and RFC 5893 that can be
+     * decided without the full IDNA derived-property table: the hyphen rules, the code
+     * point categories, the contextual rules of Appendix A, and the Bidi rule.
+     */
+    private fun isValidULabel(label: String, bidiDomain: Boolean): Boolean {
+        if (label.isEmpty()) return false
+        if (label.startsWith('-') || label.endsWith('-')) return false
+        if (label.length >= 4 && label[2] == '-' && label[3] == '-') return false
+
+        val codePoints = label.codePoints().toArray()
+        val firstType = Character.getType(codePoints[0])
+        if (firstType == Character.NON_SPACING_MARK.toInt() ||
+            firstType == Character.COMBINING_SPACING_MARK.toInt() ||
+            firstType == Character.ENCLOSING_MARK.toInt()
+        ) {
+            return false
+        }
+        if (codePoints.any { !isAllowedIdnCodePoint(it) }) return false
+        if (!satisfiesContextualRules(codePoints)) return false
+        return !bidiDomain || satisfiesBidiRule(codePoints)
+    }
+
+    private fun isAllowedIdnCodePoint(cp: Int): Boolean {
+        if (cp == ZWNJ || cp == ZWJ) return true // CONTEXTJ, decided by the contextual rules
+        if (cp in IDNA_CONTEXT_O_CHARS) return true // CONTEXTO, likewise
+        if (cp in IDNA_DISALLOWED_CODE_POINTS) return false
+        if (cp in IDNA_PVALID_EXCEPTIONS) return true
+        if (cp == '-'.code) return true
+        return when (Character.getType(cp)) {
+            Character.LOWERCASE_LETTER.toInt(),
+            Character.OTHER_LETTER.toInt(),
+            Character.MODIFIER_LETTER.toInt(),
+            Character.DECIMAL_DIGIT_NUMBER.toInt(),
+            Character.NON_SPACING_MARK.toInt(),
+            Character.COMBINING_SPACING_MARK.toInt(),
+            -> true
+            else -> false
+        }
+    }
+
+    /** RFC 5892 Appendix A: the CONTEXTJ and CONTEXTO rules. */
+    private fun satisfiesContextualRules(codePoints: IntArray): Boolean {
+        var hasArabicIndic = false
+        var hasExtendedArabicIndic = false
+        codePoints.forEachIndexed { i, cp ->
+            val previous = codePoints.getOrNull(i - 1)
+            val next = codePoints.getOrNull(i + 1)
+            when {
+                // ZERO WIDTH JOINER: only after a Virama
+                cp == ZWJ -> if (previous == null || !isVirama(previous)) return false
+                // ZERO WIDTH NON-JOINER: after a Virama, or inside an Arabic-style joining sequence
+                cp == ZWNJ ->
+                    if ((previous == null || !isVirama(previous)) && !isJoiningContext(codePoints, i)) return false
+                // MIDDLE DOT: only between two 'l's
+                cp == 0x00B7 -> if (previous != 'l'.code || next != 'l'.code) return false
+                // GREEK LOWER NUMERAL SIGN: must be followed by Greek
+                cp == 0x0375 -> if (next == null || Character.UnicodeScript.of(next) != Character.UnicodeScript.GREEK) return false
+                // HEBREW GERESH and GERSHAYIM: must be preceded by Hebrew
+                cp == 0x05F3 || cp == 0x05F4 ->
+                    if (previous == null || Character.UnicodeScript.of(previous) != Character.UnicodeScript.HEBREW) return false
+                // KATAKANA MIDDLE DOT: the label must carry Hiragana, Katakana or Han
+                cp == 0x30FB ->
+                    if (codePoints.none { other ->
+                            Character.UnicodeScript.of(other) in KATAKANA_MIDDLE_DOT_SCRIPTS
+                        }
+                    ) {
+                        return false
+                    }
+                cp in 0x0660..0x0669 -> hasArabicIndic = true
+                cp in 0x06F0..0x06F9 -> hasExtendedArabicIndic = true
+            }
+        }
+        // The two Arabic-Indic digit blocks may not be mixed within one label
+        return !(hasArabicIndic && hasExtendedArabicIndic)
+    }
+
+    /**
+     * RFC 5892 rule B for ZERO WIDTH NON-JOINER: a joining or dual-joining character
+     * before it and a right-joining or dual-joining one after, ignoring transparent marks.
+     */
+    private fun isJoiningContext(codePoints: IntArray, index: Int): Boolean {
+        var before = index - 1
+        while (before >= 0 && isJoiningTransparent(codePoints[before])) before--
+        var after = index + 1
+        while (after < codePoints.size && isJoiningTransparent(codePoints[after])) after++
+        if (before < 0 || after >= codePoints.size) return false
+        return isJoiningLetter(codePoints[before]) && isJoiningLetter(codePoints[after])
+    }
+
+    private fun isJoiningTransparent(cp: Int): Boolean = Character.getType(cp) == Character.NON_SPACING_MARK.toInt() ||
+            Character.getType(cp) == Character.ENCLOSING_MARK.toInt() ||
+            Character.getType(cp) == Character.FORMAT.toInt()
+
+    /** Cursive scripts whose letters carry a joining type of L, R or D. */
+    private fun isJoiningLetter(cp: Int): Boolean = Character.isLetter(cp) && Character.UnicodeScript.of(cp) in CURSIVE_SCRIPTS
+
+    private fun isVirama(cp: Int): Boolean = cp in VIRAMA_CODE_POINTS
+
+    private fun isRtlCodePoint(cp: Int): Boolean = when (Character.getDirectionality(cp)) {
+            Character.DIRECTIONALITY_RIGHT_TO_LEFT,
+            Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC,
+            Character.DIRECTIONALITY_ARABIC_NUMBER,
+            -> true
+            else -> false
+        }
+
+    /** RFC 5893: every label of a domain that contains any RTL character must satisfy this. */
+    private fun satisfiesBidiRule(codePoints: IntArray): Boolean {
+        val first = Character.getDirectionality(codePoints[0])
+        val rtl = first == Character.DIRECTIONALITY_RIGHT_TO_LEFT || first == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC
+        if (!rtl && first != Character.DIRECTIONALITY_LEFT_TO_RIGHT) return false
+
+        val allowed = if (rtl) BIDI_RTL_ALLOWED else BIDI_LTR_ALLOWED
+        val trailing = if (rtl) BIDI_RTL_TRAILING else BIDI_LTR_TRAILING
+        if (codePoints.any { Character.getDirectionality(it) !in allowed }) return false
+
+        val last = codePoints.last { Character.getDirectionality(it) != Character.DIRECTIONALITY_NONSPACING_MARK }
+        if (Character.getDirectionality(last) !in trailing) return false
+
+        // An RTL label may carry European or Arabic numbers, but not both
+        if (rtl) {
+            val hasEuropean = codePoints.any { Character.getDirectionality(it) == Character.DIRECTIONALITY_EUROPEAN_NUMBER }
+            val hasArabic = codePoints.any { Character.getDirectionality(it) == Character.DIRECTIONALITY_ARABIC_NUMBER }
+            if (hasEuropean && hasArabic) return false
+        }
+        return true
+    }
+
+    /** RFC 3492 Punycode decoding. Returns null when the input is not valid Punycode. */
+    private fun punycodeDecode(input: String): String? {
+        var n = PUNYCODE_INITIAL_N
+        var i = 0
+        var bias = PUNYCODE_INITIAL_BIAS
+        val output = mutableListOf<Int>()
+
+        val lastHyphen = input.lastIndexOf('-')
+        if (lastHyphen >= 0) {
+            for (c in input.substring(0, lastHyphen)) {
+                if (c.code > 127) return null
+                output.add(c.code)
+            }
+        }
+
+        var pos = if (lastHyphen >= 0) lastHyphen + 1 else 0
+        if (pos >= input.length) return null
+        while (pos < input.length) {
+            val previousI = i
+            var weight = 1
+            var k = PUNYCODE_BASE
+            while (true) {
+                if (pos >= input.length) return null
+                val digit = punycodeDigit(input[pos]) ?: return null
+                pos++
+                if (digit > (Int.MAX_VALUE - i) / weight) return null
+                i += digit * weight
+                val t = when {
+                    k <= bias -> PUNYCODE_TMIN
+                    k >= bias + PUNYCODE_TMAX -> PUNYCODE_TMAX
+                    else -> k - bias
+                }
+                if (digit < t) break
+                if (weight > Int.MAX_VALUE / (PUNYCODE_BASE - t)) return null
+                weight *= PUNYCODE_BASE - t
+                k += PUNYCODE_BASE
+            }
+            bias = punycodeAdapt(i - previousI, output.size + 1, previousI == 0)
+            if (i / (output.size + 1) > Int.MAX_VALUE - n) return null
+            n += i / (output.size + 1)
+            i %= output.size + 1
+            if (n < 0x80) return null // a basic code point may not be encoded in the extended part
+            if (!Character.isValidCodePoint(n)) return null
+            output.add(i, n)
+            i++
+        }
+        return buildString { output.forEach { appendCodePoint(it) } }
+    }
+
+    /** RFC 3492 Punycode encoding of a Unicode label (without the ACE prefix). */
+    private fun punycodeEncode(input: String): String {
+        val codePoints = input.codePoints().toArray()
+        val output = StringBuilder()
+        codePoints.filter { it < 0x80 }.forEach { output.appendCodePoint(it) }
+        val basicCount = output.length
+        if (basicCount > 0) output.append('-')
+
+        var handled = basicCount
+        var n = PUNYCODE_INITIAL_N
+        var delta = 0
+        var bias = PUNYCODE_INITIAL_BIAS
+        while (handled < codePoints.size) {
+            val m = codePoints.filter { it >= n }.min()
+            delta += (m - n) * (handled + 1)
+            n = m
+            for (cp in codePoints) {
+                if (cp < n) delta++
+                if (cp == n) {
+                    var q = delta
+                    var k = PUNYCODE_BASE
+                    while (true) {
+                        val t = when {
+                            k <= bias -> PUNYCODE_TMIN
+                            k >= bias + PUNYCODE_TMAX -> PUNYCODE_TMAX
+                            else -> k - bias
+                        }
+                        if (q < t) break
+                        output.append(punycodeChar(t + (q - t) % (PUNYCODE_BASE - t)))
+                        q = (q - t) / (PUNYCODE_BASE - t)
+                        k += PUNYCODE_BASE
+                    }
+                    output.append(punycodeChar(q))
+                    bias = punycodeAdapt(delta, handled + 1, handled == basicCount)
+                    delta = 0
+                    handled++
+                }
+            }
+            delta++
+            n++
+        }
+        return output.toString()
+    }
+
+    private fun punycodeAdapt(delta: Int, numPoints: Int, firstTime: Boolean): Int {
+        var d = if (firstTime) delta / PUNYCODE_DAMP else delta / 2
+        d += d / numPoints
+        var k = 0
+        while (d > ((PUNYCODE_BASE - PUNYCODE_TMIN) * PUNYCODE_TMAX) / 2) {
+            d /= PUNYCODE_BASE - PUNYCODE_TMIN
+            k += PUNYCODE_BASE
+        }
+        return k + (PUNYCODE_BASE - PUNYCODE_TMIN + 1) * d / (d + PUNYCODE_SKEW)
+    }
+
+    private fun punycodeDigit(c: Char): Int? = when (c) {
+            in 'a'..'z' -> c - 'a'
+            in 'A'..'Z' -> c - 'A'
+            in '0'..'9' -> c - '0' + 26
+            else -> null
+        }
+
+    private fun punycodeChar(digit: Int): Char = if (digit < 26) 'a' + digit else '0' + (digit - 26)
+
+    private fun isValidIdnEmail(value: String): Boolean {
+        val atIdx = value.lastIndexOf('@')
+        if (atIdx <= 0 || atIdx >= value.length - 1) return false
+        val domain = value.substring(atIdx + 1)
+        return if (domain.startsWith('[') && domain.endsWith(']')) isValidEmailDomain(domain) else isValidIdnHostname(domain)
+    }
+
+    /**
+     * The regex format is defined in terms of ECMA 262, which differs from Java both ways:
+     * Java accepts constructs ECMA does not (inline flags, `\a`, `\A`) and rejects two it does
+     * (the empty character classes, handled by [translateEmptyCharacterClasses]).
+     */
+    private fun isValidEcmaRegex(value: String): Boolean {
+        if (!hasOnlyEcmaRegexSyntax(value)) return false
+        return try {
+            Regex(translatePatternToJava(value))
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun hasOnlyEcmaRegexSyntax(pattern: String): Boolean {
+        var i = 0
+        var inClass = false
+        while (i < pattern.length) {
+            val c = pattern[i]
+            when {
+                c == '\\' -> {
+                    val next = pattern.getOrNull(i + 1) ?: return false
+                    if (next !in ECMA_REGEX_ESCAPES && next !in '1'..'9') return false
+                    i += 2
+                }
+                c == '[' && !inClass -> {
+                    inClass = true
+                    i++
+                }
+                c == ']' && inClass -> {
+                    inClass = false
+                    i++
+                }
+                c == '(' && !inClass && pattern.startsWith("(?", i) -> {
+                    val rest = pattern.substring(i + 2)
+                    val recognised = rest.startsWith(":") ||
+                        rest.startsWith("=") ||
+                        rest.startsWith("!") ||
+                        rest.startsWith("<=") ||
+                        rest.startsWith("<!") ||
+                        (rest.startsWith("<") && rest.getOrNull(1)?.isLetter() == true)
+                    if (!recognised) return false
+                    i += 2
+                }
+                else -> i++
             }
         }
         return true
@@ -1133,8 +1520,9 @@ class JsonValidator(
         var i = 0
         when {
             value[i] == '0' -> i = 1
-            value[i].isDigit() -> {
-                while (i < value.length && value[i].isDigit()) i++
+            // Non-ASCII digits are not part of the grammar, so isDigit() is too permissive here
+            value[i] in '1'..'9' -> {
+                while (i < value.length && value[i] in '0'..'9') i++
             }
             else -> return false
         }
@@ -1147,21 +1535,75 @@ class JsonValidator(
         }
     }
 
+    /** RFC 6570 URI Template: a sequence of literals and brace-delimited expressions. */
     private fun isValidUriTemplate(value: String): Boolean {
-        var inExpression = false
-        for (c in value) {
-            when (c) {
-                '{' -> {
-                    if (inExpression) return false
-                    inExpression = true
+        var i = 0
+        while (i < value.length) {
+            val c = value[i]
+            when {
+                c == '{' -> {
+                    val close = value.indexOf('}', i)
+                    if (close < 0) return false
+                    if (!isValidUriTemplateExpression(value.substring(i + 1, close))) return false
+                    i = close + 1
                 }
-                '}' -> {
-                    if (!inExpression) return false
-                    inExpression = false
+                c == '}' -> return false
+                c == '%' -> {
+                    if (i + 2 >= value.length || !isHexChar(value[i + 1]) || !isHexChar(value[i + 2])) return false
+                    i += 3
                 }
+                c.code <= 0x20 || c.code == 0x7F || c in URI_TEMPLATE_FORBIDDEN_LITERALS -> return false
+                else -> i++
             }
         }
-        return !inExpression
+        return true
+    }
+
+    private fun isValidUriTemplateExpression(body: String): Boolean {
+        if (body.isEmpty()) return false
+        val varList = if (body[0] in URI_TEMPLATE_OPERATORS || body[0] in URI_TEMPLATE_RESERVED_OPERATORS) {
+            // op-reserve is reserved for future extensions and cannot be used yet
+            if (body[0] in URI_TEMPLATE_RESERVED_OPERATORS) return false
+            body.substring(1)
+        } else {
+            body
+        }
+        return varList.isNotEmpty() && varList.split(',').all { isValidUriTemplateVarspec(it) }
+    }
+
+    private fun isValidUriTemplateVarspec(spec: String): Boolean {
+        if (spec.isEmpty()) return false
+        val colon = spec.indexOf(':')
+        val name = when {
+            colon >= 0 -> {
+                // prefix modifier: 1-4 digits, 1-9999, no leading zero
+                val maxLength = spec.substring(colon + 1)
+                if (maxLength.isEmpty() || maxLength.length > 4) return false
+                if (maxLength[0] !in '1'..'9' || maxLength.any { it !in '0'..'9' }) return false
+                spec.substring(0, colon)
+            }
+            spec.endsWith('*') -> spec.dropLast(1)
+            else -> spec
+        }
+        return isValidUriTemplateVarname(name)
+    }
+
+    private fun isValidUriTemplateVarname(name: String): Boolean {
+        if (name.isEmpty()) return false
+        if (name.startsWith('.') || name.endsWith('.') || ".." in name) return false
+        var i = 0
+        while (i < name.length) {
+            val c = name[i]
+            when {
+                c == '%' -> {
+                    if (i + 2 >= name.length || !isHexChar(name[i + 1]) || !isHexChar(name[i + 2])) return false
+                    i += 3
+                }
+                c == '.' || c == '_' || c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' -> i++
+                else -> return false
+            }
+        }
+        return true
     }
 
     private fun isValidDuration(value: String): Boolean {
@@ -1900,12 +2342,55 @@ class JsonValidator(
         }
     }
 
-    private fun translatePatternToJava(pattern: String): String = pattern.replace(REGEX_UNICODE_CATEGORY) { match ->
+    private fun translatePatternToJava(pattern: String): String {
+        val withJavaCategories = pattern.replace(REGEX_UNICODE_CATEGORY) { match ->
             val flag = match.groupValues[1]
             val name = match.groupValues[2]
             val javaName = UNICODE_CATEGORY_NAMES[name] ?: name
             "\\$flag{$javaName}"
         }
+        return translateEmptyCharacterClasses(withJavaCategories)
+    }
+
+    /** `[]` (matches nothing) and `[^]` (matches anything) are valid ECMA 262 but errors in Java. */
+    private fun translateEmptyCharacterClasses(pattern: String): String {
+        val result = StringBuilder(pattern.length)
+        var i = 0
+        var inClass = false
+        while (i < pattern.length) {
+            val c = pattern[i]
+            when {
+                c == '\\' -> {
+                    result.append(c)
+                    pattern.getOrNull(i + 1)?.let { result.append(it) }
+                    i += 2
+                }
+                c == '[' && !inClass && pattern.startsWith("[^]", i) -> {
+                    result.append("[\\s\\S]")
+                    i += 3
+                }
+                c == '[' && !inClass && pattern.startsWith("[]", i) -> {
+                    result.append("[^\\s\\S]")
+                    i += 2
+                }
+                c == '[' && !inClass -> {
+                    inClass = true
+                    result.append(c)
+                    i++
+                }
+                c == ']' && inClass -> {
+                    inClass = false
+                    result.append(c)
+                    i++
+                }
+                else -> {
+                    result.append(c)
+                    i++
+                }
+            }
+        }
+        return result.toString()
+    }
 
     companion object {
         private val REGEX_UNICODE_CATEGORY = Regex("""\\([pP])\{([^}]+)}""")
@@ -1913,14 +2398,30 @@ class JsonValidator(
         private val REGEX_DATE = Regex("^\\d{4}-\\d{2}-\\d{2}$")
         private val REGEX_TIME = Regex("^\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$")
         private val REGEX_DATE_TIME = Regex("^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:\\d{2})$")
-        private val REGEX_IPV4 = Regex("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$")
 private val REGEX_UUID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
         private val REGEX_JSON_POINTER_INVALID_TILDE = Regex("~(?![01])")
         private val REGEX_HOSTNAME_LABEL = Regex("[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?")
-        private val REGEX_IRI_SCHEME = Regex("[a-zA-Z][a-zA-Z0-9+\\-.]*:.*")
         private val REGEX_DURATION_WEEKS = Regex("^P\\d+W$")
-        private val REGEX_DURATION_DATE = Regex("^(\\d+Y)?(\\d+M)?(\\d+D)?$")
-        private val REGEX_DURATION_TIME = Regex("^(\\d+H)?(\\d+M)?(\\d+S)?$")
+
+        // RFC 3339 Appendix A fixes the order too: a unit may only be followed by the next
+        // smaller one, so P1Y2D (year then day) and PT1H2S (hour then second) are not durations
+        private val REGEX_DURATION_DATE = Regex("^(\\d+Y(\\d+M(\\d+D)?)?|\\d+M(\\d+D)?|\\d+D)$")
+        private val REGEX_DURATION_TIME = Regex("^(\\d+H(\\d+M(\\d+S)?)?|\\d+M(\\d+S)?|\\d+S)$")
+
+        // Illegal outside an authority component; brackets only delimit an IP-literal host
+        private val URI_FORBIDDEN_CHARS = setOf(' ', '"', '<', '>', '{', '}', '^', '`', '|', '\\', '[', ']')
+
+        private val URI_TEMPLATE_FORBIDDEN_LITERALS = setOf(' ', '"', '<', '>', '^', '`', '|', '\\')
+        private val URI_TEMPLATE_OPERATORS = setOf('+', '#', '.', '/', ';', '?', '&')
+        private val URI_TEMPLATE_RESERVED_OPERATORS = setOf('=', ',', '!', '@', '|')
+
+        // Escapes ECMA 262 recognises; Java additionally accepts \a, \A, \Z, \z, \G, \R, \h, \X ...
+        private val ECMA_REGEX_ESCAPES =
+            setOf(
+                'f', 'n', 'r', 't', 'v', '0', 'x', 'u', 'c',
+                'd', 'D', 's', 'S', 'w', 'W', 'b', 'B', 'k', 'p', 'P',
+                '^', '$', '\\', '.', '*', '+', '?', '(', ')', '[', ']', '{', '}', '|', '/', '-',
+            )
 
         // Maps ECMAScript Unicode category long names to Java short names for \p{} in patterns
         private val UNICODE_CATEGORY_NAMES =
@@ -1964,19 +2465,119 @@ private val REGEX_UUID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
                 "Unassigned" to "Cn",
             )
 
-        // Characters DISALLOWED in IDN labels per RFC 5892
-        private val IDNA_DISALLOWED_CHARS =
+        private const val ACE_PREFIX = "xn--"
+        private const val MAX_LABEL_LENGTH = 63
+        private const val MAX_HOSTNAME_LENGTH = 253
+        private const val ZWNJ = 0x200C
+        private const val ZWJ = 0x200D
+
+        private const val PUNYCODE_BASE = 36
+        private const val PUNYCODE_TMIN = 1
+        private const val PUNYCODE_TMAX = 26
+        private const val PUNYCODE_SKEW = 38
+        private const val PUNYCODE_DAMP = 700
+        private const val PUNYCODE_INITIAL_BIAS = 72
+        private const val PUNYCODE_INITIAL_N = 128
+
+        // RFC 5892 Section 2.6: PVALID despite their code point category
+        private val IDNA_PVALID_EXCEPTIONS =
             setOf(
-                '\u0640', // ARABIC TATWEEL
-                '\u07FA', // NKO LAJANYALAN
-                '\u302E', // HANGUL SINGLE DOT TONE MARK
-                '\u302F', // HANGUL DOUBLE DOT TONE MARK
-                '\u3031', // VERTICAL KANA REPEAT MARK
-                '\u3032', // VERTICAL KANA REPEAT WITH VOICED ITERATION MARK
-                '\u3033', // VERTICAL KANA REPEAT MARK UPPER HALF
-                '\u3034', // VERTICAL KANA REPEAT WITH VOICED ITERATION MARK UPPER HALF
-                '\u3035', // VERTICAL KANA REPEAT MARK LOWER HALF
-                '\u303B', // VERTICAL IDEOGRAPHIC ITERATION MARK
+                0x00DF, // LATIN SMALL LETTER SHARP S
+                0x03C2, // GREEK SMALL LETTER FINAL SIGMA
+                0x06FD, // ARABIC SIGN SINDHI AMPERSAND
+                0x06FE, // ARABIC SIGN SINDHI POSTPOSITION MEN
+                0x0F0B, // TIBETAN MARK INTERSYLLABIC TSHEG
+                0x3007, // IDEOGRAPHIC NUMBER ZERO
+            )
+
+        // CONTEXTO code points: allowed only where their rule in RFC 5892 Appendix A holds
+        private val IDNA_CONTEXT_O_CHARS = setOf(0x00B7, 0x0375, 0x05F3, 0x05F4, 0x30FB)
+
+        private val KATAKANA_MIDDLE_DOT_SCRIPTS =
+            setOf(
+                Character.UnicodeScript.HIRAGANA,
+                Character.UnicodeScript.KATAKANA,
+                Character.UnicodeScript.HAN,
+            )
+
+        // Scripts written cursively, whose letters join to their neighbours
+        private val CURSIVE_SCRIPTS =
+            setOf(
+                Character.UnicodeScript.ARABIC,
+                Character.UnicodeScript.SYRIAC,
+                Character.UnicodeScript.NKO,
+                Character.UnicodeScript.MANDAIC,
+                Character.UnicodeScript.MANICHAEAN,
+                Character.UnicodeScript.PSALTER_PAHLAVI,
+                Character.UnicodeScript.HANIFI_ROHINGYA,
+                Character.UnicodeScript.SOGDIAN,
+                Character.UnicodeScript.ADLAM,
+            )
+
+        // Combining class 9 (Virama), which licenses a following ZWJ or ZWNJ
+        private val VIRAMA_CODE_POINTS =
+            setOf(
+                0x094D, 0x09CD, 0x0A4D, 0x0ACD, 0x0B4D, 0x0BCD, 0x0C4D, 0x0CCD, 0x0D3B, 0x0D3C,
+                0x0D4D, 0x0DCA, 0x0E3A, 0x0EBA, 0x0F84, 0x1039, 0x103A, 0x1714, 0x1734, 0x17D2,
+                0x1A60, 0x1B44, 0x1BAA, 0x1BAB, 0x1BF2, 0x1BF3, 0x2D7F, 0xA806, 0xA82C, 0xA8C4,
+                0xA953, 0xA9C0, 0xAAF6, 0xABED, 0x10A3F, 0x11046, 0x1107F, 0x110B9, 0x111C0,
+                0x11235, 0x1134D, 0x11442, 0x114C2, 0x115BF, 0x1163F, 0x116B6, 0x1172B, 0x11839,
+                0x119E0, 0x11A34, 0x11A47, 0x11A99, 0x11C3F, 0x11D44, 0x11D45, 0x11D97,
+            )
+
+        private val BIDI_RTL_ALLOWED =
+            setOf(
+                Character.DIRECTIONALITY_RIGHT_TO_LEFT,
+                Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC,
+                Character.DIRECTIONALITY_ARABIC_NUMBER,
+                Character.DIRECTIONALITY_EUROPEAN_NUMBER,
+                Character.DIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR,
+                Character.DIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR,
+                Character.DIRECTIONALITY_COMMON_NUMBER_SEPARATOR,
+                Character.DIRECTIONALITY_OTHER_NEUTRALS,
+                Character.DIRECTIONALITY_BOUNDARY_NEUTRAL,
+                Character.DIRECTIONALITY_NONSPACING_MARK,
+            )
+
+        private val BIDI_LTR_ALLOWED =
+            setOf(
+                Character.DIRECTIONALITY_LEFT_TO_RIGHT,
+                Character.DIRECTIONALITY_EUROPEAN_NUMBER,
+                Character.DIRECTIONALITY_EUROPEAN_NUMBER_SEPARATOR,
+                Character.DIRECTIONALITY_EUROPEAN_NUMBER_TERMINATOR,
+                Character.DIRECTIONALITY_COMMON_NUMBER_SEPARATOR,
+                Character.DIRECTIONALITY_OTHER_NEUTRALS,
+                Character.DIRECTIONALITY_BOUNDARY_NEUTRAL,
+                Character.DIRECTIONALITY_NONSPACING_MARK,
+            )
+
+        private val BIDI_RTL_TRAILING =
+            setOf(
+                Character.DIRECTIONALITY_RIGHT_TO_LEFT,
+                Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC,
+                Character.DIRECTIONALITY_EUROPEAN_NUMBER,
+                Character.DIRECTIONALITY_ARABIC_NUMBER,
+            )
+
+        private val BIDI_LTR_TRAILING =
+            setOf(
+                Character.DIRECTIONALITY_LEFT_TO_RIGHT,
+                Character.DIRECTIONALITY_EUROPEAN_NUMBER,
+            )
+
+        // Characters DISALLOWED in IDN labels per RFC 5892
+        private val IDNA_DISALLOWED_CODE_POINTS =
+            setOf(
+                0x0640, // ARABIC TATWEEL
+                0x07FA, // NKO LAJANYALAN
+                0x302E, // HANGUL SINGLE DOT TONE MARK
+                0x302F, // HANGUL DOUBLE DOT TONE MARK
+                0x3031, // VERTICAL KANA REPEAT MARK
+                0x3032, // VERTICAL KANA REPEAT WITH VOICED ITERATION MARK
+                0x3033, // VERTICAL KANA REPEAT MARK UPPER HALF
+                0x3034, // VERTICAL KANA REPEAT WITH VOICED ITERATION MARK UPPER HALF
+                0x3035, // VERTICAL KANA REPEAT MARK LOWER HALF
+                0x303B, // VERTICAL IDEOGRAPHIC ITERATION MARK
             )
     }
 }

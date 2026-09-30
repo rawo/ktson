@@ -264,4 +264,129 @@ class FormatValidationTest :
         it("backslash in path is invalid") { runTest { invalid("https://example.org/foobar\\.txt", "uri-reference") } }
         it("non-ASCII character is invalid") { runTest { invalid("/foobar®.txt", "uri-reference") } }
     }
+
+    describe("hostname format: A-labels") {
+        it("plain hostname is valid") { runTest { valid("www.example.com", "hostname") } }
+        it("a well-formed A-label is valid") { runTest { valid("xn--nxasmq6b.example", "hostname") } }
+
+        it("undecodable Punycode is invalid") { runTest { invalid("xn--X", "hostname") } }
+        it("non-canonical Punycode is invalid") { runTest { invalid("xn---9uc", "hostname") } }
+        it("an A-label decoding to a disallowed code point is invalid") { runTest { invalid("xn--7a", "hostname") } }
+        it("an A-label decoding to a leading combining mark is invalid") { runTest { invalid("xn--hello-txk", "hostname") } }
+        it("an A-label decoding to a Bidi violation is invalid") { runTest { invalid("xn--0ca24w", "hostname") } }
+        it("a decoded U-label with -- in the third and fourth position is invalid") {
+            runTest { invalid("XN--aa---o47jg78q", "hostname") }
+        }
+        it("a name longer than 253 characters is invalid") {
+            runTest { invalid(List(4) { "a".repeat(63) }.joinToString(".") + ".com", "hostname") }
+        }
+    }
+
+    describe("idn-hostname format: mapping and length") {
+        it("fullwidth characters are mapped before validation") { runTest { valid("\uFF41".repeat(63), "idn-hostname") } }
+        it("a mapped ACE prefix is decoded as an A-label") { runTest { valid("\uFF58\uFF4E--nxasmq6b", "idn-hostname") } }
+        it("an ignorable code point is dropped by the mapping") { runTest { valid("a\u200Bb", "idn-hostname") } }
+        it("an ideographic full stop separates labels") { runTest { valid("\u03C0\u03B1\u03C1\u03AC\u03B4\u03B5\u03B9\u03B3\u03BC\u03B1\u3002com", "idn-hostname") } }
+        it("a label whose A-label exceeds 63 characters is invalid") { runTest { invalid("\u03B1".repeat(64), "idn-hostname") } }
+    }
+
+    describe("idn-hostname format: contextual rules") {
+        it("ZERO WIDTH JOINER after a Virama is valid") { runTest { valid("\u0915\u094D\u200D\u0937", "idn-hostname") } }
+        it("ZERO WIDTH JOINER without a Virama is invalid") { runTest { invalid("\u0915\u200D\u0937", "idn-hostname") } }
+        it("ZERO WIDTH NON-JOINER in a joining context is valid") { runTest { valid("\u0628\u064A\u200C\u0628\u064A", "idn-hostname") } }
+        it("ZERO WIDTH NON-JOINER outside any context is invalid") { runTest { invalid("\u0915\u094D\u200C\u0937x\u200Cy", "idn-hostname") } }
+        it("MIDDLE DOT between two l characters is valid") { runTest { valid("l\u00B7l", "idn-hostname") } }
+        it("MIDDLE DOT without a preceding l is invalid") { runTest { invalid("a\u00B7l", "idn-hostname") } }
+        it("GREEK KERAIA followed by Greek is valid") { runTest { valid("\u03B1\u0375\u03B2", "idn-hostname") } }
+        it("GREEK KERAIA not followed by Greek is invalid") { runTest { invalid("\u03B1\u0375S", "idn-hostname") } }
+        it("HEBREW GERESH after Hebrew is valid") { runTest { valid("\u05D1\u05F3\u05D2", "idn-hostname") } }
+        it("HEBREW GERESH not preceded by Hebrew is invalid") { runTest { invalid("A\u05F3\u05D1", "idn-hostname") } }
+        it("KATAKANA MIDDLE DOT alongside Katakana is valid") { runTest { valid("\u30A2\u30FB\u30A4", "idn-hostname") } }
+        it("KATAKANA MIDDLE DOT without Japanese characters is invalid") { runTest { invalid("def\u30FBabc", "idn-hostname") } }
+        it("one Arabic-Indic digit block is valid") { runTest { valid("\u0628\u0660\u0628", "idn-hostname") } }
+        it("mixed Arabic-Indic digit blocks are invalid") { runTest { invalid("\u0628\u0660\u06F0", "idn-hostname") } }
+    }
+
+    describe("idn-hostname format: Bidi rule") {
+        it("a right-to-left label is valid") { runTest { valid("\u05D0\u05D1", "idn-hostname") } }
+        it("digits before a right-to-left letter are invalid") { runTest { invalid("0\u0627", "idn-hostname") } }
+        it("a left-to-right label containing a right-to-left letter is invalid") { runTest { invalid("a\u05D0", "idn-hostname") } }
+        it("a right-to-left label mixing both digit types is invalid") { runTest { invalid("\u05D00\u0660", "idn-hostname") } }
+        it("a digit-first label in a Bidi domain is invalid") { runTest { invalid("0a.\u05D0", "idn-hostname") } }
+        it("a label of only Arabic-Indic digits is invalid") { runTest { invalid("\u0660\u0661", "idn-hostname") } }
+        it("digits are unrestricted outside a Bidi domain") { runTest { valid("1host", "idn-hostname") } }
+    }
+
+    describe("iri and iri-reference formats") {
+        it("a non-ASCII IRI is valid") { runTest { valid("http://\u0192\u00F8\u00F8.\u00DF\u00E5r/", "iri") } }
+        it("a relative IRI reference is valid") { runTest { valid("/abc", "iri-reference") } }
+        it("a lone percent sign is invalid") { runTest { invalid("http://\u0192\u00F8\u00F8.\u00DF\u00E5r/%", "iri") } }
+        it("an incomplete percent triplet is invalid") { runTest { invalid("/%A", "iri-reference") } }
+        it("non-hex percent encoding is invalid") { runTest { invalid("/%6G", "iri-reference") } }
+        it("a trailing newline is invalid") { runTest { invalid("/abc\n", "iri-reference") } }
+        it("an embedded IPv4 with a leading zero is invalid") { runTest { invalid("//[::ffff:192.168.0.01]/p", "iri-reference") } }
+    }
+
+    describe("uri format: authority rules") {
+        it("an IPv6 host is valid") { runTest { valid("http://[::1]/p", "uri") } }
+        it("an embedded IPv4 with a leading zero is invalid") { runTest { invalid("http://[::ffff:01.2.3.4]", "uri") } }
+        it("square brackets in a path are invalid") { runTest { invalid("http:/[::1]", "uri") } }
+        it("a trailing newline is invalid") { runTest { invalid("http://foo.bar/\n", "uri") } }
+        it("an unbracketed IPv6 host is invalid") { runTest { invalid("http://2001:0db8:85a3::8a2e:0370:7334", "uri") } }
+        it("a non-numeric port is invalid") { runTest { invalid("//example.com:abc/p", "uri-reference") } }
+        it("more than one at-sign in the authority is invalid") { runTest { invalid("//a@b@example.com/", "uri-reference") } }
+        it("a colon in the first segment of a relative path is invalid") { runTest { invalid("1:b", "uri-reference") } }
+    }
+
+    describe("uri-template format: RFC 6570 grammar") {
+        it("an expression with a prefix modifier is valid") { runTest { valid("{term:1}", "uri-template") } }
+        it("a four-digit prefix is valid") { runTest { valid("{v:1000}", "uri-template") } }
+        it("the explode modifier is valid") { runTest { valid("{var*}", "uri-template") } }
+        it("a dotted variable name is valid") { runTest { valid("{a.b}", "uri-template") } }
+        it("a percent-encoded variable name is valid") { runTest { valid("{%41}", "uri-template") } }
+        it("expansion operators are valid") { runTest { valid("{+var}{#var}{.var}{/var}{;var}{?var}{&var}", "uri-template") } }
+
+        it("an empty expression is invalid") { runTest { invalid("{}", "uri-template") } }
+        it("an empty varspec in the list is invalid") { runTest { invalid("{a,,b}", "uri-template") } }
+        it("a trailing comma is invalid") { runTest { invalid("{a,}", "uri-template") } }
+        it("a zero prefix length is invalid") { runTest { invalid("{v:0}", "uri-template") } }
+        it("a leading zero in the prefix length is invalid") { runTest { invalid("{v:01}", "uri-template") } }
+        it("a five-digit prefix length is invalid") { runTest { invalid("{v:10000}", "uri-template") } }
+        it("combining prefix and explode is invalid") { runTest { invalid("{var:1*}", "uri-template") } }
+        it("a double dot in a variable name is invalid") { runTest { invalid("{a..b}", "uri-template") } }
+        it("a default value in a varspec is invalid") { runTest { invalid("{var=def}", "uri-template") } }
+        it("a reserved operator is invalid") { runTest { invalid("{,+var}", "uri-template") } }
+        it("an incomplete percent triplet in a literal is invalid") { runTest { invalid("a%4", "uri-template") } }
+        it("a space in a literal is invalid") { runTest { invalid("a b", "uri-template") } }
+        it("a delete character in a literal is invalid") { runTest { invalid("a\u007Fb", "uri-template") } }
+    }
+
+    describe("regex format: ECMA 262 syntax") {
+        it("a named group is valid") { runTest { valid("(?<name>x)", "regex") } }
+        it("a named backreference is valid") { runTest { valid("(?<n>a)\\k<n>", "regex") } }
+        it("a variable-width lookbehind is valid") { runTest { valid("(?<=a+)b", "regex") } }
+        it("an empty character class is valid") { runTest { valid("[]", "regex") } }
+        it("a negated empty character class is valid") { runTest { valid("[^]", "regex") } }
+        it("a control escape is valid") { runTest { valid("\\cA", "regex") } }
+
+        it("a Java-only escape is invalid") { runTest { invalid("\\a", "regex") } }
+        it("a single inline flag is invalid") { runTest { invalid("(?i)abc", "regex") } }
+        it("multiple inline flags are invalid") { runTest { invalid("(?ims)abc", "regex") } }
+        it("a Python named group is invalid") { runTest { invalid("(?P<name>x)", "regex") } }
+        it("an inline comment group is invalid") { runTest { invalid("(?#comment)a", "regex") } }
+        it("an unclosed group is invalid") { runTest { invalid("^(abc]", "regex") } }
+    }
+
+    describe("format edge cases fixed alongside the IDNA work") {
+        it("a duration may not skip a component") { runTest { invalid("P1Y2D", "duration") } }
+        it("a time duration may not skip a component") { runTest { invalid("PT1H2S", "duration") } }
+        it("nested duration components are valid") { runTest { valid("P1Y2M3DT4H5M6S", "duration") } }
+        it("a leading zero in an IPv4 octet is invalid") { runTest { invalid("192.168.0.01", "ipv4") } }
+        it("a leading zero in an embedded IPv4 octet is invalid") { runTest { invalid("::ffff:192.168.0.01", "ipv6") } }
+        it("a non-ASCII digit in a relative pointer prefix is invalid") { runTest { invalid("\u0661/foo", "relative-json-pointer") } }
+        it("an escaped double quote in a quoted local part is valid") { runTest { valid("\"\\\"\"@iana.org", "email") } }
+        it("a non-ASCII character in a quoted pair is invalid") { runTest { invalid("\"test\\©\"@iana.org", "email") } }
+        it("a lowercase IPv6 tag in an address literal is valid") { runTest { valid("a@[ipv6:::1]", "email") } }
+        it("an idn-email domain must be a valid hostname") { runTest { invalid("\u03B4@example..com", "idn-email") } }
+    }
 })
