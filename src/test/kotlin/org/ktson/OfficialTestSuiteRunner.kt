@@ -31,6 +31,7 @@ class OfficialTestSuiteRunner :
                     version = SchemaVersion.DRAFT_2019_09,
                     validator = validator201909,
                 )
+                runFormatTests(draft201909Dir, SchemaVersion.DRAFT_2019_09, schemaLoader)
             } else {
                 it("directory not found") {
                     throw IllegalStateException("Draft 2019-09 directory not found")
@@ -50,6 +51,7 @@ class OfficialTestSuiteRunner :
                     version = SchemaVersion.DRAFT_2020_12,
                     validator = validator202012,
                 )
+                runFormatTests(draft202012Dir, SchemaVersion.DRAFT_2020_12, schemaLoader)
             } else {
                 it("directory not found") {
                     throw IllegalStateException("Draft 2020-12 directory not found")
@@ -97,10 +99,29 @@ private fun buildSchemaLoader(testSuiteBase: File): (String) -> JsonElement? {
 }
 
 /**
+ * The per-format test files live under optional/ because format assertion is opt-in.
+ * They are run separately, against a validator that asserts formats in both drafts.
+ */
+private suspend fun DescribeSpecContainerScope.runFormatTests(
+    draftDirectory: File,
+    version: SchemaVersion,
+    schemaLoader: (String) -> JsonElement?,
+) {
+    val formatDirectory = File(draftDirectory, "optional/format")
+    if (!formatDirectory.exists()) return
+    describe("optional/format") {
+        val validator = JsonValidator(formatAssertion = true, schemaLoader = schemaLoader)
+        formatDirectory.listFiles()?.sortedBy { it.name }?.filter { it.isFile && it.extension == "json" }?.forEach { file ->
+            runTestsFromFile(file, version, validator)
+        }
+    }
+}
+
+/**
  * Recursively run tests from a directory
  */
 private suspend fun DescribeSpecContainerScope.runTestsFromDirectory(directory: File, version: SchemaVersion, validator: JsonValidator) {
-    // Skip optional tests and unsupported features
+    // optional/ is covered separately by runFormatTests; the rest is not supported yet
     val filesToSkip = setOf(
         "optional",
         "vocabulary.json",
