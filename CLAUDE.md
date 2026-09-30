@@ -111,11 +111,11 @@ validate()
 - **Draft201909ValidationTest.kt** - 47 tests for Draft 2019-09 features
 - **Draft202012ValidationTest.kt** - 54 tests for Draft 2020-12 features
 - **EdgeCaseAndThreadSafetyTest.kt** - 39 edge case and concurrency tests
-- **FormatValidationTest.kt** - 203 tests covering all supported format validators
+- **FormatValidationTest.kt** - 294 tests covering all supported format validators
 - **UriResolverTest.kt** - 25 tests for RFC 3986 URI resolution
 - **DepthLimitTest.kt** - 14 tests for `maxValidationDepth` protection
 - **ErrorMessageTest.kt** - 14 tests for error message content (path, keyword, schema path)
-- **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (draft2019-09 + draft2020-12)
+- **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (draft2019-09 + draft2020-12), including `optional/format`
 - **PerformanceTest.kt** - 6 performance tests (excluded from default test run)
 
 The official suite is **not vendored** - it must be cloned as a sibling of this project:
@@ -128,7 +128,7 @@ Without it, `OfficialTestSuiteRunner` prints a warning and passes locally, but *
 
 CI fetches the suite pinned to a SHA - `TEST_SUITE_REF` in `.github/workflows/build.yml` - so upstream additions cannot turn a build red on their own. Bump that SHA periodically; keep the local clone near it (`git -C ../JSON-Schema-Test-Suite fetch && git checkout <ref>`) or local and CI results will diverge.
 
-Skipped in the official suite: `vocabulary.json`, `infinite-loop-detection.json`, and the `optional/` directory. At the pinned SHA that is 2,082 of 4,630 assertions in the two draft directories; the 2,548 that do run pass 100%.
+Skipped in the official suite: `vocabulary.json`, `infinite-loop-detection.json`, and `optional/` apart from `optional/format`, which `runFormatTests` runs separately against a validator with `formatAssertion = true` (format is annotation-only by default in 2020-12, so the shared validator cannot run them). At the pinned SHA that leaves 334 of 4,630 assertions skipped in the two draft directories; the 4,296 that run pass 100%.
 
 Test memory configuration: min 512MB, max 2GB heap
 
@@ -155,7 +155,12 @@ val validator = JsonValidator(
 **Recommendation**: Use default (1000) for most cases. Lower for untrusted schemas (e.g., 100-500).
 
 ### 2. Partial Support
-- `idn-hostname` is a partial implementation (not full RFC 5892 IDNA compliance)
+- IDNA validation (`hostname`, `idn-hostname`, `idn-email`) implements the hyphen rules, Punycode
+  round-tripping, the RFC 5892 Appendix A contextual rules and the RFC 5893 Bidi rule, but decides
+  PVALID/DISALLOWED from Unicode categories plus an exception list rather than the full IDNA
+  derived-property table. It passes the official suite; exotic code points may still be misjudged.
+- `Joining_Type` is approximated by script for the CONTEXTJ rule on ZERO WIDTH NON-JOINER, since
+  the JDK exposes no joining-type data.
 
 ### 3. Other Notes
 - API is synchronous (migrated from async coroutines)
@@ -194,9 +199,15 @@ val validator = JsonValidator(
 ### Format Validation
 - Format validation controlled by `formatAssertion` constructor parameter (default: true)
 - Currently supported (19): email, uri, uri-reference, uri-template, date, time, date-time, duration, ipv4, ipv6, uuid, hostname, idn-hostname, idn-email, iri, iri-reference, json-pointer, relative-json-pointer, regex
-- Helper validators (`isValidHostname()`, `isValidIri()`, `isValidIdnHostname()`, `isValidRelativeJsonPointer()`, `isValidUriTemplate()`, `isValidDuration()`, ...) live in `JsonValidator.kt`
 - Formats are validated in `validateFormat()` method
 - Add new formats by extending the when expression in `validateFormat()`
+- Helper validators live in `JsonValidator.kt`, grouped by family:
+  - `isValidUriLike()` backs uri, uri-reference, iri and iri-reference from one RFC 3986/3987 parse
+  - `isValidHostname()` / `isValidIdnHostname()` share `isValidULabel()`, `punycodeDecode()`,
+    `punycodeEncode()` and `idnaMap()` (UTS 46 mapping: drop ignorables, NFKC, case-fold)
+  - `isValidEcmaRegex()` rejects Java-only regex syntax (inline flags, `\a`, `(?#...)`), while
+    `translateEmptyCharacterClasses()` accepts the ECMA-only `[]` and `[^]` for both `format` and
+    `pattern`
 
 ## Important Files
 
