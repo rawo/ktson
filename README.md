@@ -76,7 +76,7 @@ Most of the code refactoring were performed by AI agent with supervision and cod
 
 ```kotlin
 dependencies {
-    implementation("org.ktson:ktson:1.0.0")
+    implementation("org.ktson:ktson:2.0.0")
 }
 ```
 
@@ -84,7 +84,7 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'org.ktson:ktson:1.0.0'
+    implementation 'org.ktson:ktson:2.0.0'
 }
 ```
 
@@ -94,7 +94,7 @@ dependencies {
 <dependency>
     <groupId>org.ktson</groupId>
     <artifactId>ktson</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
 </dependency>
 ```
 
@@ -283,9 +283,31 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
      script for the CONTEXTJ rule and the Virama set is a fixed list, so both drift with new Unicode
      versions. Exotic code points may be misjudged; everyday names are not affected.
 
+## Upgrading from 1.0.0
+
+The public API is unchanged — same classes, same constructor parameters, same methods, so 2.0.0
+is a drop-in replacement at compile time. The major version reflects **changed validation verdicts**:
+
+- **Format validation is much stricter.** Of 879 official format cases, 112 now answer differently
+  (100 valid → invalid, 10 invalid → valid, 2 that used to throw). Every change moves toward the
+  official test suite, which 1.0.0 failed in 220 places. Affected most: `hostname` and
+  `idn-hostname` (A-labels are now decoded and checked), `uri-template` (full RFC 6570 grammar),
+  the `uri`/`iri` family (percent-encoding, control characters, authority rules), and `regex`
+  (ECMA 262 rather than Java syntax). This applies on default settings, since `formatAssertion`
+  defaults to `true`.
+- **`pattern` no longer throws on `[]` and `[^]`.** 1.0.0 let a `PatternSyntaxException` escape
+  `validate()`; these are valid ECMA 262 and now validate normally.
+- **Error content changed.** `ValidationError.schemaPath` was always `null` and is now always
+  populated with the keyword location, so `toString()` output differs. Messages render numbers as
+  written (`maximum 10`, not `10.0`) and quote the offending value. Do not assert on message text.
+- **Dependencies**: Kotlin 2.4.0, kotlinx-serialization-json 1.8.1, coroutines 1.10.2.
+
+If a value your data relies on now fails, it is worth checking against the official suite before
+assuming a regression — but pin 1.0.0 if you need the old verdicts.
+
 ## Project Status
 
-**Version**: 1.0.0  
+**Version**: 2.0.0  
 **Status**: ✅ Stable
 
 ### Test Coverage

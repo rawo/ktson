@@ -8,7 +8,7 @@ KtSON is a JSON Schema validator for Kotlin with comprehensive support for JSON 
 
 **Package**: `org.ktson`
 **Tech Stack**: Kotlin 2.4.0, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
-**Status**: 1.0.0, 100% official test suite coverage
+**Status**: 2.0.0, 100% official test suite coverage
 
 ## Common Commands
 
