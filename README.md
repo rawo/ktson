@@ -263,8 +263,8 @@ For more examples, see [docs/REF_USAGE_EXAMPLES.md](docs/REF_USAGE_EXAMPLES.md) 
 | References ($ref) | ✅ Complete | Local and external (via schemaLoader) |
 | Unevaluated Keywords | ✅ Complete | 100% |
 | Remote Schema Loading | ✅ Complete | Pluggable schemaLoader callback |
-| Format Validation | ⚠️ Partial | email, URI, date, time, IPv4, IPv6, UUID, hostname, idn-email, IRI, iri-reference, regex, idn-hostname, json-pointer, relative-json-pointer, uri-reference, uri-template, duration |
-| **Official Test Suite** | ✅ **100%** | **2,653/2,653 passing** |
+| Format Validation | ✅ Complete | All 19 formats, assertion mode only: email, idn-email, uri, uri-reference, uri-template, iri, iri-reference, date, time, date-time, duration, ipv4, ipv6, uuid, hostname, idn-hostname, json-pointer, relative-json-pointer, regex |
+| **Official Test Suite** | ✅ **100%** | **4,296/4,296 passing** (includes `optional/format`) |
 
 See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed feature breakdown.
 
@@ -277,7 +277,11 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 2. **Format Validation**
    - Assertion mode only (no annotation-only mode yet)
-   - `idn-hostname` validation is partial (covers common rules, not full RFC 5892 IDNA compliance)
+   - IDNA validation (`hostname`, `idn-hostname`, `idn-email`) passes the official suite, but decides
+     code point validity from Unicode categories plus the RFC 5892 §2.6 exception list rather than the
+     IDNA derived-property table, which the JDK does not expose. `Joining_Type` is approximated by
+     script for the CONTEXTJ rule and the Virama set is a fixed list, so both drift with new Unicode
+     versions. Exotic code points may be misjudged; everyday names are not affected.
 
 ## Project Status
 
@@ -286,18 +290,20 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 ### Test Coverage
 
-- **Custom Tests**: 396 tests (100% passing)
+- **Custom Tests**: 487 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
   - Depth limit protection: 14 tests
   - URI resolver: 25 tests
-  - Format validation: 203 tests
+  - Format validation: 294 tests
   - Error messages: 14 tests
 
-- **Official JSON Schema Test Suite**: 2,653 tests
-  - ✅ Passing: 2,653 (100%)
+- **Official JSON Schema Test Suite**: 4,296 tests
+  - ✅ Passing: 4,296 (100%)
   - ❌ Failing: 0
+  - Includes the `optional/format` files for both drafts; `vocabulary.json`,
+    `infinite-loop-detection.json` and the rest of `optional/` are not run yet
 
 - **Performance Tests**: 6 tests (100% passing)
   - Tested with schemas up to 50MB
@@ -306,10 +312,13 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 ### Recent Changes
 
-- ✅ **RFC 3986-compliant `uri` format validator** (scheme, forbidden chars, percent-encoding, authority)
-- ✅ **Improved `uri-reference` format validator** (rejects non-ASCII and invalid percent-encoding)
+- ✅ **All 19 formats pass the official `optional/format` suite** (1,748 assertions that previously did not run)
+- ✅ **IDNA validation** for `hostname` / `idn-hostname` / `idn-email`: Punycode round-tripping, UTS 46
+  mapping, RFC 5892 contextual rules and the RFC 5893 Bidi rule
+- ✅ **One RFC 3986/3987 parser** behind `uri`, `uri-reference`, `iri` and `iri-reference`
+- ✅ **RFC 6570 grammar** for `uri-template`; **ECMA 262 syntax rules** for `regex` and `pattern`
 - ✅ **Remote schema loading implemented** (pluggable `schemaLoader` callback)
-- ✅ **100% official test suite pass rate** (2,653/2,653 tests)
+- ✅ **100% official test suite pass rate** (4,296/4,296 tests)
 - ✅ `unevaluatedProperties` and `unevaluatedItems` implemented
 - ✅ `$dynamicRef` / `$dynamicAnchor` full dynamic scope resolution
 - ✅ `$recursiveRef` / `$recursiveAnchor` dynamic recursion
@@ -323,7 +332,7 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 - [x] ~~Implement recursion depth limiting~~ ✅ **COMPLETED**
 - [x] ~~Implement `unevaluatedProperties` and `unevaluatedItems`~~ ✅ **COMPLETED**
 - [x] ~~Remote schema reference support~~ ✅ **COMPLETED**
-- [x] ~~Add more format validators (hostname, idn-email, iri, regex)~~ ✅ **COMPLETED** (also: idn-hostname, json-pointer, relative-json-pointer, uri-reference, uri-template, duration)
+- [x] ~~Add more format validators (hostname, idn-email, iri, regex)~~ ✅ **COMPLETED** (all 19 formats, verified against the official `optional/format` suite)
 - [ ] Improve error messages
 
 **Future Enhancements:**
