@@ -290,14 +290,14 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 ### Test Coverage
 
-- **Custom Tests**: 487 tests (100% passing)
+- **Custom Tests**: 505 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
   - Depth limit protection: 14 tests
   - URI resolver: 25 tests
   - Format validation: 294 tests
-  - Error messages: 14 tests
+  - Error messages: 32 tests
 
 - **Official JSON Schema Test Suite**: 4,296 tests
   - ✅ Passing: 4,296 (100%)
@@ -312,6 +312,9 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 
 ### Recent Changes
 
+- ✅ **Errors carry a keyword location** (`ValidationError.schemaPath`), e.g. `/properties/n/$ref/minimum`
+- ✅ **Numbers are reported as written** — `maximum 10`, not `maximum 10.0`
+- ✅ **Messages quote the offending value** for `pattern`, `format` and the length bounds
 - ✅ **All 19 formats pass the official `optional/format` suite** (1,748 assertions that previously did not run)
 - ✅ **IDNA validation** for `hostname` / `idn-hostname` / `idn-email`: Punycode round-tripping, UTS 46
   mapping, RFC 5892 contextual rules and the RFC 5893 Bidi rule
@@ -333,9 +336,12 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 - [x] ~~Implement `unevaluatedProperties` and `unevaluatedItems`~~ ✅ **COMPLETED**
 - [x] ~~Remote schema reference support~~ ✅ **COMPLETED**
 - [x] ~~Add more format validators (hostname, idn-email, iri, regex)~~ ✅ **COMPLETED** (all 19 formats, verified against the official `optional/format` suite)
-- [ ] Improve error messages
+- [x] ~~Improve error messages~~ ✅ **COMPLETED** (keyword locations, literal-accurate numbers, offending values)
 
 **Future Enhancements:**
+- [ ] [RFC 6901 instance locations](docs/SPEC_INSTANCE_LOCATION.md) in errors (breaking change to `ValidationError.path`)
+- [ ] [Standard output formats](docs/SPEC_OUTPUT_FORMATS.md) (flag/basic/detailed/verbose)
+- [ ] [Arbitrary-precision numbers](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md) — fixes a known correctness defect beyond 2^53
 - [ ] Schema caching improvements
 - [ ] Streaming validation for large datasets
 - [ ] GraalVM native image support

@@ -114,7 +114,7 @@ validate()
 - **FormatValidationTest.kt** - 294 tests covering all supported format validators
 - **UriResolverTest.kt** - 25 tests for RFC 3986 URI resolution
 - **DepthLimitTest.kt** - 14 tests for `maxValidationDepth` protection
-- **ErrorMessageTest.kt** - 14 tests for error message content (path, keyword, schema path)
+- **ErrorMessageTest.kt** - 32 tests for error content (instance path, keyword, keyword location, wording)
 - **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (draft2019-09 + draft2020-12), including `optional/format`
 - **PerformanceTest.kt** - 6 performance tests (excluded from default test run)
 
@@ -162,7 +162,12 @@ val validator = JsonValidator(
 - `Joining_Type` is approximated by script for the CONTEXTJ rule on ZERO WIDTH NON-JOINER, since
   the JDK exposes no joining-type data.
 
-### 3. Other Notes
+### 3. Numeric Precision
+All numeric comparisons go through `Double`, so values beyond 2^53 are compared as approximations
+and some invalid instances are reported valid. See `docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md`.
+`optional/bignum.json` is skipped for this reason.
+
+### 4. Other Notes
 - API is synchronous (migrated from async coroutines)
 - Format validation in assertion mode only
 - Thread-safe (immutable validator, stateless ReferenceResolver)
@@ -184,7 +189,10 @@ val validator = JsonValidator(
 1. Changes to `validateElement()` affect 32 recursive call sites
 2. Test against both Draft 2019-09 and 2020-12 test suites
 3. Consider stack depth implications for recursive changes
-4. Update error messages to include keyword and schema path
+4. Pass the keyword location on every error: `ValidationError(path, msg, KEYWORD, at(schemaPath, KEYWORD))`.
+   `at()` appends a keyword, `at(schemaPath, keyword, token)` appends a keyword and an escaped token
+   (`properties/name`, `anyOf/0`). Recursive calls pass the sub-schema's location, so `$ref` hops are
+   visible in the result (`/properties/n/$ref/minimum`)
 5. Maintain thread safety (avoid mutable shared state)
 
 ### Reference Resolution
@@ -213,6 +221,9 @@ val validator = JsonValidator(
 
 ### Documentation
 - `docs/STACK_OVERFLOW_RISK_ANALYSIS.md` - **Read this before production deployment**
+- `docs/SPEC_INSTANCE_LOCATION.md` - proposed: RFC 6901 instance locations (not implemented)
+- `docs/SPEC_OUTPUT_FORMATS.md` - proposed: standard JSON Schema output formats (not implemented)
+- `docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md` - proposed: BigDecimal comparisons; **documents a live correctness defect**
 - `docs/IMPLEMENTATION_STATUS.md` - Feature completeness tracking
 - `docs/OFFICIAL_TEST_SUITE_RESULTS.md` - Detailed test results (100% pass rate)
 - `docs/TESTING.md` - Testing methodology
