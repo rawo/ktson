@@ -2,8 +2,10 @@ package org.ktson
 
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.comparables.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import io.kotest.matchers.string.shouldNotContain
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.*
 
@@ -183,6 +185,143 @@ class ErrorMessageTest :
                 str shouldContain "outer error"
                 str shouldContain "inner error"
                 str shouldContain "  " // indentation for cause
+            }
+        }
+    }
+
+    describe("keyword location (schemaPath)") {
+        fun firstError(schema: String, data: String): ValidationError {
+            val result = validator.validate(
+                Json.parseToJsonElement(data),
+                JsonSchema.fromString(schema, SchemaVersion.DRAFT_2020_12),
+            ) as ValidationResult.Invalid
+            return result.validationErrors.first()
+        }
+
+        it("points at the failing keyword") {
+            runTest { firstError("""{"type": "integer"}""", """"x"""").schemaPath shouldBe "/type" }
+        }
+
+        it("walks into properties") {
+            runTest {
+                firstError("""{"properties": {"user": {"properties": {"age": {"type": "integer"}}}}}""", """{"user": {"age": "x"}}""")
+                    .schemaPath shouldBe "/properties/user/properties/age/type"
+            }
+        }
+
+        it("walks into items") {
+            runTest { firstError("""{"items": {"type": "integer"}}""", """[1, "two"]""").schemaPath shouldBe "/items/type" }
+        }
+
+        it("follows a reference") {
+            runTest {
+                firstError(
+                    """{"${'$'}defs": {"pos": {"minimum": 0}}, "properties": {"n": {"${'$'}ref": "#/${'$'}defs/pos"}}}""",
+                    """{"n": -5}""",
+                ).schemaPath shouldBe "/properties/n/${'$'}ref/minimum"
+            }
+        }
+
+        it("numbers the branch of a combiner") {
+            runTest {
+                val error = firstError("""{"anyOf": [{"type": "integer"}, {"type": "boolean"}]}""", """"x"""")
+                error.schemaPath shouldBe "/anyOf"
+                error.causes[1].schemaPath shouldBe "/anyOf/1"
+                error.causes[1].causes.first().schemaPath shouldBe "/anyOf/1/type"
+            }
+        }
+
+        it("reports the applied branch of a conditional") {
+            runTest {
+                firstError("""{"if": {"const": "a"}, "then": {"const": "b"}}""", """"a"""").schemaPath shouldBe "/then/const"
+            }
+        }
+
+        it("escapes a slash in a pattern key") {
+            runTest {
+                firstError("""{"patternProperties": {"^x/": {"type": "integer"}}}""", """{"x/1": "s"}""")
+                    .schemaPath shouldBe "/patternProperties/^x~1/type"
+            }
+        }
+
+        it("is reported by toString") {
+            runTest { firstError("""{"type": "integer"}""", """"x"""").toString() shouldContain "schema path: /type" }
+        }
+    }
+
+    describe("numeric error messages") {
+        fun message(schema: String, data: String): String {
+            val result = validator.validate(
+                Json.parseToJsonElement(data),
+                JsonSchema.fromString(schema, SchemaVersion.DRAFT_2020_12),
+            ) as ValidationResult.Invalid
+            return result.validationErrors.first().message
+        }
+
+        it("keeps integers as integers") {
+            runTest {
+                val message = message("""{"maximum": 10}""", "11")
+                message shouldContain "11"
+                message shouldContain "10"
+                message shouldNotContain ".0"
+            }
+        }
+
+        it("keeps a decimal as written") {
+            runTest { message("""{"minimum": 0.5}""", "0.25") shouldContain "0.5" }
+        }
+
+        it("keeps large integers exact") {
+            runTest { message("""{"maximum": 10}""", "9007199254740993") shouldContain "9007199254740993" }
+        }
+
+        it("reports multipleOf without a fractional suffix") {
+            runTest { message("""{"multipleOf": 3}""", "10") shouldContain "not a multiple of 3" }
+        }
+
+        it("reports the exclusive bound as written") {
+            runTest { message("""{"exclusiveMinimum": 0}""", "0") shouldContain "greater than 0" }
+        }
+    }
+
+    describe("string error messages") {
+        fun message(schema: String, data: String): String {
+            val result = validator.validate(
+                Json.parseToJsonElement(data),
+                JsonSchema.fromString(schema, SchemaVersion.DRAFT_2020_12),
+            ) as ValidationResult.Invalid
+            return result.validationErrors.first().message
+        }
+
+        it("quotes the value that failed a pattern") {
+            runTest { message("""{"pattern": "^a+${'$'}"}""", """"bbb"""") shouldContain "\"bbb\"" }
+        }
+
+        it("quotes the value that failed a format") {
+            runTest { message("""{"format": "email"}""", """"not-an-email"""") shouldContain "\"not-an-email\"" }
+        }
+
+        it("quotes the value that failed a length bound") {
+            runTest { message("""{"maxLength": 2}""", """"abcd"""") shouldContain "\"abcd\"" }
+        }
+
+        it("truncates a long value") {
+            runTest {
+                val message = message("""{"pattern": "^a+${'$'}"}""", """"${"z".repeat(60)}"""")
+                message shouldContain "..."
+                message.length shouldBeLessThan 120
+            }
+        }
+    }
+
+    describe("oneOf match reporting") {
+        it("names the branches that matched") {
+            runTest {
+                val result = validator.validate(
+                    JsonPrimitive(5),
+                    JsonSchema.fromString("""{"oneOf": [{"type": "integer"}, {"minimum": 0}, {"type": "string"}]}""", SchemaVersion.DRAFT_2020_12),
+                ) as ValidationResult.Invalid
+                result.validationErrors.first().message shouldContain "branches 0, 1"
             }
         }
     }
