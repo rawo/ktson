@@ -330,7 +330,7 @@ suspend fun main() {
         is ValidationResult.Valid -> println("✓ Valid!")
         is ValidationResult.Invalid -> {
             result.getErrors().forEach { error ->
-                println("✗ ${error.path}: ${error.message}")
+                println("✗ ${error.instanceLocation}: ${error.message}")
             }
         }
     }

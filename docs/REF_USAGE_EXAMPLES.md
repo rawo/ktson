@@ -308,7 +308,7 @@ when (result) {
     is ValidationResult.Invalid -> {
         println("❌ Validation failed:")
         result.validationErrors.forEach { error ->
-            println("  - Path: ${error.path}")
+            println("  - Location: ${error.instanceLocation}")
             println("    Message: ${error.message}")
             println("    Keyword: ${error.keyword}")
         }

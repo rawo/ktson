@@ -170,7 +170,7 @@ it("should provide detailed error messages") {
         val errors = result.getErrors()
         
         errors.any { it.message.contains("Required property 'name'") } shouldBe true
-        errors.any { it.path.isEmpty() } shouldBe true
+        errors.any { it.instanceLocation.isEmpty() } shouldBe true
     }
 }
 ```
@@ -304,7 +304,7 @@ describe("Debug feature") {
             
             if (result.isInvalid) {
                 result.getErrors().forEach { error ->
-                    println("Error at ${error.path}: ${error.message}")
+                    println("Error at ${error.instanceLocation}: ${error.message}")
                     println("  Keyword: ${error.keyword}")
                     println("  Schema path: ${error.schemaPath}")
                 }

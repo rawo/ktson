@@ -150,8 +150,8 @@ println("Valid: ${result.isValid}")
 when (result) {
     is ValidationResult.Valid -> println("Success!")
     is ValidationResult.Invalid -> {
-        result.errors.forEach { error ->
-            println("${error.path}: ${error.message}")
+        result.validationErrors.forEach { error ->
+            println("${error.instanceLocation}: ${error.message}")
         }
     }
 }
