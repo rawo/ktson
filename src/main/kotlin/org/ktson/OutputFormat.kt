@@ -39,6 +39,27 @@ data class FlagOutput(override val valid: Boolean) : ValidationOutput {
     override fun toJson(): String = outputJson.encodeToString(serializer(), this)
 }
 
+/** The `basic` format: a root unit with every failing unit in one flat list. */
+@Serializable
+data class BasicOutput(
+    override val valid: Boolean,
+    val keywordLocation: String,
+    val instanceLocation: String,
+    /** Every failing unit, each parent before its causes; null when valid. */
+    val errors: List<BasicUnit>? = null,
+) : ValidationOutput {
+    override fun toJson(): String = outputJson.encodeToString(serializer(), this)
+}
+
+/** One failing unit in [BasicOutput.errors]; never nests. */
+@Serializable
+data class BasicUnit(
+    val valid: Boolean,
+    val keywordLocation: String,
+    val instanceLocation: String,
+    val error: String,
+)
+
 /**
  * Selects a standard output format; the type parameter is the output type it produces.
  *
@@ -52,7 +73,22 @@ sealed class OutputFormat<T : ValidationOutput> {
     data object Flag : OutputFormat<FlagOutput>() {
         override fun from(result: ValidationResult): FlagOutput = FlagOutput(result.isValid)
     }
+
+    /** The root unit plus every failing unit, flattened depth-first. */
+    data object Basic : OutputFormat<BasicOutput>() {
+        override fun from(result: ValidationResult): BasicOutput = when (result) {
+            is ValidationResult.Valid -> BasicOutput(valid = true, keywordLocation = "", instanceLocation = "")
+            is ValidationResult.Invalid ->
+                BasicOutput(valid = false, keywordLocation = "", instanceLocation = "", errors = result.validationErrors.flatMap { it.toBasicUnits() })
+        }
+    }
 }
 
 /** Maps this native result to the standard output [format]. */
 fun <T : ValidationOutput> ValidationResult.toOutput(format: OutputFormat<T>): T = format.from(this)
+
+/** The validator always sets schemaPath; only a hand-built error can lack one, and maps to the root. */
+private fun ValidationError.keywordLocationOrRoot(): String = schemaPath ?: ""
+
+private fun ValidationError.toBasicUnits(): List<BasicUnit> = listOf(BasicUnit(valid = false, keywordLocation = keywordLocationOrRoot(), instanceLocation = instanceLocation, error = message)) +
+        causes.flatMap { it.toBasicUnits() }
