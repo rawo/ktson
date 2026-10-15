@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Numeric bounds, integer classification, `multipleOf`, and equality for `const`, `enum` and
+  `uniqueItems` now use exact `Long`/`BigDecimal` arithmetic. Large integers and high-precision
+  fractions no longer collapse through `Double`, and numeric strings remain distinct from numbers.
+- **Breaking verdict changes:** previously accepted rounded values and near-multiples may now
+  fail validation; valid large integers such as `1e400` are accepted as integers.
+
+### Added
+- Official `optional/bignum.json` coverage for both drafts and 88 numeric regression/concurrency tests.
+- Three numeric performance benchmarks; integer fast paths and a cache of parsed schema limits
+  reduce the cost of exact arithmetic. Decimal validation remains slower than approximate arithmetic;
+  see `docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md` for measurements.
+
 ## [1.0.1] - 2025-11-04
 
 ### Fixed

@@ -115,8 +115,9 @@ validate()
 - **UriResolverTest.kt** - 25 tests for RFC 3986 URI resolution
 - **DepthLimitTest.kt** - 14 tests for `maxValidationDepth` protection
 - **ErrorMessageTest.kt** - 32 tests for error content (instance path, keyword, keyword location, wording)
+- **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
 - **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (draft2019-09 + draft2020-12), including `optional/format`
-- **PerformanceTest.kt** - 6 performance tests (excluded from default test run)
+- **PerformanceTest.kt** - 9 performance tests, including three numeric benchmarks (excluded from default test run)
 
 The official suite is **not vendored** - it must be cloned as a sibling of this project:
 
@@ -128,7 +129,7 @@ Without it, `OfficialTestSuiteRunner` prints a warning and passes locally, but *
 
 CI fetches the suite pinned to a SHA - `TEST_SUITE_REF` in `.github/workflows/build.yml` - so upstream additions cannot turn a build red on their own. Bump that SHA periodically; keep the local clone near it (`git -C ../JSON-Schema-Test-Suite fetch && git checkout <ref>`) or local and CI results will diverge.
 
-Skipped in the official suite: `vocabulary.json`, `infinite-loop-detection.json`, and `optional/` apart from `optional/format`, which `runFormatTests` runs separately against a validator with `formatAssertion = true` (format is annotation-only by default in 2020-12, so the shared validator cannot run them). At the pinned SHA that leaves 334 of 4,630 assertions skipped in the two draft directories; the 4,296 that run pass 100%.
+Skipped in the official suite: `vocabulary.json`, `infinite-loop-detection.json`, and `optional/` apart from `optional/format` and `optional/bignum.json`. Format tests run separately against a validator with `formatAssertion = true` (format is annotation-only by default in 2020-12, so the shared validator cannot run them). At the pinned SHA that leaves 316 of 4,630 assertions excluded in the two draft directories; the 4,314 that run pass 100%.
 
 Test memory configuration: min 512MB, max 2GB heap
 
@@ -163,9 +164,11 @@ val validator = JsonValidator(
   the JDK exposes no joining-type data.
 
 ### 3. Numeric Precision
-All numeric comparisons go through `Double`, so values beyond 2^53 are compared as approximations
-and some invalid instances are reported valid. See `docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md`.
-`optional/bignum.json` is skipped for this reason.
+Bounds, integer classification, `multipleOf` and numeric equality use exact `Long`/`BigDecimal`
+arithmetic. Integer tokens within `Long` range take a fast path; parsed decimal schema limits are
+cached in a `ConcurrentHashMap` (instance numbers are never cached). `optional/bignum.json` runs
+for both drafts. Decimal validation costs more than approximate `Double` arithmetic; see
+`docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md` for benchmarks and `BigDecimal` range limitations.
 
 ### 4. Other Notes
 - API is synchronous (migrated from async coroutines)
@@ -233,7 +236,7 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - `docs/STACK_OVERFLOW_RISK_ANALYSIS.md` - **Read this before production deployment**
 - `docs/SPEC_INSTANCE_LOCATION.md` - proposed: RFC 6901 instance locations (not implemented)
 - `docs/SPEC_OUTPUT_FORMATS.md` - proposed: standard JSON Schema output formats (not implemented)
-- `docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md` - proposed: BigDecimal comparisons; **documents a live correctness defect**
+- `docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md` - implemented: exact numeric comparisons, regression coverage and benchmarks
 - `docs/IMPLEMENTATION_STATUS.md` - Feature completeness tracking
 - `docs/OFFICIAL_TEST_SUITE_RESULTS.md` - Detailed test results (100% pass rate)
 - `docs/TESTING.md` - Testing methodology

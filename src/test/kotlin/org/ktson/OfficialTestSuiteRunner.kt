@@ -32,6 +32,7 @@ class OfficialTestSuiteRunner :
                     validator = validator201909,
                 )
                 runFormatTests(draft201909Dir, SchemaVersion.DRAFT_2019_09, schemaLoader)
+                runBignumTests(draft201909Dir, SchemaVersion.DRAFT_2019_09, validator201909)
             } else {
                 it("directory not found") {
                     throw IllegalStateException("Draft 2019-09 directory not found")
@@ -52,6 +53,7 @@ class OfficialTestSuiteRunner :
                     validator = validator202012,
                 )
                 runFormatTests(draft202012Dir, SchemaVersion.DRAFT_2020_12, schemaLoader)
+                runBignumTests(draft202012Dir, SchemaVersion.DRAFT_2020_12, validator202012)
             } else {
                 it("directory not found") {
                     throw IllegalStateException("Draft 2020-12 directory not found")
@@ -118,10 +120,25 @@ private suspend fun DescribeSpecContainerScope.runFormatTests(
 }
 
 /**
+ * Run arbitrary-precision number tests from optional/bignum.json
+ */
+private suspend fun DescribeSpecContainerScope.runBignumTests(
+    draftDirectory: File,
+    version: SchemaVersion,
+    validator: JsonValidator,
+) {
+    val bignumFile = File(draftDirectory, "optional/bignum.json")
+    if (!bignumFile.exists()) return
+    describe("optional/bignum") {
+        runTestsFromFile(bignumFile, version, validator)
+    }
+}
+
+/**
  * Recursively run tests from a directory
  */
 private suspend fun DescribeSpecContainerScope.runTestsFromDirectory(directory: File, version: SchemaVersion, validator: JsonValidator) {
-    // optional/ is covered separately by runFormatTests; the rest is not supported yet
+    // optional/format and optional/bignum.json run separately; other optional tests remain excluded
     val filesToSkip = setOf(
         "optional",
         "vocabulary.json",

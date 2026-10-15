@@ -1,19 +1,19 @@
 # Spec: arbitrary-precision number handling
 
-**Status**: proposed, not implemented
+**Status**: implemented, unreleased
 **Kind**: correctness defect, not an enhancement
 **Depends on**: nothing
 
 ## Motivation
 
-Every numeric comparison in the validator goes through `Double`. JSON itself places no limit on
+Previously, numeric comparisons in the validator went through `Double`. JSON itself places no limit on
 the magnitude or precision of a number, so any value needing more than 53 bits of mantissa is
 compared as a rounded approximation. The result is **silent false negatives**: instances that
 violate a schema are reported valid.
 
-These were each reproduced against the current implementation:
+These were each reproduced against the previous implementation and are now regression tests:
 
-| Schema | Instance | Correct | KtSON says |
+| Schema | Instance | Correct | Previous verdict |
 |---|---|---|---|
 | `{"minimum": 9007199254740993}` | `9007199254740992` | invalid | **valid** |
 | `{"maximum": 9007199254740992}` | `9007199254740993` | invalid | **valid** |
@@ -28,10 +28,9 @@ This is not hypothetical territory: 64-bit identifiers (snowflake IDs, Twitter/D
 bigints) exceed 2^53 routinely, and a validator that quietly passes a wrong ID is worse than one
 that has no numeric support at all.
 
-The official suite does not catch any of it, because these cases live in `optional/bignum.json`,
-which the runner skips.
+The official runner now includes `optional/bignum.json` for both drafts (18 assertions total).
 
-## Current behaviour
+## Previous behaviour
 
 `JsonValidator.kt`, the sites that matter:
 
@@ -47,7 +46,7 @@ the display side needs no change.
 
 ## Design
 
-Replace `Double` with `java.math.BigDecimal`, built from the token text that kotlinx-serialization
+The implementation replaces `Double` with `java.math.BigDecimal`, built from the token text that kotlinx-serialization
 preserves on `JsonPrimitive.content`.
 
 ```kotlin
@@ -75,22 +74,55 @@ Then:
 `BigDecimal` is materially slower than `Double`, and numeric keywords sit on the hot path. Two
 mitigations, in order of preference:
 
-1. **Fast path**: if both operands parse as `Long` (no `.`, `e` or `E` in either token and within
+1. **Implemented fast path**: if both operands parse as `Long` (no `.`, `e` or `E` in either token and within
    `Long` range), compare as `Long`. This covers the overwhelming majority of real schemas at no
    precision cost, and only genuinely wide or fractional values reach `BigDecimal`.
-2. Cache the parsed limit per schema object if profiling shows the schema side dominating.
+2. **Implemented schema-limit cache**: decimal schema limits are cached by literal in a
+   `ConcurrentHashMap`. Instance values are not cached, so an input stream of distinct numbers
+   cannot grow the cache. Like the existing pattern cache, it lives for the validator's lifetime.
 
-`PerformanceTest` must be run before and after; treat a regression beyond ~10% on the numeric
-benchmarks as a blocker for the naive version and a reason to implement the fast path first.
+The naive all-`BigDecimal` approach was avoided because the original plan treated regressions
+beyond roughly 10% as a reason to implement the integer fast path first. Exact decimal arithmetic
+still has a measurable cost; the benchmark below records that tradeoff explicitly.
 
-## Test plan
+### Benchmark comparison
 
-- **Un-skip `optional/bignum.json`** in `OfficialTestSuiteRunner` — 9 assertions per draft that
-  directly cover this. This is the acceptance criterion.
-- Unit tests for each row of the table in *Motivation*.
+Compared with commit `8977ff1` in an isolated temporary checkout, using the same `PerformanceTest`
+on the same machine (Gradle 9.1.0, Java 21 toolchain). Each numeric case validates 20,000 pre-parsed
+values, warms up five times, then reports the median of seven samples of three validations each.
+These are local timing observations, not enforced timing assertions or a JMH study.
+
+| Numeric workload | Previous `Double` | Exact arithmetic with cache | Change |
+|---|---:|---:|---:|
+| Integer bounds and `multipleOf` | 4.25 ms | 2.98 ms | 30% faster |
+| Decimal bounds and `multipleOf` | 4.21 ms | 5.36 ms | 27% slower |
+| Integer bounds beyond `Long` | 11.77 ms | 10.54 ms | 10% faster |
+
+The table uses the final verification run. An earlier cached run measured 2.72 ms, 7.27 ms and
+9.88 ms respectively; before caching, the decimal and wide-integer cases measured 7.60 ms and
+14.42 ms. The decimal workload remains slower because it uses exact remainder arithmetic instead of a
+floating-point tolerance. All six existing large-data and concurrency performance checks also
+pass. Individual short timings vary substantially between runs; correctness is asserted, timing
+is reported for comparison.
+
+### Representational limits
+
+Precision is limited by `BigDecimal` and JVM memory, rather than IEEE 754's 53-bit mantissa.
+`BigDecimal` uses a signed 32-bit scale; tokens whose exponents exceed that representable range
+are outside this implementation's numeric support. The existing cardinality keywords
+(`minLength`, `maxItems`, etc.) still convert their limits to `Int`; this change covers numeric
+values, comparisons and equality, not those collection-size limits.
+
+## Verification
+
+- **Enabled `optional/bignum.json`** in `OfficialTestSuiteRunner` — all 9 assertions per draft pass.
+- `NumericPrecisionTest`: 43 regression cases per draft plus one concurrency test per draft,
+  covering every motivation example, signed and wide integers, fractions, exponents, exact
+  multiples, nested equality, and numeric strings distinct from numbers (88 tests total).
 - `1.0` vs `1` equality for `const`, `enum` and `uniqueItems` must keep passing (the existing suite
   covers this; do not regress it while making 2^53+1 distinct).
-- `PerformanceTest` before/after comparison recorded in the PR.
+- `PerformanceTest`: three numeric benchmarks plus all six existing performance checks pass.
+- Full standard suite: 4,314 official assertions and 593 custom tests; ktlint check passes.
 
 ## Effort
 

@@ -255,7 +255,7 @@ For more examples, see [docs/REF_USAGE_EXAMPLES.md](docs/REF_USAGE_EXAMPLES.md) 
 |-----------------|--------|----------|
 | Type Validation | ✅ Complete | 100% |
 | String Validation | ✅ Complete | 100% (including Unicode codepoints) |
-| Numeric Validation | ✅ Complete | 100% |
+| Numeric Validation | ✅ Complete | Exact `Long`/`BigDecimal` comparisons, including `optional/bignum` |
 | Object Validation | ✅ Complete | 100% |
 | Array Validation | ✅ Complete | 100% |
 | Schema Combiners | ✅ Complete | 100% |
@@ -264,7 +264,7 @@ For more examples, see [docs/REF_USAGE_EXAMPLES.md](docs/REF_USAGE_EXAMPLES.md) 
 | Unevaluated Keywords | ✅ Complete | 100% |
 | Remote Schema Loading | ✅ Complete | Pluggable schemaLoader callback |
 | Format Validation | ✅ Complete | All 19 formats, assertion mode only: email, idn-email, uri, uri-reference, uri-template, iri, iri-reference, date, time, date-time, duration, ipv4, ipv6, uuid, hostname, idn-hostname, json-pointer, relative-json-pointer, regex |
-| **Official Test Suite** | ✅ **100%** | **4,296/4,296 passing** (includes `optional/format`) |
+| **Official Test Suite** | ✅ **100%** | **4,314/4,314 passing** (includes `optional/format` and `optional/bignum`) |
 
 See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed feature breakdown.
 
@@ -302,6 +302,11 @@ is a drop-in replacement at compile time. The major version reflects **changed v
   written (`maximum 10`, not `10.0`) and quote the offending value. Do not assert on message text.
 - **Dependencies**: Kotlin 2.4.0, kotlinx-serialization-json 1.8.1, coroutines 1.10.2.
 
+**Unreleased numeric precision fix:** approximate numeric comparisons use exact `Long`/`BigDecimal`
+arithmetic. This changes verdicts for large integers, high-precision fractions and near-multiples
+previously accepted by the floating-point tolerance. Numeric strings remain distinct from numbers.
+See [the numeric precision implementation and benchmarks](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md).
+
 If a value your data relies on now fails, it is worth checking against the official suite before
 assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
@@ -312,7 +317,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 505 tests (100% passing)
+- **Custom Tests**: 593 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -320,17 +325,19 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - URI resolver: 25 tests
   - Format validation: 294 tests
   - Error messages: 32 tests
+  - Numeric precision and concurrent numeric validation: 88 tests
 
-- **Official JSON Schema Test Suite**: 4,296 tests
-  - ✅ Passing: 4,296 (100%)
+- **Official JSON Schema Test Suite**: 4,314 tests
+  - ✅ Passing: 4,314 (100%)
   - ❌ Failing: 0
-  - Includes the `optional/format` files for both drafts; `vocabulary.json`,
+  - Includes the `optional/format` files and `optional/bignum.json` for both drafts; `vocabulary.json`,
     `infinite-loop-detection.json` and the rest of `optional/` are not run yet
 
-- **Performance Tests**: 6 tests (100% passing)
+- **Performance Tests**: 9 tests (100% passing)
   - Tested with schemas up to 50MB
   - Tested with data up to 20MB
   - Concurrent validation verified
+  - Three numeric benchmarks cover integer, decimal and wide-integer validation
 
 ### Recent Changes
 
@@ -343,7 +350,8 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 - ✅ **One RFC 3986/3987 parser** behind `uri`, `uri-reference`, `iri` and `iri-reference`
 - ✅ **RFC 6570 grammar** for `uri-template`; **ECMA 262 syntax rules** for `regex` and `pattern`
 - ✅ **Remote schema loading implemented** (pluggable `schemaLoader` callback)
-- ✅ **100% official test suite pass rate** (4,296/4,296 tests)
+- ✅ **100% official test suite pass rate** (4,314/4,314 tests)
+- ✅ **Exact numeric comparisons** for bounds, integer classification, `multipleOf` and numeric equality
 - ✅ `unevaluatedProperties` and `unevaluatedItems` implemented
 - ✅ `$dynamicRef` / `$dynamicAnchor` full dynamic scope resolution
 - ✅ `$recursiveRef` / `$recursiveAnchor` dynamic recursion
@@ -363,7 +371,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 **Future Enhancements:**
 - [ ] [RFC 6901 instance locations](docs/SPEC_INSTANCE_LOCATION.md) in errors (breaking change to `ValidationError.path`)
 - [ ] [Standard output formats](docs/SPEC_OUTPUT_FORMATS.md) (flag/basic/detailed/verbose)
-- [ ] [Arbitrary-precision numbers](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md) — fixes a known correctness defect beyond 2^53
+- [x] [Arbitrary-precision numbers](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md) — exact comparisons beyond 2^53
 - [ ] Schema caching improvements
 - [ ] Streaming validation for large datasets
 - [ ] GraalVM native image support

@@ -73,6 +73,7 @@ import org.ktson.SchemaKeywords.TYPE_UNKNOWN
 import org.ktson.SchemaKeywords.UNEVALUATED_ITEMS
 import org.ktson.SchemaKeywords.UNEVALUATED_PROPERTIES
 import org.ktson.SchemaKeywords.UNIQUE_ITEMS
+import java.math.BigDecimal
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -87,6 +88,7 @@ class JsonValidator(
 ) {
     private val referenceResolver = ReferenceResolver(schemaLoader)
     private val patternCache = ConcurrentHashMap<String, Regex>()
+    private val numericLimitCache = ConcurrentHashMap<String, BigDecimal>()
 
     private fun compiledPattern(pattern: String): Regex = patternCache.computeIfAbsent(pattern) { Regex(translatePatternToJava(it)) }
 
@@ -445,6 +447,26 @@ class JsonValidator(
     }
 
     /**
+     * Compares two numeric JSON primitives at full precision.
+     * Uses Long fast-path when both operands fit in 64 bits with no fractional or exponent parts.
+     * Returns null if either primitive is not a valid number.
+     */
+    private fun compareNumerics(a: JsonPrimitive, b: JsonPrimitive): Int? {
+        if (a is JsonNull || a.isString || a.booleanOrNull != null) return null
+        if (b is JsonNull || b.isString || b.booleanOrNull != null) return null
+
+        val aLong = a.content.toLongOrNull()
+        val bLong = b.content.toLongOrNull()
+        if (aLong != null && bLong != null) {
+            return aLong.compareTo(bLong)
+        }
+
+        val aDec = a.content.toBigDecimalOrNull() ?: return null
+        val bDec = b.content.toBigDecimalOrNull() ?: return null
+        return aDec.compareTo(bDec)
+    }
+
+    /**
      * Gets the JSON type name of an element
      */
     private fun getJsonType(element: JsonElement): String = when (element) {
@@ -452,22 +474,18 @@ class JsonValidator(
         is JsonPrimitive if element.isString -> TYPE_STRING
         is JsonPrimitive if element.booleanOrNull != null -> TYPE_BOOLEAN
         is JsonPrimitive -> {
-            val content = element.content
-            // Check if it's a number
-            val doubleValue = element.doubleOrNull
-            if (doubleValue != null) {
-                // If it's a whole number (no fractional part), it's an integer
-                if (doubleValue == kotlin.math.floor(doubleValue) && doubleValue.isFinite()) {
-                    TYPE_INTEGER
-                } else {
-                    TYPE_NUMBER
-                }
+            if (element.content.toLongOrNull() != null) {
+                TYPE_INTEGER
             } else {
-                // Fallback to string parsing
-                if (content.contains('.') || content.contains('e', ignoreCase = true)) {
-                    TYPE_NUMBER
+                val dec = element.content.toBigDecimalOrNull()
+                if (dec != null) {
+                    if (dec.stripTrailingZeros().scale() <= 0) {
+                        TYPE_INTEGER
+                    } else {
+                        TYPE_NUMBER
+                    }
                 } else {
-                    TYPE_INTEGER
+                    TYPE_UNKNOWN
                 }
             }
         }
@@ -487,12 +505,9 @@ class JsonValidator(
 
         // Check numeric equivalence for primitives
         if (a is JsonPrimitive && b is JsonPrimitive) {
-            val aNum = a.doubleOrNull
-            val bNum = b.doubleOrNull
-
-            // If both are numbers, compare their numeric values
-            if (aNum != null && bNum != null) {
-                return aNum == bNum
+            val cmp = compareNumerics(a, b)
+            if (cmp != null) {
+                return cmp == 0
             }
         }
 
@@ -1654,24 +1669,50 @@ class JsonValidator(
         return hasDate || hasTime
     }
 
+    private inline fun compareToLimit(
+        instanceLong: Long?,
+        getInstanceDec: () -> BigDecimal,
+        limitPrimitive: JsonPrimitive,
+    ): Int? {
+        if (limitPrimitive is JsonNull || limitPrimitive.isString || limitPrimitive.booleanOrNull != null) return null
+        val limitLong = limitPrimitive.content.toLongOrNull()
+        if (instanceLong != null && limitLong != null) {
+            return instanceLong.compareTo(limitLong)
+        }
+        val limitDec = decimalLimit(limitPrimitive) ?: return null
+        return getInstanceDec().compareTo(limitDec)
+    }
+
+    /** Cache schema limits only; instance values must not accumulate in a shared cache. */
+    private fun decimalLimit(primitive: JsonPrimitive): BigDecimal? {
+        val literal = primitive.content
+        return numericLimitCache[literal] ?: literal.toBigDecimalOrNull()?.also { numericLimitCache.putIfAbsent(literal, it) }
+    }
+
     /**
      * Validates a number value
      */
     private fun validateNumber(instance: JsonPrimitive, schema: JsonObject, path: String, schemaPath: String, errors: MutableList<ValidationError>) {
-        val number = instance.doubleOrNull ?: return
-        // Messages quote the literals as written; only the comparisons go through Double
+        if (instance is JsonNull || instance.isString || instance.booleanOrNull != null) return
+        val instanceLong = instance.content.toLongOrNull()
+        val instanceDec = if (instanceLong == null) instance.content.toBigDecimalOrNull() ?: return else null
+        var cachedInstanceDec: BigDecimal? = instanceDec
+        fun getInstanceDec(): BigDecimal = cachedInstanceDec ?: BigDecimal.valueOf(instanceLong!!).also { cachedInstanceDec = it }
+
         val shown = instance.content
 
         // Minimum
-        schema[MINIMUM]?.jsonPrimitive?.doubleOrNull?.let { minimum ->
-            if (number < minimum) {
+        (schema[MINIMUM] as? JsonPrimitive)?.let { minPrim ->
+            val cmp = compareToLimit(instanceLong, ::getInstanceDec, minPrim)
+            if (cmp != null && cmp < 0) {
                 errors.add(ValidationError(path, "Number $shown is less than minimum ${schema.numberText(MINIMUM)}", MINIMUM, at(schemaPath, MINIMUM)))
             }
         }
 
         // Maximum
-        schema[MAXIMUM]?.jsonPrimitive?.doubleOrNull?.let { maximum ->
-            if (number > maximum) {
+        (schema[MAXIMUM] as? JsonPrimitive)?.let { maxPrim ->
+            val cmp = compareToLimit(instanceLong, ::getInstanceDec, maxPrim)
+            if (cmp != null && cmp > 0) {
                 errors.add(ValidationError(path, "Number $shown is greater than maximum ${schema.numberText(MAXIMUM)}", MAXIMUM, at(schemaPath, MAXIMUM)))
             }
         }
@@ -1682,17 +1723,17 @@ class JsonValidator(
                 is JsonPrimitive -> {
                     if (exclusiveMin.booleanOrNull == true) {
                         // Draft 4 style with separate minimum
-                        schema[MINIMUM]?.jsonPrimitive?.doubleOrNull?.let { minimum ->
-                            if (number <= minimum) {
+                        (schema[MINIMUM] as? JsonPrimitive)?.let { minPrim ->
+                            val cmp = compareToLimit(instanceLong, ::getInstanceDec, minPrim)
+                            if (cmp != null && cmp <= 0) {
                                 errors.add(ValidationError(path, "Number $shown must be greater than ${schema.numberText(MINIMUM)}", EXCLUSIVE_MINIMUM, at(schemaPath, EXCLUSIVE_MINIMUM)))
                             }
                         }
                     } else {
                         // Draft 2019-09+ style with value
-                        exclusiveMin.doubleOrNull?.let { minimum ->
-                            if (number <= minimum) {
-                                errors.add(ValidationError(path, "Number $shown must be greater than ${exclusiveMin.content}", EXCLUSIVE_MINIMUM, at(schemaPath, EXCLUSIVE_MINIMUM)))
-                            }
+                        val cmp = compareToLimit(instanceLong, ::getInstanceDec, exclusiveMin)
+                        if (cmp != null && cmp <= 0) {
+                            errors.add(ValidationError(path, "Number $shown must be greater than ${exclusiveMin.content}", EXCLUSIVE_MINIMUM, at(schemaPath, EXCLUSIVE_MINIMUM)))
                         }
                     }
                 }
@@ -1706,17 +1747,17 @@ class JsonValidator(
                 is JsonPrimitive -> {
                     if (exclusiveMax.booleanOrNull == true) {
                         // Draft 4 style with separate maximum
-                        schema[MAXIMUM]?.jsonPrimitive?.doubleOrNull?.let { maximum ->
-                            if (number >= maximum) {
+                        (schema[MAXIMUM] as? JsonPrimitive)?.let { maxPrim ->
+                            val cmp = compareToLimit(instanceLong, ::getInstanceDec, maxPrim)
+                            if (cmp != null && cmp >= 0) {
                                 errors.add(ValidationError(path, "Number $shown must be less than ${schema.numberText(MAXIMUM)}", EXCLUSIVE_MAXIMUM, at(schemaPath, EXCLUSIVE_MAXIMUM)))
                             }
                         }
                     } else {
                         // Draft 2019-09+ style with value
-                        exclusiveMax.doubleOrNull?.let { maximum ->
-                            if (number >= maximum) {
-                                errors.add(ValidationError(path, "Number $shown must be less than ${exclusiveMax.content}", EXCLUSIVE_MAXIMUM, at(schemaPath, EXCLUSIVE_MAXIMUM)))
-                            }
+                        val cmp = compareToLimit(instanceLong, ::getInstanceDec, exclusiveMax)
+                        if (cmp != null && cmp >= 0) {
+                            errors.add(ValidationError(path, "Number $shown must be less than ${exclusiveMax.content}", EXCLUSIVE_MAXIMUM, at(schemaPath, EXCLUSIVE_MAXIMUM)))
                         }
                     }
                 }
@@ -1725,20 +1766,17 @@ class JsonValidator(
         }
 
         // Multiple of
-        schema[MULTIPLE_OF]?.jsonPrimitive?.doubleOrNull?.let { multipleOf ->
-            if (multipleOf > 0) {
-                val quotient = number / multipleOf
-                // Handle infinity case (division by very small number)
-                if (!quotient.isFinite()) {
-                    errors.add(ValidationError(path, "Number $shown is not a multiple of ${schema.numberText(MULTIPLE_OF)}", MULTIPLE_OF, at(schemaPath, MULTIPLE_OF)))
+        (schema[MULTIPLE_OF] as? JsonPrimitive)?.let { multPrim ->
+            if (multPrim !is JsonNull && !multPrim.isString && multPrim.booleanOrNull == null) {
+                val multLong = multPrim.content.toLongOrNull()
+                val isMultiple = if (multLong != null && multLong > 0 && instanceLong != null) {
+                    instanceLong % multLong == 0L
                 } else {
-                    val rounded = kotlin.math.round(quotient)
-                    val diff = kotlin.math.abs(quotient - rounded)
-                    // Use relative epsilon for better floating point comparison
-                    val epsilon = kotlin.math.max(1e-10, kotlin.math.abs(quotient) * 1e-10)
-                    if (diff > epsilon) {
-                        errors.add(ValidationError(path, "Number $shown is not a multiple of ${schema.numberText(MULTIPLE_OF)}", MULTIPLE_OF, at(schemaPath, MULTIPLE_OF)))
-                    }
+                    val multDec = decimalLimit(multPrim)
+                    multDec == null || multDec.signum() <= 0 || getInstanceDec().remainder(multDec).signum() == 0
+                }
+                if (!isMultiple) {
+                    errors.add(ValidationError(path, "Number $shown is not a multiple of ${schema.numberText(MULTIPLE_OF)}", MULTIPLE_OF, at(schemaPath, MULTIPLE_OF)))
                 }
             }
         }

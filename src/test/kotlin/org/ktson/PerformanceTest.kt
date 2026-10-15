@@ -3,6 +3,7 @@ package org.ktson
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.*
+import kotlin.system.measureNanoTime
 import kotlin.system.measureTimeMillis
 
 /**
@@ -197,6 +198,28 @@ class PerformanceTest :
             println("Execution time: ${executionTime}ms")
             println("Memory used: ~${memUsed}MB")
             println("Validation: SUCCESS")
+        }
+    }
+
+    describe("Performance: Numeric Precision") {
+        val benchmarks = listOf(
+            Triple("integer bounds and multiples", """{"type":"integer","minimum":0,"maximum":1000000,"multipleOf":2}""", (0 until 20000).map { (it * 2).toString() }),
+            Triple("decimal bounds and multiples", """{"type":"number","minimum":0,"maximum":1000000,"multipleOf":0.25}""", (0 until 20000).map { "$it.25" }),
+            Triple("wide integer bounds", """{"type":"integer","minimum":0,"maximum":999999999999999999999999999999}""", (0 until 20000).map { "922337203685477580$it" }),
+        )
+        benchmarks.forEach { (name, itemSchema, numbers) ->
+            it(name) {
+                val schema = JsonSchema.fromString("""{"items":$itemSchema}""")
+                val data = Json.parseToJsonElement(numbers.joinToString(prefix = "[", postfix = "]"))
+                val validator = JsonValidator()
+                repeat(5) { validator.validate(data, schema).isValid shouldBe true }
+                val samples = List(7) {
+                    measureNanoTime {
+                        repeat(3) { validator.validate(data, schema).isValid shouldBe true }
+                    } / 3_000_000.0
+                }.sorted()
+                println("Numeric benchmark: $name; median ${samples[samples.size / 2]}ms per 20000 values")
+            }
         }
     }
 
