@@ -40,49 +40,55 @@ Two breaking changes; see "Upgrading from 2.0.0" in the README for migration ste
 - GitHub release notes list breaking changes in their own section, from a `!` after the commit
   type or a `BREAKING CHANGE:` footer.
 
-## [1.0.1] - 2025-11-04
+## [2.0.0] - 2026-09-30
 
-### Fixed
-- **Stack overflow protection**: Implemented configurable recursion depth limiting to prevent stack overflow with deeply nested or circular schemas
-  - Default limit: 1000 validation depth levels
-  - Covers all 21 recursive validation paths (references, combiners, properties, arrays, conditionals)
-  - Thread-safe implementation using parameter-based depth tracking
-  - Resolves HIGH severity security issue (7.5/10 risk level)
+The public API is unchanged, so 2.0.0 is a drop-in replacement at compile time. The major version
+reflects **changed validation verdicts**; see "Upgrading from 1.0.0" in the README.
 
 ### Changed
-- `JsonValidator` constructor now accepts optional `maxValidationDepth: Int = 1000` parameter
-- `ReferenceResolver` simplified to be stateless, improving thread-safety
-  - Removed mutable state (`recursionDepth`, `schemaCache`)
-  - Reference resolution depth now handled by global validation depth tracking
+- **Breaking verdict changes:** format validation is much stricter. Of 879 official format cases,
+  112 now answer differently (100 valid → invalid, 10 invalid → valid, 2 that previously threw).
+  Most affected: `hostname` and `idn-hostname` (A-labels are decoded and validated),
+  `uri-template` (full RFC 6570 grammar), the `uri`/`iri` family (percent-encoding, control
+  characters, authority rules) and `regex` (ECMA 262 instead of Java syntax). This applies on
+  default settings, since `formatAssertion` defaults to `true`.
+- `ValidationError.schemaPath` is now always populated with the keyword location
+  (e.g. `/properties/n/$ref/minimum`), so `toString()` output differs. Messages render numbers as
+  written (`maximum 10`, not `10.0`) and quote the offending value.
+- Dependency floor: Kotlin 2.4.0, kotlinx-serialization-json 1.8.1, coroutines 1.10.2.
+
+### Fixed
+- `pattern` no longer throws `PatternSyntaxException` on the ECMA 262 empty character classes
+  `[]` and `[^]`; both now validate normally.
 
 ### Added
-- `DepthLimitTest.kt` with 15 comprehensive test cases covering:
-  - Deeply nested objects and arrays
-  - Circular `$ref` references
-  - Complex schema combiners (allOf, anyOf, oneOf, not)
-  - Conditional validation (if/then/else)
-  - Pattern properties
-  - Mixed nesting scenarios
-  - Edge cases at exact depth limits
+- Complete validation for all 19 supported formats.
+- The official `optional/format` suite now runs: 1,748 assertions that previously did not run at
+  all. Official coverage rose from 2,548 to 4,296 assertions, all passing.
+- CI runs the official test suite, pinned to a known commit (`TEST_SUITE_REF`).
 
-### Documentation
-- Updated README.md to reflect resolved stack overflow limitation
-- Updated CLAUDE.md with new configuration options and recommendations
-- Updated test coverage counts (155 total custom tests)
-- Marked recursion depth limiting as completed in roadmap
+### Known Limitations
+- Numeric comparisons go through `Double`, so `minimum`, `maximum`, `const` and `enum` can report
+  valid for instances beyond 2^53 that violate the schema. Fixed in 3.0.0.
 
-### Technical Details
-- Backward compatible: existing code works without changes (new parameter has default value)
-- Performance impact: minimal (single integer increment per validation level)
-- Error message includes actual depth limit and helpful context
-- Error keyword: "depth" for programmatic detection
+## [1.0.0] - 2026-06-05
 
-## [1.0.0] - 2024-XX-XX
+First release.
 
-### Initial Release
-- JSON Schema validator for Kotlin
-- Support for Draft 2019-09 and Draft 2020-12
-- 92.8% official test suite coverage (2,205/2,376 tests passing)
-- Thread-safe synchronous validation
-- Comprehensive feature support (types, combiners, conditionals, references)
-- Performance tested with schemas up to 50MB and data up to 20MB
+### Added
+- JSON Schema validator for Kotlin supporting Draft 2019-09 and Draft 2020-12, with a thread-safe
+  synchronous API.
+- 100% pass rate on the official JSON Schema Test Suite (2,548 assertions).
+- Reference resolution: `$ref` with sibling keywords, `$anchor` and `$id`-based lookup,
+  `$recursiveRef`/`$recursiveAnchor`, `$dynamicRef` dynamic scope, and remote schemas through the
+  pluggable `schemaLoader`.
+- `unevaluatedProperties` and `unevaluatedItems`.
+- Format validators: email, uri, uri-reference, uri-template, iri, iri-reference, date, time,
+  date-time, duration, ipv4, ipv6, uuid, hostname, idn-hostname, idn-email, json-pointer,
+  relative-json-pointer and regex.
+- Error messages with actual values and nested causes.
+- **Stack overflow protection:** configurable recursion depth limit,
+  `JsonValidator(maxValidationDepth = 1000)`. Covers nested schemas, circular `$ref`, combiners
+  and conditionals; exceeding it yields an error with keyword `depth`. `ReferenceResolver` is
+  stateless, since depth is tracked by the validator.
+- Performance tests with schemas up to 50MB and data up to 20MB.
