@@ -99,6 +99,12 @@ class JsonValidator(
     fun validate(instance: JsonElement, schema: JsonSchema): ValidationResult = validateInternal(instance, schema, "")
 
     /**
+     * Validates a JSON instance against a JSON schema and returns standard output in [format],
+     * for example `validate(instance, schema, OutputFormat.Basic)`.
+     */
+    fun <T : ValidationOutput> validate(instance: JsonElement, schema: JsonSchema, format: OutputFormat<T>): T = validate(instance, schema).toOutput(format)
+
+    /**
      * Validates a JSON instance from string against a schema from string
      */
     fun validate(instanceJson: String, schemaJson: String, schemaVersion: SchemaVersion = SchemaVersion.DRAFT_2020_12): ValidationResult {
