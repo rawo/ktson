@@ -85,7 +85,7 @@ data class DetailedOutput(                        // a node of the failure tree
     override val valid: Boolean,
     val keywordLocation: String,
     val instanceLocation: String,
-    val error: String? = null,                    // null on the root
+    val error: String? = null,                    // null on an uncollapsed root
     val errors: List<DetailedOutput>? = null,     // null on leaves and when valid
 ) : ValidationOutput
 
@@ -163,8 +163,9 @@ pass over a reference, or if the schema declares no absolute URI as its `$id`. T
 schema likewise requires it for any unit whose `keywordLocation` contains `/$ref/` or
 `/$dynamicRef/`.
 
-This round always omits it. Output for errors reached through `$ref` in a schema with an absolute
-`$id` is therefore not fully compliant. The KDoc and README say so. (The official output schema
+This round always omits it, so every unit reached through `$ref`, `$dynamicRef` or `$recursiveRef`
+is not fully compliant: against the output schema whatever the `$id`, and against §12.3.3 when the
+schema has an absolute `$id`. The KDoc and README say so. (The official output schema
 does not catch this in practice: its root `anyOf` admits any object with a boolean `valid` through
 the `flag` branch.)
 

@@ -308,9 +308,11 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
      versions. Exotic code points may be misjudged; everyday names are not affected.
 
 3. **Output Formats**
-   - `absoluteKeywordLocation` is never produced. JSON Schema 2020-12 §12.3.3 allows omitting it
-     only when evaluation did not pass through `$ref` or the schema has no absolute `$id`, so output
-     for errors reached through a reference in such schemas is not fully compliant.
+   - `absoluteKeywordLocation` is never produced, so output units reached through `$ref`,
+     `$dynamicRef` or `$recursiveRef` are not fully compliant. The official output schema requires it
+     for any unit whose `keywordLocation` passes through `$ref` or `$dynamicRef`, whatever the `$id`;
+     JSON Schema 2020-12 §12.3.3 requires it whenever evaluation passed through a reference in a
+     schema with an absolute `$id`.
    - No `Verbose` format and no annotations in output.
 
 ## Upgrading from 2.0.0
