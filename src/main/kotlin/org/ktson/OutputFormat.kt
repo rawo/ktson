@@ -1,3 +1,7 @@
+// Java sees toOutput as ValidationOutputs.toOutput(result, OutputFormat.Basic.INSTANCE). Renaming
+// this facade after release would break Java callers.
+@file:JvmName("ValidationOutputs")
+
 package org.ktson
 
 import kotlinx.serialization.Serializable
