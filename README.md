@@ -21,6 +21,7 @@ Most of the code refactoring were performed by AI agent with supervision and cod
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Basic Usage](#basic-usage)
+  - [Standard output formats](#standard-output-formats)
 - [Available Scripts](#available-scripts)
 - [Project Scope](#project-scope)
   - [Supported JSON Schema Versions](#supported-json-schema-versions)
@@ -201,6 +202,28 @@ val schema = """
 
 For more examples, see [docs/REF_USAGE_EXAMPLES.md](docs/REF_USAGE_EXAMPLES.md) and [src/main/kotlin/org/ktson/Example.kt](src/main/kotlin/org/ktson/Example.kt).
 
+### Standard output formats
+
+`validate(instance, schema)` returns KtSON's own `ValidationResult`. To get the standard
+JSON Schema output (2020-12 §12) instead, pass a format; the return type follows it:
+
+```kotlin
+val flag: FlagOutput = validator.validate(instance, schema, OutputFormat.Flag)
+val basic: BasicOutput = validator.validate(instance, schema, OutputFormat.Basic)
+val detailed: DetailedOutput = validator.validate(instance, schema, OutputFormat.Detailed)
+
+println(basic.toJson())
+// {"valid":false,"keywordLocation":"","instanceLocation":"","errors":[{"valid":false,
+//  "keywordLocation":"/properties/name/type","instanceLocation":"/name","error":"..."}]}
+```
+
+- `Flag` is `{"valid": …}` only; `Basic` lists every failing unit flat; `Detailed` keeps the
+  `allOf`/`anyOf`/`oneOf` hierarchy. `result.toOutput(format)` converts a result you already have.
+- Serialise with `toJson()`. Encoding through the `ValidationOutput` interface would add a type
+  discriminator that is not part of the standard.
+- `error` texts are KtSON's messages, which the standard does not fix; do not match on them.
+- `Verbose` is not supported yet.
+
 ## Available Scripts
 
 ### Build
@@ -284,6 +307,12 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
      script for the CONTEXTJ rule and the Virama set is a fixed list, so both drift with new Unicode
      versions. Exotic code points may be misjudged; everyday names are not affected.
 
+3. **Output Formats**
+   - `absoluteKeywordLocation` is never produced. JSON Schema 2020-12 §12.3.3 allows omitting it
+     only when evaluation did not pass through `$ref` or the schema has no absolute `$id`, so output
+     for errors reached through a reference in such schemas is not fully compliant.
+   - No `Verbose` format and no annotations in output.
+
 ## Upgrading from 2.0.0
 
 3.0.0 has two breaking changes: one to the error API, one to numeric verdicts.
@@ -345,7 +374,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 710 tests (100% passing)
+- **Custom Tests**: 747 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -355,12 +384,15 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Error messages: 32 tests
   - Numeric precision and concurrent numeric validation: 88 tests
   - Instance locations, legacy access and JSON Pointer resolution: 117 tests
+  - Output formats: 37 tests
 
 - **Official JSON Schema Test Suite**: 4,314 tests
   - ✅ Passing: 4,314 (100%)
   - ❌ Failing: 0
   - Includes the `optional/format` files and `optional/bignum.json` for both drafts; `vocabulary.json`,
     `infinite-loop-detection.json` and the rest of `optional/` are not run yet
+
+- **Official output-tests**: 6 (Basic format, both drafts; `readOnly.json` needs annotations and is not run)
 
 - **Performance Tests**: 9 tests (100% passing)
   - Tested with schemas up to 50MB
@@ -400,7 +432,8 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 **Future Enhancements:**
 - [x] [RFC 6901 instance locations](docs/SPEC_INSTANCE_LOCATION.md) in errors (`instanceLocation`, deprecated legacy `path` getter)
-- [ ] [Standard output formats](docs/SPEC_OUTPUT_FORMATS.md) (flag/basic/detailed/verbose)
+- [x] [Standard output formats](docs/SPEC_OUTPUT_FORMATS.md): flag, basic, detailed
+- [ ] Verbose output, annotations and `absoluteKeywordLocation`
 - [x] [Arbitrary-precision numbers](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md) — exact comparisons beyond 2^53
 - [ ] Schema caching improvements
 - [ ] Streaming validation for large datasets

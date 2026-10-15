@@ -1,7 +1,7 @@
 # Spec: standard JSON Schema output formats
 
-**Status**: design approved, in progress — `Flag`, `Basic` and `Detailed` in this round;
-`Verbose` and `absoluteKeywordLocation` deferred (see [Deferred](#deferred))
+**Status**: `Flag`, `Basic` and `Detailed` implemented, unreleased; `Verbose`, annotations and
+`absoluteKeywordLocation` deferred (see [Deferred](#deferred))
 **Depends on**: [SPEC_INSTANCE_LOCATION.md](SPEC_INSTANCE_LOCATION.md) (implemented in 3.0.0)
 
 ## Motivation

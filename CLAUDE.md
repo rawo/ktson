@@ -88,6 +88,11 @@ The validator architecture is straightforward with minimal abstractions:
 
 7. **SchemaVersion** (`SchemaVersion.kt`) - Enum of supported drafts (`DRAFT_2019_09`, `DRAFT_2020_12`)
 
+8. **OutputFormat** (`OutputFormat.kt`) - Standard JSON Schema output (2020-12 §12)
+   - `FlagOutput`, `BasicOutput`/`BasicUnit`, `DetailedOutput`, selected by the `OutputFormat<T>` token
+   - `validate(instance, schema, format)` / `result.toOutput(format)`; a pure mapping over `ValidationResult`
+   - Serialise with `toJson()`, never through the `ValidationOutput` interface
+
 ### Validation Flow
 
 ```
@@ -118,6 +123,8 @@ validate()
 - **ErrorMessageTest.kt** - 32 tests for error content (instance path, keyword, keyword location, wording)
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
 - **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
+- **OutputFormatTest.kt** - 37 tests for the Flag, Basic and Detailed output formats
+- **OfficialOutputTestRunner.kt** - Runs the suite's `output-tests` content files against Basic output (skips `readOnly.json`, which needs annotations)
 - **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (draft2019-09 + draft2020-12), including `optional/format`
 - **PerformanceTest.kt** - 9 performance tests, including three numeric benchmarks (excluded from default test run)
 
@@ -241,7 +248,7 @@ Release notes are generated from the commit log, so commits must follow Conventi
 ### Documentation
 - `docs/STACK_OVERFLOW_RISK_ANALYSIS.md` - **Read this before production deployment**
 - `docs/SPEC_INSTANCE_LOCATION.md` - implemented in 3.0.0: RFC 6901 instance locations and legacy `path` deprecation
-- `docs/SPEC_OUTPUT_FORMATS.md` - proposed: standard JSON Schema output formats (not implemented)
+- `docs/SPEC_OUTPUT_FORMATS.md` - Flag/Basic/Detailed implemented, unreleased; Verbose and absoluteKeywordLocation deferred
 - `docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md` - implemented: exact numeric comparisons, regression coverage and benchmarks
 - `docs/IMPLEMENTATION_STATUS.md` - Feature completeness tracking
 - `docs/OFFICIAL_TEST_SUITE_RESULTS.md` - Detailed test results (100% pass rate)
