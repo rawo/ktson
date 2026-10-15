@@ -29,10 +29,6 @@ object JsonPointer {
             pointer
         }
 
-        if (path.isEmpty()) {
-            return document
-        }
-
         val tokens = path.split("/").map { decodeToken(it) }
         var current: JsonElement = document
 
@@ -58,7 +54,7 @@ object JsonPointer {
      * ~ is encoded as ~0
      * / is encoded as ~1
      */
-    private fun decodeToken(token: String): String = token
+    internal fun decodeToken(token: String): String = token
             .replace("~1", "/")
             .replace("~0", "~")
 

@@ -446,7 +446,7 @@ class EdgeCaseAndThreadSafetyTest :
                 val result = validator.validate(obj, schema)
                 result.isInvalid shouldBe true
                 val errors = result.getErrors()
-                errors[0].path shouldContain "user.age"
+                errors[0].instanceLocation shouldBe "/user/age"
             }
         }
     }

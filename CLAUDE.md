@@ -71,7 +71,8 @@ The validator architecture is straightforward with minimal abstractions:
 3. **ValidationResult** (`ValidationError.kt`) - Sealed class result type
    - `Valid` - validation succeeded
    - `Invalid(validationErrors: List<ValidationError>)` - validation failed
-   - Each error contains: path, message, keyword, schemaPath
+   - Each error contains: instanceLocation (RFC 6901), message, keyword, schemaPath, causes
+   - `path` is a deprecated computed legacy display string; never use it for navigation
 
 4. **SchemaKeywords** (`SchemaKeywords.kt`) - Constants object
    - All JSON Schema keywords as constants (REF, TYPE, PROPERTIES, etc.)
@@ -116,6 +117,7 @@ validate()
 - **DepthLimitTest.kt** - 14 tests for `maxValidationDepth` protection
 - **ErrorMessageTest.kt** - 32 tests for error content (instance path, keyword, keyword location, wording)
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
+- **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
 - **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (draft2019-09 + draft2020-12), including `optional/format`
 - **PerformanceTest.kt** - 9 performance tests, including three numeric benchmarks (excluded from default test run)
 
@@ -207,6 +209,10 @@ Release notes are generated from the commit log, so commits must follow Conventi
    (`properties/name`, `anyOf/0`). Recursive calls pass the sub-schema's location, so `$ref` hops are
    visible in the result (`/properties/n/$ref/minimum`)
 5. Maintain thread safety (avoid mutable shared state)
+6. Instance paths are RFC 6901 pointers. Use `childOf(path, token)` for properties and array
+   indices; the root is `""`. `propertyNames` errors stay at the owning object's location.
+   Construct errors with `instanceLocation`, and migrate `copy(path = ...)` to
+   `copy(instanceLocation = ...)`. `toString()` prints canonical pointers.
 
 ### Reference Resolution
 - `$ref` resolution uses `ReferenceResolver` in `JsonPointer.kt`
@@ -234,7 +240,7 @@ Release notes are generated from the commit log, so commits must follow Conventi
 
 ### Documentation
 - `docs/STACK_OVERFLOW_RISK_ANALYSIS.md` - **Read this before production deployment**
-- `docs/SPEC_INSTANCE_LOCATION.md` - proposed: RFC 6901 instance locations (not implemented)
+- `docs/SPEC_INSTANCE_LOCATION.md` - implemented, unreleased: RFC 6901 instance locations and legacy `path` deprecation
 - `docs/SPEC_OUTPUT_FORMATS.md` - proposed: standard JSON Schema output formats (not implemented)
 - `docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md` - implemented: exact numeric comparisons, regression coverage and benchmarks
 - `docs/IMPLEMENTATION_STATUS.md` - Feature completeness tracking

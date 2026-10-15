@@ -179,8 +179,8 @@ class ErrorMessageTest :
     describe("ValidationError toString") {
         it("shows causes indented") {
             runTest {
-                val cause = ValidationError("a.b", "inner error", "type")
-                val parent = ValidationError("a", "outer error", "allOf", causes = listOf(cause))
+                val cause = ValidationError("/a/b", "inner error", "type")
+                val parent = ValidationError("/a", "outer error", "allOf", causes = listOf(cause))
                 val str = parent.toString()
                 str shouldContain "outer error"
                 str shouldContain "inner error"

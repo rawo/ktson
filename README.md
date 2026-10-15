@@ -135,8 +135,8 @@ fun main() {
         is ValidationResult.Valid -> println("✓ Validation successful!")
         is ValidationResult.Invalid -> {
             println("✗ Validation failed:")
-            result.errors.forEach { error ->
-                println("  - ${error.path}: ${error.message}")
+            result.validationErrors.forEach { error ->
+                println("  - ${error.instanceLocation}: ${error.message}")
             }
         }
     }
@@ -171,7 +171,7 @@ val schema = JsonSchema.fromString(schemaJson, SchemaVersion.DRAFT_2020_12)
 val result = validator.validateSchema(schema)
 if (result is ValidationResult.Invalid) {
     println("Invalid schema:")
-    result.errors.forEach { println("  - ${it.message}") }
+    result.validationErrors.forEach { println("  - ${it.message}") }
 }
 ```
 
@@ -307,6 +307,27 @@ arithmetic. This changes verdicts for large integers, high-precision fractions a
 previously accepted by the floating-point tolerance. Numeric strings remain distinct from numbers.
 See [the numeric precision implementation and benchmarks](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md).
 
+**Unreleased error-location API change:** `ValidationError.instanceLocation` is an RFC 6901 JSON
+Pointer: the root is `""`, nested properties use `/user/age`, and array elements use `/users/0`.
+Tokens escape `~` as `~0` and `/` as `~1`; `/` identifies a member with an empty key.
+`propertyNames` failures point to the owning object and name the offending key in the message.
+Nested causes and `toString()` use these canonical locations too.
+
+The deprecated `error.path` getter derives the old dotted/bracket notation for display only.
+This projection loses information: `/a.b` and `/a/b` both become `a.b`, and numeric object keys
+are indistinguishable from array indices. Use `instanceLocation` for navigation:
+
+```kotlin
+val error = ValidationError(instanceLocation = "/users/0/age", message = "Expected an integer")
+val moved = error.copy(instanceLocation = "/users/1/age")
+val failingValue = JsonPointer.resolve(instance, error.instanceLocation)
+```
+
+Migrate named constructor and `copy(path = ...)` arguments to `instanceLocation = ...`, passing
+a JSON Pointer. Positional construction and the first destructured component also use pointer
+semantics now. This is a breaking API change to ship in a future major release; no version bump
+is included here. See [the instance-location implementation](docs/SPEC_INSTANCE_LOCATION.md).
+
 If a value your data relies on now fails, it is worth checking against the official suite before
 assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
@@ -317,7 +338,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 593 tests (100% passing)
+- **Custom Tests**: 710 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -326,6 +347,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Format validation: 294 tests
   - Error messages: 32 tests
   - Numeric precision and concurrent numeric validation: 88 tests
+  - Instance locations, legacy access and JSON Pointer resolution: 117 tests
 
 - **Official JSON Schema Test Suite**: 4,314 tests
   - ✅ Passing: 4,314 (100%)
@@ -342,6 +364,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 ### Recent Changes
 
 - ✅ **Errors carry a keyword location** (`ValidationError.schemaPath`), e.g. `/properties/n/$ref/minimum`
+- ✅ **Errors carry an instance location** (`ValidationError.instanceLocation`), e.g. `/users/0/age`
 - ✅ **Numbers are reported as written** — `maximum 10`, not `maximum 10.0`
 - ✅ **Messages quote the offending value** for `pattern`, `format` and the length bounds
 - ✅ **All 19 formats pass the official `optional/format` suite** (1,748 assertions that previously did not run)
@@ -369,7 +392,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 - [x] ~~Improve error messages~~ ✅ **COMPLETED** (keyword locations, literal-accurate numbers, offending values)
 
 **Future Enhancements:**
-- [ ] [RFC 6901 instance locations](docs/SPEC_INSTANCE_LOCATION.md) in errors (breaking change to `ValidationError.path`)
+- [x] [RFC 6901 instance locations](docs/SPEC_INSTANCE_LOCATION.md) in errors (`instanceLocation`, deprecated legacy `path` getter)
 - [ ] [Standard output formats](docs/SPEC_OUTPUT_FORMATS.md) (flag/basic/detailed/verbose)
 - [x] [Arbitrary-precision numbers](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md) — exact comparisons beyond 2^53
 - [ ] Schema caching improvements

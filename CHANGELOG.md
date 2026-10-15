@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- JSON Pointer `/` and `#/` now resolve to a member with an empty key instead of the root.
+- `propertyNames` errors point to the owning object and identify the rejected key, including
+  failures from boolean schemas and combiners.
 - Numeric bounds, integer classification, `multipleOf`, and equality for `const`, `enum` and
   `uniqueItems` now use exact `Long`/`BigDecimal` arithmetic. Large integers and high-precision
   fractions no longer collapse through `Double`, and numeric strings remain distinct from numbers.
@@ -15,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fail validation; valid large integers such as `1e400` are accepted as integers.
 
 ### Added
+- **Breaking error API change:** `ValidationError.instanceLocation` replaces the primary `path`
+  field with an RFC 6901 JSON Pointer. Named constructor and `copy(path = ...)` arguments must
+  migrate to `instanceLocation = ...`; positional construction and destructuring now use pointers.
+  The deprecated `path` getter provides a lossy legacy display string; `toString()` uses pointers.
+- 117 instance-location and JSON Pointer tests, including both drafts, nested causes, references,
+  unusual keys, schema-structure errors and the deprecated accessor.
 - Official `optional/bignum.json` coverage for both drafts and 88 numeric regression/concurrency tests.
 - Three numeric performance benchmarks; integer fast paths and a cache of parsed schema limits
   reduce the cost of exact arithmetic. Decimal validation remains slower than approximate arithmetic;

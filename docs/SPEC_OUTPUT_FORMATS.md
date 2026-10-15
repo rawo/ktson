@@ -1,7 +1,7 @@
 # Spec: standard JSON Schema output formats
 
 **Status**: proposed, not implemented
-**Depends on**: [SPEC_INSTANCE_LOCATION.md](SPEC_INSTANCE_LOCATION.md) (needs RFC 6901 instance locations)
+**Depends on**: [SPEC_INSTANCE_LOCATION.md](SPEC_INSTANCE_LOCATION.md) (implemented, unreleased)
 
 ## Motivation
 
@@ -14,14 +14,14 @@ its results must be written specifically against it. Producing the standard form
 at validation time and makes the library interoperable.
 
 The pieces are now mostly in place: `ValidationError` carries the keyword location (`schemaPath`),
-the keyword, a message, and nested `causes`. What is missing is the instance location as a pointer,
-the absolute keyword location, and the serialisation itself.
+the instance pointer (`instanceLocation`), the keyword, a message, and nested `causes`. What is
+missing is the absolute keyword location and the serialisation itself.
 
 ## Current behaviour
 
 ```kotlin
 ValidationError(
-    path = "user.age",                             // non-standard notation
+    instanceLocation = "/user/age",                // RFC 6901 JSON Pointer
     message = "Expected type(s): integer, but got: string",
     keyword = "type",
     schemaPath = "/properties/user/properties/age/type",   // = keywordLocation
@@ -29,8 +29,8 @@ ValidationError(
 )
 ```
 
-Against the spec's output unit, KtSON has `keywordLocation` and `error`, needs `instanceLocation`
-in pointer form, and has no `absoluteKeywordLocation` (the URI of the schema resource plus fragment,
+Against the spec's output unit, KtSON has `keywordLocation`, `error` and `instanceLocation`,
+and has no `absoluteKeywordLocation` (the URI of the schema resource plus fragment,
 which matters once `$ref` crosses into another document).
 
 ## Design

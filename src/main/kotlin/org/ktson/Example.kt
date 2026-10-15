@@ -96,7 +96,7 @@ fun example2ObjectValidation(validator: JsonValidator) {
     val result2 = validator.validate(invalidUser, schema)
     println("Invalid user: ${if (result2.isValid) "✓ Valid" else "✗ Invalid"}")
     if (result2.isInvalid) {
-        result2.getErrors().forEach { println("  Error at '${it.path}': ${it.message}") }
+        result2.getErrors().forEach { println("  Error at '${it.instanceLocation}': ${it.message}") }
     }
     println()
 }

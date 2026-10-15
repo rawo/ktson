@@ -1,12 +1,12 @@
 # Spec: RFC 6901 instance locations in validation errors
 
-**Status**: proposed, not implemented
+**Status**: implemented, unreleased (Option A)
 **Depends on**: nothing (keyword locations in `ValidationError.schemaPath` are already implemented)
-**Blocks**: [SPEC_OUTPUT_FORMATS.md](SPEC_OUTPUT_FORMATS.md)
+**Unblocks**: [SPEC_OUTPUT_FORMATS.md](SPEC_OUTPUT_FORMATS.md)
 
 ## Motivation
 
-`ValidationError.path` locates the failing *instance* value. It currently uses a home-grown
+`ValidationError.path` locates the failing *instance* value. It previously used a home-grown
 dotted/bracket notation, which is both non-standard and ambiguous.
 
 The ambiguity is real, not theoretical. These two schemas produce the identical `path` of `a.b`
@@ -24,19 +24,19 @@ RFC 6901 JSON Pointer has no such ambiguity, is what the JSON Schema output form
 `instanceLocation`, and is already implemented in this repository (`JsonPointer.encodeToken`
 escapes `~` as `~0` and `/` as `~1`).
 
-## Current behaviour
+## Previous behaviour
 
-Paths are assembled inline at roughly a dozen sites in `JsonValidator.kt`, all of the same two shapes:
+Paths were assembled inline at roughly a dozen sites in `JsonValidator.kt`, all of the same two shapes:
 
 ```kotlin
 val propPath = if (path.isEmpty()) propName else "$path.$propName"
 val itemPath = "$path[$index]"
 ```
 
-The root instance is `""`. One site produces the pseudo-segment `"$path.<propertyName>"` for
+The root instance is `""`. One site produced the pseudo-segment `"$path.<propertyName>"` for
 `propertyNames` failures, which is not a location at all.
 
-| Instance | Current `path` | Proposed `instanceLocation` |
+| Instance | Previous `path` | Implemented `instanceLocation` |
 |---|---|---|
 | root | `""` | `""` |
 | `{"user": {"age": …}}` | `user.age` | `/user/age` |
@@ -47,50 +47,77 @@ The root instance is `""`. One site produces the pseudo-segment `"$path.<propert
 
 ## Design
 
-1. Add a private helper mirroring the existing keyword-location helpers:
+1. Added a private helper mirroring the existing keyword-location helpers:
 
    ```kotlin
    /** Child location of [path] for an object member or array index (RFC 6901). */
    private fun childOf(path: String, token: String): String = "$path/${JsonPointer.encodeToken(token)}"
    ```
 
-2. Replace every `"$path.$propName"` with `childOf(path, propName)` and every `"$path[$index]"`
+2. Replaced every `"$path.$propName"` with `childOf(path, propName)` and every `"$path[$index]"`
    with `childOf(path, index.toString())`. The `if (path.isEmpty())` special case disappears —
    a JSON Pointer always leads with `/`, and the root is the empty string.
 
 3. `propertyNames` failures report the location of the *object* being validated, not a fabricated
-   `<propertyName>` child. The failing key belongs in the message, which already names it.
+   `<propertyName>` child. Each top-level name error prefixes the message with the failing key, including errors from
+   boolean schemas and combiners; nested causes retain the owning object's pointer.
 
-4. Keep `validateSchemaStructure`'s paths in the same notation as instance paths for consistency;
-   they describe positions in the schema document and should use pointers too.
+4. `validateSchemaStructure` uses pointers to the schema node being checked. The keyword path
+   preserves the correct map keyword (`properties`, `patternProperties`, `dependentSchemas`) and
+   the keyword before a combiner index.
 
-## API impact
+5. `JsonPointer.resolve` distinguishes the root (`""` or `"#"`) from an empty member (`"/"` or
+   `"#/"`) and preserves consecutive empty tokens. Pointer decoding is shared by resolution and
+   the deprecated display accessor.
 
-`ValidationError.path` is public on a released 1.0.0, so changing its format is a breaking change
-for anyone parsing or displaying it. Two options:
+## API decision and migration
 
-**Option A — rename and deprecate (recommended).** Add `instanceLocation: String` holding the
-pointer; keep `path` as a deprecated computed property that derives the old notation (a lossy
-back-conversion is acceptable for a deprecated accessor). Remove `path` in 2.0.0.
+**Selected Option A:** `instanceLocation` is the first property of `ValidationError`; `path` is a
+`@Deprecated` computed getter. `toString()` prints the canonical pointer, including nested causes.
+The project is already at 2.0.0, so the original suggestion to remove `path` in 2.0.0 is obsolete.
+Removal is deferred to a future major release, with no specific version assigned.
 
-**Option B — change `path` in place.** Smaller diff, no dead code, but silently breaks consumers
-at a patch/minor version. Only acceptable if the library is known to have no external users yet.
+This is not full source or semantic compatibility:
 
-Pick one before implementing; the rest of the work is identical.
+- Existing `error.path` reads still compile with a deprecation warning, but the projection is
+  inherently lossy. Dotted and bracketed keys remain ambiguous. Numeric tokens are rendered as
+  `[index]` (including numeric object keys), and empty tokens lose key identity.
+- Replace named constructor `path = ...` and `copy(path = ...)` arguments with
+  `instanceLocation = ...`, supplying a JSON Pointer rather than a dotted string.
+- Positional construction and `component1()`/destructuring now carry pointers; callers must migrate
+  the values they supply or consume. The positional constructor shape alone does not preserve
+  the old semantics.
+- Error rendering and `propertyNames` locations change. Package this API change in a future major
+  release; this implementation does not change `build.gradle.kts`'s version.
 
-## Test plan
+```kotlin
+val error = ValidationError(instanceLocation = "/users/0/age", message = "Expected an integer")
+val relocated = error.copy(instanceLocation = "/users/1/age")
+// error.instanceLocation == "/users/0/age"
+// error.path == "users[0].age" (deprecated; display only)
+```
 
-- Unit tests in `ErrorMessageTest.kt`: root, nested object, array index, deeply mixed
-  (`/users/0/roles/2`), and the three escaping cases (`.`, `/`, `~` in a property name).
-- A regression test pinning the disambiguation: the two schemas in *Motivation* must now produce
-  different locations.
-- The official suite does not assert error locations, so it will neither catch nor block this.
-- `EdgeCaseAndThreadSafetyTest` covers instances with unusual keys; check none assert on `path`.
+The root pointer is `""`; an empty property key is `/`; a literal `~1` key is `/~01`.
+`required`, `contains`, and object/array-level failures retain the owning instance location.
+Subschema validation failures point to the child value being validated. Paths do not change when
+following `$ref` or evaluating a combiner; `schemaPath` records those schema-side hops separately.
 
-## Effort
+## Verification
 
-Small — roughly a dozen construction sites, one helper, plus the deprecation shim. The risk is in
-the API decision, not the code.
+`InstanceLocationTest.kt` contains 117 tests covering both drafts, root and nested instances,
+arrays and tuple/prefix items, mixed `/users/0/roles/2` paths, special/empty/numeric/Unicode keys,
+pattern/additional/unevaluated keywords, conditionals, references, depth errors, nested causes,
+`propertyNames`, schema-structure paths, constructor/copy/destructuring semantics, the deprecated
+projection, `toString()` and JSON Pointer empty-key resolution.
+
+The dotted-key regression distinguishes `/a.b` from `/a/b`. Special-key tests resolve each emitted
+pointer back into the original instance. Schema errors resolve into the schema document. Existing
+examples, official-suite failure output and edge-case assertions use `instanceLocation`.
+
+Full standard test run: 5,024 passing tests (4,314 official assertions and 710 custom tests).
+`ktlintFormat`, `ktlintCheck` and a subagent code review are part of the completion checks.
+The official suite checks verdicts rather than output locations, so dedicated location tests
+provide the regression coverage for this feature.
 
 ## References
 

@@ -156,6 +156,9 @@ class JsonValidator(
     /** Keyword location of a sub-schema reached through [keyword] and [token], e.g. properties/name. */
     private fun at(schemaPath: String, keyword: String, token: String): String = "$schemaPath/$keyword/${JsonPointer.encodeToken(token)}"
 
+    /** Child instance location for an object member or array index (RFC 6901). */
+    private fun childOf(path: String, token: String): String = "$path/${JsonPointer.encodeToken(token)}"
+
     private fun validateElement(
         instance: JsonElement,
         schemaElement: JsonElement,
@@ -390,7 +393,7 @@ class JsonValidator(
                 val evaluated = collectEvaluatedProperties(instance, schema, path, version, rootSchema, depth, resourceRoot, dynamicScope)
                 instance.keys.forEach { propName ->
                     if (propName !in evaluated) {
-                        val propPath = if (path.isEmpty()) propName else "$path.$propName"
+                        val propPath = childOf(path, propName)
                         when {
                             unevalPropsSchema is JsonPrimitive && unevalPropsSchema.booleanOrNull == false ->
                                 errors.add(ValidationError(path, "Unevaluated property '$propName' is not allowed", UNEVALUATED_PROPERTIES, at(schemaPath, UNEVALUATED_PROPERTIES)))
@@ -409,7 +412,7 @@ class JsonValidator(
                 val evaluated = collectEvaluatedIndices(instance, schema, path, version, rootSchema, depth, resourceRoot, dynamicScope)
                 instance.indices.forEach { index ->
                     if (index !in evaluated) {
-                        val itemPath = "$path[$index]"
+                        val itemPath = childOf(path, index.toString())
                         when {
                             unevalItemsSchema is JsonPrimitive && unevalItemsSchema.booleanOrNull == false ->
                                 errors.add(ValidationError(path, "Unevaluated item at index $index is not allowed", UNEVALUATED_ITEMS, at(schemaPath, UNEVALUATED_ITEMS)))
@@ -547,7 +550,7 @@ class JsonValidator(
         schema[PROPERTIES]?.jsonObject?.let { properties ->
             properties.forEach { (propName, propSchema) ->
                 instance[propName]?.let { propValue ->
-                    val propPath = if (path.isEmpty()) propName else "$path.$propName"
+                    val propPath = childOf(path, propName)
                     validateElement(propValue, propSchema, propPath, at(schemaPath, PROPERTIES, propName), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                 }
             }
@@ -570,7 +573,7 @@ class JsonValidator(
 
             instance.keys.forEach { propName ->
                 if (propName !in definedProps && !matchesAnyPattern(propName, patternProps)) {
-                    val propPath = if (path.isEmpty()) propName else "$path.$propName"
+                    val propPath = childOf(path, propName)
                     when (additionalPropsSchema) {
                         is JsonPrimitive -> {
                             if (additionalPropsSchema.booleanOrNull == false) {
@@ -590,7 +593,7 @@ class JsonValidator(
             patternProps.forEach { (pattern, propSchema) ->
                 instance.keys.forEach { propName ->
                     if (compiledPattern(pattern).containsMatchIn(propName)) {
-                        val propPath = if (path.isEmpty()) propName else "$path.$propName"
+                        val propPath = childOf(path, propName)
                         validateElement(instance[propName]!!, propSchema, propPath, at(schemaPath, PATTERN_PROPERTIES, pattern), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                     }
                 }
@@ -616,7 +619,9 @@ class JsonValidator(
         schema[PROPERTY_NAMES]?.let { propNamesSchema ->
             instance.keys.forEach { propName ->
                 val propNameElement = JsonPrimitive(propName)
-                validateElement(propNameElement, propNamesSchema, "$path.<propertyName>", at(schemaPath, PROPERTY_NAMES), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                val nameErrors = mutableListOf<ValidationError>()
+                validateElement(propNameElement, propNamesSchema, path, at(schemaPath, PROPERTY_NAMES), nameErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                errors.addAll(nameErrors.map { it.copy(message = "Property name ${quoted(propName)}: ${it.message}") })
             }
         }
 
@@ -666,7 +671,7 @@ class JsonValidator(
             schema[PREFIX_ITEMS]?.jsonArray?.let { prefixItems ->
                 prefixItems.forEachIndexed { index, itemSchema ->
                     if (index < instance.size) {
-                        val itemPath = "$path[$index]"
+                        val itemPath = childOf(path, index.toString())
                         validateElement(instance[index], itemSchema, itemPath, at(schemaPath, PREFIX_ITEMS, index.toString()), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                     }
                 }
@@ -674,7 +679,7 @@ class JsonValidator(
                 // In 2020-12, if both prefixItems and items exist, items applies to remaining items
                 schema[ITEMS]?.let { itemsSchema ->
                     for (index in prefixItems.size until instance.size) {
-                        val itemPath = "$path[$index]"
+                        val itemPath = childOf(path, index.toString())
                         validateElement(instance[index], itemsSchema, itemPath, at(schemaPath, ITEMS), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                     }
                 }
@@ -686,7 +691,7 @@ class JsonValidator(
                     is JsonObject, is JsonPrimitive -> {
                         // Single schema for all items
                         instance.forEachIndexed { index, item ->
-                            val itemPath = "$path[$index]"
+                            val itemPath = childOf(path, index.toString())
                             validateElement(item, itemsSchema, itemPath, at(schemaPath, ITEMS), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                         }
                     }
@@ -694,7 +699,7 @@ class JsonValidator(
                         // Tuple validation (deprecated in 2020-12 but still supported)
                         itemsSchema.forEachIndexed { index, itemSchema ->
                             if (index < instance.size) {
-                                val itemPath = "$path[$index]"
+                                val itemPath = childOf(path, index.toString())
                                 validateElement(instance[index], itemSchema, itemPath, at(schemaPath, ITEMS, index.toString()), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                             }
                         }
@@ -708,7 +713,7 @@ class JsonValidator(
             val itemsCount = (schema[ITEMS] as JsonArray).size
             schema[ADDITIONAL_ITEMS]?.let { additionalItemsSchema ->
                 for (index in itemsCount until instance.size) {
-                    val itemPath = "$path[$index]"
+                    val itemPath = childOf(path, index.toString())
                     when (additionalItemsSchema) {
                         is JsonPrimitive -> {
                             if (additionalItemsSchema.booleanOrNull == false) {
@@ -728,7 +733,7 @@ class JsonValidator(
             val matchingIndices = mutableListOf<Int>()
             instance.forEachIndexed { index, item ->
                 val itemErrors = mutableListOf<ValidationError>()
-                validateElement(item, containsSchema, "$path[$index]", at(schemaPath, CONTAINS), itemErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                validateElement(item, containsSchema, childOf(path, index.toString()), at(schemaPath, CONTAINS), itemErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                 if (itemErrors.isEmpty()) {
                     matchingIndices.add(index)
                 }
@@ -1989,7 +1994,7 @@ class JsonValidator(
             val matchingIndices = mutableListOf<Int>()
             instance.forEachIndexed { index, item ->
                 val tempErrors = mutableListOf<ValidationError>()
-                validateElement(item, containsSchema, "$path[$index]", "", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                validateElement(item, containsSchema, childOf(path, index.toString()), "", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                 if (tempErrors.isEmpty()) matchingIndices.add(index)
             }
             // Annotation only produced when contains validates (minContains satisfied)
@@ -2108,7 +2113,7 @@ class JsonValidator(
                 else ->
                     yetUnevaluated.forEach { index ->
                         val tempErrors = mutableListOf<ValidationError>()
-                        validateElement(instance[index], unevalItemsSchema, "$path[$index]", "", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                        validateElement(instance[index], unevalItemsSchema, childOf(path, index.toString()), "", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                         if (tempErrors.isEmpty()) evaluated.add(index)
                     }
             }
@@ -2291,7 +2296,7 @@ class JsonValidator(
                 else ->
                     yetUnevaluated.forEach { propName ->
                         val tempErrors = mutableListOf<ValidationError>()
-                        validateElement(instance[propName]!!, unevalPropsSchema, if (path.isEmpty()) propName else "$path.$propName", "", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                        validateElement(instance[propName]!!, unevalPropsSchema, childOf(path, propName), "", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
                         if (tempErrors.isEmpty()) evaluated.add(propName)
                     }
             }
@@ -2375,24 +2380,24 @@ class JsonValidator(
 
                 // Recursively validate nested schemas
                 schema.forEach { (key, value) ->
-                    val newPath = if (path.isEmpty()) key else "$path.$key"
+                    val newPath = childOf(path, key)
                     when (key) {
                         PROPERTIES, PATTERN_PROPERTIES, DEPENDENT_SCHEMAS -> {
                             if (value is JsonObject) {
                                 value.forEach { (propName, propSchema) ->
-                                    validateSchemaStructure(propSchema, "$newPath.$propName", at(schemaPath, PROPERTIES, propName), errors)
+                                    validateSchemaStructure(propSchema, childOf(newPath, propName), at(schemaPath, key, propName), errors)
                                 }
                             }
                         }
                         ITEMS, ADDITIONAL_PROPERTIES, ADDITIONAL_ITEMS, CONTAINS, PROPERTY_NAMES,
                         IF, THEN, ELSE, NOT,
                         -> {
-                            validateSchemaStructure(value, newPath, "$schemaPath/${JsonPointer.encodeToken(key)}", errors)
+                            validateSchemaStructure(value, newPath, at(schemaPath, key), errors)
                         }
                         ALL_OF, ANY_OF, ONE_OF, PREFIX_ITEMS -> {
                             if (value is JsonArray) {
                                 value.forEachIndexed { index, subSchema ->
-                                    validateSchemaStructure(subSchema, "$newPath[$index]", "$schemaPath/$index", errors)
+                                    validateSchemaStructure(subSchema, childOf(newPath, index.toString()), at(schemaPath, key, index.toString()), errors)
                                 }
                             }
                         }

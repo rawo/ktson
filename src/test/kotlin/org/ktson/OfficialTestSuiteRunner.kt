@@ -191,7 +191,7 @@ private suspend fun DescribeSpecContainerScope.runTestsFromFile(file: File, vers
                                 if (actualValid != expectedValid) {
                                     val errorDetails = if (result is ValidationResult.Invalid) {
                                         "\nValidation errors:\n" + result.validationErrors.joinToString("\n") {
-                                            "  - ${it.path}: ${it.message}"
+                                            "  - ${it.instanceLocation}: ${it.message}"
                                         }
                                     } else {
                                         ""
