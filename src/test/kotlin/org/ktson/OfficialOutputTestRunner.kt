@@ -27,8 +27,7 @@ class OfficialOutputTestRunner :
                     val outputChecker = JsonValidator(formatAssertion = true, schemaLoader = outputSchemaLoader(outputSchemaId, outputSchema))
                     val validator = JsonValidator()
 
-                    File(draftDir, "content").listFiles { file -> file.extension == "json" && file.name !in filesToSkip }!!
-                        .sortedBy { it.name }
+                    runnableOutputTestFiles(draftDir, filesToSkip)
                         .forEach { file ->
                             describe(file.nameWithoutExtension) {
                                 Json.parseToJsonElement(file.readText()).jsonArray.forEach { caseElement ->
@@ -77,4 +76,17 @@ private fun outputSchemaLoader(outputSchemaId: String, outputSchema: JsonElement
         }
         else -> null
     }
+}
+
+/**
+ * The output-test files to run for one draft: the JSON files in [draftDir]/content not in [skip],
+ * sorted by name. Fails when there are none, so a suite checkout that empties, moves or renames
+ * them turns the runner red instead of letting it pass with zero tests.
+ */
+internal fun runnableOutputTestFiles(draftDir: File, skip: Set<String>): List<File> {
+    val contentDir = File(draftDir, "content")
+    check(contentDir.isDirectory) { "Output tests directory not found: ${contentDir.absolutePath}" }
+    val files = contentDir.listFiles { file -> file.extension == "json" && file.name !in skip }.orEmpty().sortedBy { it.name }
+    check(files.isNotEmpty()) { "No runnable output-test files in ${contentDir.absolutePath} (skipped: $skip)" }
+    return files
 }
