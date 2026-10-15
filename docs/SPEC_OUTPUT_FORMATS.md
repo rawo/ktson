@@ -39,40 +39,93 @@ including depth-limit errors; it can only be `null` on a hand-built `ValidationE
 `Flag`, `Basic` and `Detailed`, implemented as a pure mapping over `ValidationResult`. The
 validation path does not change, so callers who never ask for output pay nothing.
 
+`absoluteKeywordLocation` is not a field of any output type in this round: it is added with its
+implementation (see [Deferred](#deferred)).
+
 ## Design
 
-All of it lives in one file, `src/main/kotlin/org/ktson/OutputFormat.kt`, so that a later revision
-of the output section (the next draft reworks it) is a local change.
+The output types, the tokens and the mapping live in one file, `src/main/kotlin/org/ktson/OutputFormat.kt`,
+so that a later revision of the output section (the next draft reworks it) is a local change. The
+only other change is the `validate(instance, schema, format)` overload on `JsonValidator`.
 
 ### API
 
-```kotlin
-/** VERBOSE is deferred and deliberately not declared, so it cannot fail at runtime. */
-enum class OutputFormat { FLAG, BASIC, DETAILED }
+Each format is its own type, carrying exactly the fields that format defines. The caller picks the
+format with a typed token, so the return type is known statically, with no reified generics and no
+runtime type checks, and the API is callable from Java.
 
-@Serializable
-data class OutputUnit(
-    val valid: Boolean,
-    val keywordLocation: String? = null,
-    val absoluteKeywordLocation: String? = null,   // always null in this round
-    val instanceLocation: String? = null,
-    val error: String? = null,
-    val errors: List<OutputUnit>? = null,
-) {
-    /** Standard JSON, independent of the caller's Json configuration: null fields are omitted. */
+```kotlin
+sealed interface ValidationOutput {
+    val valid: Boolean
+    /** Standard JSON for this format; never contains a type discriminator. */
     fun toJson(): String
 }
 
-fun ValidationResult.toOutput(format: OutputFormat = OutputFormat.BASIC): OutputUnit
+@Serializable
+data class FlagOutput(override val valid: Boolean) : ValidationOutput
+
+@Serializable
+data class BasicOutput(
+    override val valid: Boolean,
+    val keywordLocation: String,
+    val instanceLocation: String,
+    val errors: List<BasicUnit>? = null,          // null when valid
+) : ValidationOutput
+
+@Serializable
+data class BasicUnit(                             // a flat list entry: never nests
+    val valid: Boolean,
+    val keywordLocation: String,
+    val instanceLocation: String,
+    val error: String,
+)
+
+@Serializable
+data class DetailedOutput(                        // a node of the failure tree
+    override val valid: Boolean,
+    val keywordLocation: String,
+    val instanceLocation: String,
+    val error: String? = null,                    // null on the root
+    val errors: List<DetailedOutput>? = null,     // null on leaves and when valid
+) : ValidationOutput
+
+/** VERBOSE is deferred; it is added together with its output type and implementation. */
+sealed class OutputFormat<T : ValidationOutput> {
+    object Flag : OutputFormat<FlagOutput>()
+    object Basic : OutputFormat<BasicOutput>()
+    object Detailed : OutputFormat<DetailedOutput>()
+}
+
+// JsonValidator
+fun validate(instance: JsonElement, schema: JsonSchema): ValidationResult            // unchanged
+fun <T : ValidationOutput> validate(instance: JsonElement, schema: JsonSchema, format: OutputFormat<T>): T
+
+// ValidationResult
+fun <T : ValidationOutput> ValidationResult.toOutput(format: OutputFormat<T>): T
 ```
 
-`keywordLocation` and `instanceLocation` are nullable because `Flag` output is `{"valid": …}` and
-nothing else. `toJson()` uses a fixed internal `Json` instance (no defaults encoded, no nulls), so a
-caller whose own `Json` sets `encodeDefaults = true` still gets exact standard output from it.
-Callers may also serialise `OutputUnit` with their own `Json`.
+```kotlin
+val result = validator.validate(instance, schema)                        // ValidationResult, as today
+val basic = validator.validate(instance, schema, OutputFormat.Basic)     // BasicOutput
+println(basic.toJson())
+```
 
-Adding `VERBOSE` later is source-compatible except for exhaustive `when` expressions over
-`OutputFormat`; the KDoc says so.
+Decisions:
+
+- **KtSON's native result stays the default.** `validate(instance, schema)` keeps returning
+  `ValidationResult`; `ValidationResult` and `ValidationError` stay public and unchanged. Adding the
+  format overload is not breaking (a minor release).
+- **No `Native` token.** Omitting the format already yields the native result; a token would force
+  `ValidationResult` to implement `ValidationOutput`, including a `toJson()` with no standard shape.
+- **One implementation.** The format overload is `validate(instance, schema).toOutput(format)`.
+  `toOutput` is public for callers who already hold a result. The `validate(instanceJson,
+  schemaJson, version)` string overload gets no format variant; such callers use `toOutput`.
+- **`toJson()` on every output type.** Serialising through the sealed `ValidationOutput` type would
+  make kotlinx-serialization add a `"type"` discriminator, which is not standard output. `toJson()`
+  serialises the concrete type with a fixed internal `Json` instance (no defaults encoded, nulls
+  omitted), independent of the caller's configuration. The KDoc warns against polymorphic encoding.
+- **Adding `Verbose` later** adds a subclass to two sealed hierarchies. That is source-compatible
+  except for exhaustive `when` expressions over them; the KDoc says so.
 
 ### Mapping a `ValidationError` to a unit
 
@@ -82,15 +135,15 @@ Adding `VERBOSE` later is source-compatible except for exhaustive `when` express
 | `keywordLocation` | `schemaPath`, or `""` (the root) when `null` |
 | `instanceLocation` | `instanceLocation` |
 | `error` | `message` |
-| `errors` | `causes`, mapped recursively (`Detailed` only) |
+| `errors` | `causes`, mapped recursively (`DetailedOutput` only) |
 
 ### Formats
 
 | Format | Valid result | Invalid result |
 |---|---|---|
-| `FLAG` | `{"valid": true}` | `{"valid": false}` — never an `errors` key |
-| `BASIC` | `{"valid": true, "keywordLocation": "", "instanceLocation": ""}` | root `{"valid": false, "keywordLocation": "", "instanceLocation": "", "errors": [...]}` with the whole error tree flattened depth-first, each parent before its causes |
-| `DETAILED` | as `BASIC` | the same root, with `errors` keeping the `causes` hierarchy |
+| `Flag` | `{"valid": true}` | `{"valid": false}` |
+| `Basic` | `{"valid": true, "keywordLocation": "", "instanceLocation": ""}` | root `{"valid": false, "keywordLocation": "", "instanceLocation": "", "errors": [...]}` with the whole error tree flattened depth-first, each parent before its causes |
+| `Detailed` | as `Basic` | the same root, with `errors` keeping the `causes` hierarchy |
 
 Decisions:
 
@@ -137,18 +190,23 @@ the `flag` branch.)
 **`OutputFormatTest.kt`**, under both drafts:
 
 - One schema failing in two branches (a failing `properties` member alongside an `anyOf` whose
-  branches fail); exact expected JSON for `FLAG`, `BASIC` and `DETAILED`, compared via `toJson()`.
-- `Flag` output never contains an `errors` key, for valid and invalid results.
+  branches fail); exact expected JSON for `Flag`, `Basic` and `Detailed`, compared via `toJson()`.
+- The return types are the concrete ones: `validate(i, s, OutputFormat.Basic)` is a `BasicOutput`
+  without a cast (a compile-time check, asserted by assigning to typed vals).
+- `validate(i, s, format)` equals `validate(i, s).toOutput(format)` for every format.
+- `Flag` output contains only `valid`, for valid and invalid results.
 - Valid results in every format.
 - `Detailed` collapsing: one top-level error collapses to that unit; two or more stay under the root.
 - Escaping: a property named `~a/b` yields `/properties/~0a~1b/type` and `/~0a~1b`.
-- Round trip: `Json.decodeFromString<OutputUnit>(unit.toJson()) == unit`.
+- No type discriminator: `toJson()` of each output type contains no `"type"` key.
+- Round trip: `Json.decodeFromString<BasicOutput>(output.toJson()) == output`, and likewise for
+  `FlagOutput` and `DetailedOutput`.
 - A hand-built `ValidationError` without `schemaPath` maps to `keywordLocation: ""`.
 
 **`OfficialOutputTestRunner.kt`**, alongside `OfficialTestSuiteRunner`:
 
 - Reads `../JSON-Schema-Test-Suite/output-tests/{draft2019-09,draft2020-12}/content/*.json`.
-- For each test, validates `data` against `schema`, maps the result with `toOutput(BASIC)`, and
+- For each test, validates `data` against `schema`, calls `validate(data, schema, OutputFormat.Basic)`, and
   validates that output with KtSON against the test's `output.basic` schema. A `schemaLoader` serves
   the draft's `output-schema.json` for its `https://json-schema.org/draft/<draft>/output/schema` `$id`.
 - Skips `readOnly.json` (needs annotations); ignores `v1/` (a later release KtSON does not support).
@@ -158,7 +216,8 @@ the `flag` branch.)
 
 ## Effort
 
-Medium: one file holding a data class, an enum and a mapper; a unit test file; a runner.
+Medium: one file holding four output types, the format tokens and the mapper; one `JsonValidator`
+overload; a unit test file; a runner.
 
 ## References
 
