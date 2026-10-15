@@ -2,6 +2,7 @@ package org.ktson
 
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import kotlinx.serialization.json.*
 
 /** A failing `properties` member alongside an `anyOf` whose two branches fail. */
@@ -13,6 +14,18 @@ private const val NESTED_SCHEMA = """{"allOf":[{"anyOf":[{"type":"string"}]}]}""
 
 /** Its error message contains a double quote and a backslash. */
 private const val QUOTED_ENUM_SCHEMA = """{"enum":["a\"b"]}"""
+
+/** Needs JSON escaping in every way that matters, independent of KtSON's message wording. */
+private const val HOSTILE_MESSAGE = "quote \" backslash \\ newline \n tab \t control \u0001 non-ASCII żółw ✓"
+
+/**
+ * The validator's message for [QUOTED_ENUM_SCHEMA], checked to still contain both characters the
+ * escaping tests need, so a wording change fails those tests instead of quietly weakening them.
+ */
+private fun quotedEnumMessage(result: ValidationResult): String = result.getErrors().single().message.also {
+    it shouldContain "\""
+    it shouldContain "\\"
+}
 
 /**
  * Parses [json] and replaces every `error` value with "*", so structural assertions do not freeze
@@ -97,7 +110,7 @@ class OutputFormatTest :
 
                 it("round-trips a message containing a quote and a backslash") {
                     val output = validator.validate(instance("1"), schema(QUOTED_ENUM_SCHEMA), OutputFormat.Basic)
-                    output.errors!!.single().error shouldBe validator.validate(instance("1"), schema(QUOTED_ENUM_SCHEMA)).getErrors().single().message
+                    output.errors!!.single().error shouldBe quotedEnumMessage(validator.validate(instance("1"), schema(QUOTED_ENUM_SCHEMA)))
                     Json.decodeFromString(BasicOutput.serializer(), output.toJson()) shouldBe output
                 }
 
@@ -149,7 +162,7 @@ class OutputFormatTest :
 
                 it("round-trips a message containing a quote and a backslash") {
                     val output = validator.validate(instance("1"), schema(QUOTED_ENUM_SCHEMA), OutputFormat.Detailed)
-                    output.error shouldBe validator.validate(instance("1"), schema(QUOTED_ENUM_SCHEMA)).getErrors().single().message
+                    output.error shouldBe quotedEnumMessage(validator.validate(instance("1"), schema(QUOTED_ENUM_SCHEMA)))
                     Json.decodeFromString(DetailedOutput.serializer(), output.toJson()) shouldBe output
                 }
 
@@ -183,6 +196,21 @@ class OutputFormatTest :
                     Json.parseToJsonElement("""{"valid":false,"keywordLocation":"","instanceLocation":"","errors":[]}""")
                 Json.parseToJsonElement(empty.toOutput(OutputFormat.Detailed).toJson()) shouldBe
                     Json.parseToJsonElement("""{"valid":false,"keywordLocation":"","instanceLocation":"","errors":[]}""")
+            }
+
+            it("escapes a hand-built message in Basic output and round-trips it exactly") {
+                val result = ValidationResult.Invalid(listOf(ValidationError(instanceLocation = "", message = HOSTILE_MESSAGE, schemaPath = "/type")))
+                val output = result.toOutput(OutputFormat.Basic)
+                val parsed = Json.parseToJsonElement(output.toJson()).jsonObject["errors"]!!.jsonArray.single().jsonObject
+                parsed["error"]!!.jsonPrimitive.content shouldBe HOSTILE_MESSAGE
+                Json.decodeFromString(BasicOutput.serializer(), output.toJson()) shouldBe output
+            }
+
+            it("escapes a hand-built message in Detailed output and round-trips it exactly") {
+                val result = ValidationResult.Invalid(listOf(ValidationError(instanceLocation = "", message = HOSTILE_MESSAGE, schemaPath = "/type")))
+                val output = result.toOutput(OutputFormat.Detailed)
+                Json.parseToJsonElement(output.toJson()).jsonObject["error"]!!.jsonPrimitive.content shouldBe HOSTILE_MESSAGE
+                Json.decodeFromString(DetailedOutput.serializer(), output.toJson()) shouldBe output
             }
 
             it("has no type discriminator in Detailed output") {
