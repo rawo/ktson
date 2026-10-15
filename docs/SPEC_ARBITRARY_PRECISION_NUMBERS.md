@@ -1,6 +1,6 @@
 # Spec: arbitrary-precision number handling
 
-**Status**: implemented, unreleased
+**Status**: implemented in 3.0.0
 **Kind**: correctness defect, not an enhancement
 **Depends on**: nothing
 

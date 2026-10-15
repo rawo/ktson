@@ -1,7 +1,7 @@
 # Spec: standard JSON Schema output formats
 
 **Status**: proposed, not implemented
-**Depends on**: [SPEC_INSTANCE_LOCATION.md](SPEC_INSTANCE_LOCATION.md) (implemented, unreleased)
+**Depends on**: [SPEC_INSTANCE_LOCATION.md](SPEC_INSTANCE_LOCATION.md) (implemented in 3.0.0)
 
 ## Motivation
 

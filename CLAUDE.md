@@ -8,7 +8,7 @@ KtSON is a JSON Schema validator for Kotlin with comprehensive support for JSON 
 
 **Package**: `org.ktson`
 **Tech Stack**: Kotlin 2.4.0, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
-**Status**: 2.0.0, 100% official test suite coverage
+**Status**: 3.0.0, 100% official test suite coverage
 
 ## Common Commands
 
@@ -240,7 +240,7 @@ Release notes are generated from the commit log, so commits must follow Conventi
 
 ### Documentation
 - `docs/STACK_OVERFLOW_RISK_ANALYSIS.md` - **Read this before production deployment**
-- `docs/SPEC_INSTANCE_LOCATION.md` - implemented, unreleased: RFC 6901 instance locations and legacy `path` deprecation
+- `docs/SPEC_INSTANCE_LOCATION.md` - implemented in 3.0.0: RFC 6901 instance locations and legacy `path` deprecation
 - `docs/SPEC_OUTPUT_FORMATS.md` - proposed: standard JSON Schema output formats (not implemented)
 - `docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md` - implemented: exact numeric comparisons, regression coverage and benchmarks
 - `docs/IMPLEMENTATION_STATUS.md` - Feature completeness tracking

@@ -77,7 +77,7 @@ Most of the code refactoring were performed by AI agent with supervision and cod
 
 ```kotlin
 dependencies {
-    implementation("org.ktson:ktson:2.0.0")
+    implementation("org.ktson:ktson:3.0.0")
 }
 ```
 
@@ -85,7 +85,7 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'org.ktson:ktson:2.0.0'
+    implementation 'org.ktson:ktson:3.0.0'
 }
 ```
 
@@ -95,7 +95,7 @@ dependencies {
 <dependency>
     <groupId>org.ktson</groupId>
     <artifactId>ktson</artifactId>
-    <version>2.0.0</version>
+    <version>3.0.0</version>
 </dependency>
 ```
 
@@ -284,6 +284,38 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
      script for the CONTEXTJ rule and the Virama set is a fixed list, so both drift with new Unicode
      versions. Exotic code points may be misjudged; everyday names are not affected.
 
+## Upgrading from 2.0.0
+
+3.0.0 has two breaking changes: one to the error API, one to numeric verdicts.
+
+**Error locations are RFC 6901 JSON Pointers.** `ValidationError.instanceLocation` replaces
+`path` as the primary field: the root is `""`, nested properties use `/user/age`, and array
+elements use `/users/0`. Tokens escape `~` as `~0` and `/` as `~1`; `/` identifies a member with
+an empty key. `propertyNames` failures point to the owning object and name the offending key in
+the message. Nested causes and `toString()` use these canonical locations too.
+
+The deprecated `error.path` getter derives the old dotted/bracket notation for display only.
+This projection loses information: `/a.b` and `/a/b` both become `a.b`, and numeric object keys
+are indistinguishable from array indices. Use `instanceLocation` for navigation:
+
+```kotlin
+val error = ValidationError(instanceLocation = "/users/0/age", message = "Expected an integer")
+val moved = error.copy(instanceLocation = "/users/1/age")
+val failingValue = JsonPointer.resolve(instance, error.instanceLocation)
+```
+
+Migrate named constructor and `copy(path = ...)` arguments to `instanceLocation = ...`, passing
+a JSON Pointer. Positional construction and the first destructured component also use pointer
+semantics now. See [the instance-location implementation](docs/SPEC_INSTANCE_LOCATION.md).
+
+**Numbers are compared exactly.** Numeric comparisons use exact `Long`/`BigDecimal` arithmetic
+instead of `Double`. This changes verdicts for large integers, high-precision fractions and
+near-multiples previously accepted by the floating-point tolerance; valid large integers such as
+`1e400` are now accepted as integers. Numeric strings remain distinct from numbers.
+See [the numeric precision implementation and benchmarks](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md).
+
+Pin 2.0.0 if you need the old verdicts.
+
 ## Upgrading from 1.0.0
 
 The public API is unchanged — same classes, same constructor parameters, same methods, so 2.0.0
@@ -303,38 +335,12 @@ is a drop-in replacement at compile time. The major version reflects **changed v
   written (`maximum 10`, not `10.0`) and quote the offending value. Do not assert on message text.
 - **Dependencies**: Kotlin 2.4.0, kotlinx-serialization-json 1.8.1, coroutines 1.10.2.
 
-**Unreleased numeric precision fix:** approximate numeric comparisons use exact `Long`/`BigDecimal`
-arithmetic. This changes verdicts for large integers, high-precision fractions and near-multiples
-previously accepted by the floating-point tolerance. Numeric strings remain distinct from numbers.
-See [the numeric precision implementation and benchmarks](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md).
-
-**Unreleased error-location API change:** `ValidationError.instanceLocation` is an RFC 6901 JSON
-Pointer: the root is `""`, nested properties use `/user/age`, and array elements use `/users/0`.
-Tokens escape `~` as `~0` and `/` as `~1`; `/` identifies a member with an empty key.
-`propertyNames` failures point to the owning object and name the offending key in the message.
-Nested causes and `toString()` use these canonical locations too.
-
-The deprecated `error.path` getter derives the old dotted/bracket notation for display only.
-This projection loses information: `/a.b` and `/a/b` both become `a.b`, and numeric object keys
-are indistinguishable from array indices. Use `instanceLocation` for navigation:
-
-```kotlin
-val error = ValidationError(instanceLocation = "/users/0/age", message = "Expected an integer")
-val moved = error.copy(instanceLocation = "/users/1/age")
-val failingValue = JsonPointer.resolve(instance, error.instanceLocation)
-```
-
-Migrate named constructor and `copy(path = ...)` arguments to `instanceLocation = ...`, passing
-a JSON Pointer. Positional construction and the first destructured component also use pointer
-semantics now. This is a breaking API change to ship in a future major release; no version bump
-is included here. See [the instance-location implementation](docs/SPEC_INSTANCE_LOCATION.md).
-
 If a value your data relies on now fails, it is worth checking against the official suite before
 assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ## Project Status
 
-**Version**: 2.0.0  
+**Version**: 3.0.0  
 **Status**: ✅ Stable
 
 ### Test Coverage

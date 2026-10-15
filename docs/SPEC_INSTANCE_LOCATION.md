@@ -1,6 +1,6 @@
 # Spec: RFC 6901 instance locations in validation errors
 
-**Status**: implemented, unreleased (Option A)
+**Status**: implemented in 3.0.0 (Option A)
 **Depends on**: nothing (keyword locations in `ValidationError.schemaPath` are already implemented)
 **Unblocks**: [SPEC_OUTPUT_FORMATS.md](SPEC_OUTPUT_FORMATS.md)
 
@@ -87,8 +87,7 @@ This is not full source or semantic compatibility:
 - Positional construction and `component1()`/destructuring now carry pointers; callers must migrate
   the values they supply or consume. The positional constructor shape alone does not preserve
   the old semantics.
-- Error rendering and `propertyNames` locations change. Package this API change in a future major
-  release; this implementation does not change `build.gradle.kts`'s version.
+- Error rendering and `propertyNames` locations change. Shipped as a major release (3.0.0).
 
 ```kotlin
 val error = ValidationError(instanceLocation = "/users/0/age", message = "Expected an integer")

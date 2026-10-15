@@ -7,27 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- JSON Pointer `/` and `#/` now resolve to a member with an empty key instead of the root.
-- `propertyNames` errors point to the owning object and identify the rejected key, including
-  failures from boolean schemas and combiners.
-- Numeric bounds, integer classification, `multipleOf`, and equality for `const`, `enum` and
-  `uniqueItems` now use exact `Long`/`BigDecimal` arithmetic. Large integers and high-precision
-  fractions no longer collapse through `Double`, and numeric strings remain distinct from numbers.
-- **Breaking verdict changes:** previously accepted rounded values and near-multiples may now
-  fail validation; valid large integers such as `1e400` are accepted as integers.
+## [3.0.0] - 2026-10-15
 
-### Added
+Two breaking changes; see "Upgrading from 2.0.0" in the README for migration steps.
+
+### Changed
 - **Breaking error API change:** `ValidationError.instanceLocation` replaces the primary `path`
   field with an RFC 6901 JSON Pointer. Named constructor and `copy(path = ...)` arguments must
   migrate to `instanceLocation = ...`; positional construction and destructuring now use pointers.
   The deprecated `path` getter provides a lossy legacy display string; `toString()` uses pointers.
+- **Breaking verdict changes:** numeric bounds, integer classification, `multipleOf`, and equality
+  for `const`, `enum` and `uniqueItems` now use exact `Long`/`BigDecimal` arithmetic. Large
+  integers and high-precision fractions no longer collapse through `Double`, and numeric strings
+  remain distinct from numbers. Previously accepted rounded values and near-multiples may now fail
+  validation; valid large integers such as `1e400` are accepted as integers.
+- `propertyNames` errors point to the owning object and identify the rejected key in the message,
+  including failures from boolean schemas and combiners.
+
+### Fixed
+- JSON Pointer `/` and `#/` now resolve to a member with an empty key instead of the root.
+- Schema-structure errors report the right keyword location: nested `patternProperties` and
+  `dependentSchemas` were reported under `properties`, and `allOf`, `anyOf`, `oneOf` and
+  `prefixItems` sub-schemas were missing their keyword.
+
+### Added
 - 117 instance-location and JSON Pointer tests, including both drafts, nested causes, references,
   unusual keys, schema-structure errors and the deprecated accessor.
 - Official `optional/bignum.json` coverage for both drafts and 88 numeric regression/concurrency tests.
 - Three numeric performance benchmarks; integer fast paths and a cache of parsed schema limits
   reduce the cost of exact arithmetic. Decimal validation remains slower than approximate arithmetic;
   see `docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md` for measurements.
+- GitHub release notes list breaking changes in their own section, from a `!` after the commit
+  type or a `BREAKING CHANGE:` footer.
 
 ## [1.0.1] - 2025-11-04
 
