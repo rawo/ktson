@@ -124,9 +124,10 @@ validate()
 - **ErrorMessageTest.kt** - 32 tests for error content (instance path, keyword, keyword location, wording)
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
 - **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
-- **OutputFormatTest.kt** - 37 tests for the Flag, Basic and Detailed output formats
+- **OutputFormatTest.kt** - 39 tests for the Flag, Basic and Detailed output formats
 - **JavaOutputUsageTest.kt** - 2 tests running `src/test/java/org/ktson/JavaOutputUsage.java`, a Java caller of the output API
-- **OfficialOutputTestRunner.kt** - Runs the suite's `output-tests` content files against Basic output (skips `readOnly.json`, which needs annotations)
+- **OfficialOutputTestRunner.kt** - Runs the suite's `output-tests` content files against Basic output (skips `readOnly.json`, which needs annotations); fails if a draft has no runnable files
+- **OutputTestFilesTest.kt** - 4 tests for the runner's file discovery (missing, empty or fully skipped `content/` must fail)
 - **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (draft2019-09 + draft2020-12), including `optional/format`
 - **PerformanceTest.kt** - 9 performance tests, including three numeric benchmarks (excluded from default test run)
 

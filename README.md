@@ -383,7 +383,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 749 tests (100% passing)
+- **Custom Tests**: 755 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -393,7 +393,8 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Error messages: 32 tests
   - Numeric precision and concurrent numeric validation: 88 tests
   - Instance locations, legacy access and JSON Pointer resolution: 117 tests
-  - Output formats: 37 tests
+  - Output formats: 39 tests
+  - Output-tests runner file discovery: 4 tests
   - Java interop for output formats: 2 tests
 
 - **Official JSON Schema Test Suite**: 4,314 tests
