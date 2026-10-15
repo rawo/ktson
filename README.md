@@ -4,6 +4,7 @@
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Test Coverage](https://img.shields.io/badge/Official%20Test%20Suite-100%25-brightgreen.svg)](docs/OFFICIAL_TEST_SUITE_RESULTS.md)
+[![JSON Schema 2019-09 and 2020-12 fully supported](https://img.shields.io/badge/JSON%20Schema-2019--09%20%26%202020--12%20full%20support-brightgreen.svg)](#supported-json-schema-versions)
 
 JSON Schema validator for Kotlin with comprehensive support for JSON Schema Draft 2019-09 and 2020-12.
 
