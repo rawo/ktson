@@ -224,6 +224,13 @@ println(basic.toJson())
 - `error` texts are KtSON's messages, which the standard does not fix; do not match on them.
 - `Verbose` is not supported yet.
 
+From Java, pass the token's `INSTANCE`; the conversion lives on `ValidationOutputs`:
+
+```java
+BasicOutput basic = validator.validate(instance, schema, OutputFormat.Basic.INSTANCE);
+DetailedOutput detailed = ValidationOutputs.toOutput(result, OutputFormat.Detailed.INSTANCE);
+```
+
 ## Available Scripts
 
 ### Build
@@ -376,7 +383,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 747 tests (100% passing)
+- **Custom Tests**: 749 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -387,6 +394,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Numeric precision and concurrent numeric validation: 88 tests
   - Instance locations, legacy access and JSON Pointer resolution: 117 tests
   - Output formats: 37 tests
+  - Java interop for output formats: 2 tests
 
 - **Official JSON Schema Test Suite**: 4,314 tests
   - ✅ Passing: 4,314 (100%)

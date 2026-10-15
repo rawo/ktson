@@ -92,6 +92,7 @@ The validator architecture is straightforward with minimal abstractions:
    - `FlagOutput`, `BasicOutput`/`BasicUnit`, `DetailedOutput`, selected by the `OutputFormat<T>` token
    - `validate(instance, schema, format)` / `result.toOutput(format)`; a pure mapping over `ValidationResult`
    - Serialise with `toJson()`, never through the `ValidationOutput` interface
+   - `@file:JvmName("ValidationOutputs")`: Java calls `ValidationOutputs.toOutput(...)`; renaming it breaks Java callers
 
 ### Validation Flow
 
@@ -124,6 +125,7 @@ validate()
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
 - **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
 - **OutputFormatTest.kt** - 37 tests for the Flag, Basic and Detailed output formats
+- **JavaOutputUsageTest.kt** - 2 tests running `src/test/java/org/ktson/JavaOutputUsage.java`, a Java caller of the output API
 - **OfficialOutputTestRunner.kt** - Runs the suite's `output-tests` content files against Basic output (skips `readOnly.json`, which needs annotations)
 - **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (draft2019-09 + draft2020-12), including `optional/format`
 - **PerformanceTest.kt** - 9 performance tests, including three numeric benchmarks (excluded from default test run)

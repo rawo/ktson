@@ -120,6 +120,10 @@ Decisions:
 - **One implementation.** The format overload is `validate(instance, schema).toOutput(format)`.
   `toOutput` is public for callers who already hold a result. The `validate(instanceJson,
   schemaJson, version)` string overload gets no format variant; such callers use `toOutput`.
+- **Java facade `ValidationOutputs`.** `OutputFormat.kt` is annotated
+  `@file:JvmName("ValidationOutputs")`, so Java calls
+  `ValidationOutputs.toOutput(result, OutputFormat.Basic.INSTANCE)` rather than `OutputFormatKt`.
+  Renaming it after release would break Java callers. `JavaOutputUsageTest` runs a Java caller.
 - **`toJson()` on every output type.** Serialising through the sealed `ValidationOutput` type would
   make kotlinx-serialization add a `"type"` discriminator, which is not standard output. `toJson()`
   serialises the concrete type with a fixed internal `Json` instance (no defaults encoded, nulls

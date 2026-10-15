@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ValidationResult.toOutput(format)` return `FlagOutput`, `BasicOutput` or `DetailedOutput`,
   typed by the `OutputFormat` token; `toJson()` gives the standard JSON. `validate(instance, schema)`
   still returns `ValidationResult`. `Verbose` and `absoluteKeywordLocation` are not supported yet.
+  Java calls the conversion as `ValidationOutputs.toOutput(result, OutputFormat.Basic.INSTANCE)`.
 - The suite's `output-tests` run against Basic output for both drafts (`readOnly` skipped).
 
 ## [3.0.0] - 2026-10-15
