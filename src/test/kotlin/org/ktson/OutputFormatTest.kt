@@ -106,6 +106,58 @@ class OutputFormatTest :
                     validator.validate(instance(TWO_BRANCH_INSTANCE), schema(TWO_BRANCH_SCHEMA), OutputFormat.Basic) shouldBe native.toOutput(OutputFormat.Basic)
                 }
             }
+
+            describe("$version Detailed") {
+                it("keeps the causes hierarchy under a root with empty locations") {
+                    val output: DetailedOutput = validator.validate(instance(TWO_BRANCH_INSTANCE), schema(TWO_BRANCH_SCHEMA), OutputFormat.Detailed)
+                    normalized(output.toJson()) shouldBe normalized(
+                        """
+                        {"valid":false,"keywordLocation":"","instanceLocation":"","errors":[
+                          {"valid":false,"keywordLocation":"/properties/name/type","instanceLocation":"/name","error":"*"},
+                          {"valid":false,"keywordLocation":"/anyOf","instanceLocation":"","error":"*","errors":[
+                            {"valid":false,"keywordLocation":"/anyOf/0","instanceLocation":"","error":"*","errors":[
+                              {"valid":false,"keywordLocation":"/anyOf/0/required","instanceLocation":"","error":"*"}
+                            ]},
+                            {"valid":false,"keywordLocation":"/anyOf/1","instanceLocation":"","error":"*","errors":[
+                              {"valid":false,"keywordLocation":"/anyOf/1/required","instanceLocation":"","error":"*"}
+                            ]}
+                          ]}
+                        ]}
+                        """,
+                    )
+                }
+
+                it("collapses a root with a single child into that child, keeping every inner level") {
+                    val output = validator.validate(instance("1"), schema(NESTED_SCHEMA), OutputFormat.Detailed)
+                    normalized(output.toJson()) shouldBe normalized(
+                        """
+                        {"valid":false,"keywordLocation":"/allOf/0","instanceLocation":"","error":"*","errors":[
+                          {"valid":false,"keywordLocation":"/allOf/0/anyOf","instanceLocation":"","error":"*","errors":[
+                            {"valid":false,"keywordLocation":"/allOf/0/anyOf/0","instanceLocation":"","error":"*","errors":[
+                              {"valid":false,"keywordLocation":"/allOf/0/anyOf/0/type","instanceLocation":"","error":"*"}
+                            ]}
+                          ]}
+                        ]}
+                        """,
+                    )
+                }
+
+                it("is the root alone for a valid result") {
+                    val output = validator.validate(instance("""{"name":"x","a":1}"""), schema(TWO_BRANCH_SCHEMA), OutputFormat.Detailed)
+                    Json.parseToJsonElement(output.toJson()) shouldBe Json.parseToJsonElement("""{"valid":true,"keywordLocation":"","instanceLocation":""}""")
+                }
+
+                it("round-trips a message containing a quote and a backslash") {
+                    val output = validator.validate(instance("1"), schema(QUOTED_ENUM_SCHEMA), OutputFormat.Detailed)
+                    output.error shouldBe validator.validate(instance("1"), schema(QUOTED_ENUM_SCHEMA)).getErrors().single().message
+                    Json.decodeFromString(DetailedOutput.serializer(), output.toJson()) shouldBe output
+                }
+
+                it("matches toOutput on the native result") {
+                    val native = validator.validate(instance(TWO_BRANCH_INSTANCE), schema(TWO_BRANCH_SCHEMA))
+                    validator.validate(instance(TWO_BRANCH_INSTANCE), schema(TWO_BRANCH_SCHEMA), OutputFormat.Detailed) shouldBe native.toOutput(OutputFormat.Detailed)
+                }
+            }
         }
 
         describe("toJson") {
@@ -121,6 +173,20 @@ class OutputFormatTest :
 
             it("has no type discriminator in Basic output") {
                 val json = ValidationResult.Valid.toOutput(OutputFormat.Basic).toJson()
+                (Json.parseToJsonElement(json) as JsonObject).containsKey("type") shouldBe false
+            }
+
+            it("still produces output for a hand-built Invalid result with no errors") {
+                val empty = ValidationResult.Invalid(emptyList())
+                Json.parseToJsonElement(empty.toOutput(OutputFormat.Flag).toJson()) shouldBe Json.parseToJsonElement("""{"valid":false}""")
+                Json.parseToJsonElement(empty.toOutput(OutputFormat.Basic).toJson()) shouldBe
+                    Json.parseToJsonElement("""{"valid":false,"keywordLocation":"","instanceLocation":"","errors":[]}""")
+                Json.parseToJsonElement(empty.toOutput(OutputFormat.Detailed).toJson()) shouldBe
+                    Json.parseToJsonElement("""{"valid":false,"keywordLocation":"","instanceLocation":"","errors":[]}""")
+            }
+
+            it("has no type discriminator in Detailed output") {
+                val json = ValidationResult.Valid.toOutput(OutputFormat.Detailed).toJson()
                 (Json.parseToJsonElement(json) as JsonObject).containsKey("type") shouldBe false
             }
         }

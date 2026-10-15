@@ -60,6 +60,18 @@ data class BasicUnit(
     val error: String,
 )
 
+/** The `detailed` format: a node of the failure tree. The root has no [error]; leaves have no [errors]. */
+@Serializable
+data class DetailedOutput(
+    override val valid: Boolean,
+    val keywordLocation: String,
+    val instanceLocation: String,
+    val error: String? = null,
+    val errors: List<DetailedOutput>? = null,
+) : ValidationOutput {
+    override fun toJson(): String = outputJson.encodeToString(serializer(), this)
+}
+
 /**
  * Selects a standard output format; the type parameter is the output type it produces.
  *
@@ -82,6 +94,20 @@ sealed class OutputFormat<T : ValidationOutput> {
                 BasicOutput(valid = false, keywordLocation = "", instanceLocation = "", errors = result.validationErrors.flatMap { it.toBasicUnits() })
         }
     }
+
+    /**
+     * The failure hierarchy. A root with exactly one child collapses into that child; inner nodes
+     * never collapse, since each carries its own keyword location and message.
+     */
+    data object Detailed : OutputFormat<DetailedOutput>() {
+        override fun from(result: ValidationResult): DetailedOutput = when (result) {
+            is ValidationResult.Valid -> DetailedOutput(valid = true, keywordLocation = "", instanceLocation = "")
+            is ValidationResult.Invalid -> {
+                val children = result.validationErrors.map { it.toDetailed() }
+                children.singleOrNull() ?: DetailedOutput(valid = false, keywordLocation = "", instanceLocation = "", errors = children)
+            }
+        }
+    }
 }
 
 /** Maps this native result to the standard output [format]. */
@@ -92,3 +118,11 @@ private fun ValidationError.keywordLocationOrRoot(): String = schemaPath ?: ""
 
 private fun ValidationError.toBasicUnits(): List<BasicUnit> = listOf(BasicUnit(valid = false, keywordLocation = keywordLocationOrRoot(), instanceLocation = instanceLocation, error = message)) +
         causes.flatMap { it.toBasicUnits() }
+
+private fun ValidationError.toDetailed(): DetailedOutput = DetailedOutput(
+    valid = false,
+    keywordLocation = keywordLocationOrRoot(),
+    instanceLocation = instanceLocation,
+    error = message,
+    errors = causes.takeIf { it.isNotEmpty() }?.map { it.toDetailed() },
+)
