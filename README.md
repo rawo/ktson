@@ -25,6 +25,7 @@ Most of the code refactoring were performed by AI agent with supervision and cod
   - [Using KtSON from Java](#using-ktson-from-java)
   - [Memory and validator lifecycle](#memory-and-validator-lifecycle)
   - [Large datasets and streams](#large-datasets-and-streams)
+  - [Native images](#native-images)
 - [Available Scripts](#available-scripts)
 - [Project Scope](#project-scope)
   - [Supported JSON Schema Versions](#supported-json-schema-versions)
@@ -304,6 +305,14 @@ A `JsonValidator` is thread-safe, so units can be validated in parallel with one
 Validation is CPU work: to keep it off an I/O or UI thread, run it on a worker thread or
 `Dispatchers.Default` rather than expecting a non-blocking API from KtSON.
 
+### Native images
+
+KtSON needs no GraalVM reachability metadata: the library uses no reflection, loads no resources at
+runtime and does no dynamic class loading, and its only runtime dependency, kotlinx-serialization-json,
+is used through compiler-generated serializers. Applications built as native images (Quarkus,
+Micronaut, Spring Native, CLI tools) should be able to use it without extra configuration. This is not
+tested in CI yet; reports of problems are welcome.
+
 ## Available Scripts
 
 ### Build
@@ -531,7 +540,6 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 - [ ] Annotations in standard output ([#5](https://github.com/rawo/ktson/issues/5))
 - [x] [Arbitrary-precision numbers](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md) — exact comparisons beyond 2^53
 - [x] [No global state](#memory-and-validator-lifecycle): dropping a validator frees its schemas and caches (tested); schema pooling is left to applications
-- [ ] GraalVM native image support
 
 ## Documentation
 

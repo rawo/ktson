@@ -215,6 +215,9 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - Keep public API Java-friendly: `@JvmStatic` on companion/object functions, `@JvmOverloads` on
   functions and constructors with default arguments. Cover new public calls in
   `src/test/java/org/ktson/JavaApiUsage.java` (run by `JavaApiUsageTest`)
+- Keep `src/main` native-image friendly: no reflection (`Class.forName`, `::class.java`, kotlin-reflect,
+  reified `serializer<T>()` lookups), no runtime resources (`getResource`, `src/main/resources`), no
+  `ServiceLoader` or dynamic proxies. The README's "Native images" section promises this
 
 ### Testing Approach
 1. Run standard tests during development: `./gradlew test`
