@@ -223,7 +223,7 @@ println(basic.toJson())
 - Serialise with `toJson()`. Encoding through the `ValidationOutput` interface would add a type
   discriminator that is not part of the standard.
 - `error` texts are KtSON's messages, which the standard does not fix; do not match on them.
-- `Verbose` is not supported yet.
+- There is no `Verbose` format: the next output-format draft removes it.
 
 From Java, pass the token's `INSTANCE`; the conversion lives on `ValidationOutputs`:
 
@@ -342,7 +342,7 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
      for any unit whose `keywordLocation` passes through `$ref` or `$dynamicRef`, whatever the `$id`;
      JSON Schema 2020-12 §12.3.3 requires it whenever evaluation passed through a reference in a
      schema with an absolute `$id`.
-   - No `Verbose` format and no annotations in output.
+   - No annotations in output ([#5](https://github.com/rawo/ktson/issues/5)).
 
 ## Upgrading from 3.0.0
 
@@ -476,7 +476,8 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 **Future Enhancements:**
 - [x] [RFC 6901 instance locations](docs/SPEC_INSTANCE_LOCATION.md) in errors (`instanceLocation`, deprecated legacy `path` getter)
 - [x] [Standard output formats](docs/SPEC_OUTPUT_FORMATS.md): flag, basic, detailed
-- [ ] Verbose output, annotations and `absoluteKeywordLocation`
+- [ ] `absoluteKeywordLocation` in standard output
+- [ ] Annotations in standard output ([#5](https://github.com/rawo/ktson/issues/5))
 - [x] [Arbitrary-precision numbers](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md) — exact comparisons beyond 2^53
 - [ ] Schema caching improvements
 - [ ] Streaming validation for large datasets

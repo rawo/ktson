@@ -83,8 +83,8 @@ data class DetailedOutput(
 /**
  * Selects a standard output format; the type parameter is the output type it produces.
  *
- * `Verbose` is not supported yet. Adding it later adds a subclass here and to [ValidationOutput],
- * which breaks exhaustive `when` expressions over either.
+ * There is no `Verbose`: the next output-format draft removes it. Adding a format later adds a
+ * subclass here and to [ValidationOutput], which breaks exhaustive `when` expressions over either.
  */
 sealed class OutputFormat<T : ValidationOutput> {
     internal abstract fun from(result: ValidationResult): T

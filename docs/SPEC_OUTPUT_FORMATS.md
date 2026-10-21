@@ -1,7 +1,7 @@
 # Spec: standard JSON Schema output formats
 
-**Status**: `Flag`, `Basic` and `Detailed` implemented in 3.1.0; `Verbose`, annotations and
-`absoluteKeywordLocation` deferred (see [Deferred](#deferred))
+**Status**: `Flag`, `Basic` and `Detailed` implemented in 3.1.0; annotations and
+`absoluteKeywordLocation` deferred (see [Deferred](#deferred)); `Verbose` dropped (see [Dropped](#dropped))
 **Depends on**: [SPEC_INSTANCE_LOCATION.md](SPEC_INSTANCE_LOCATION.md) (implemented in 3.0.0)
 
 ## Motivation
@@ -89,7 +89,7 @@ data class DetailedOutput(                        // a node of the failure tree
     val errors: List<DetailedOutput>? = null,     // null on leaves and when valid
 ) : ValidationOutput
 
-/** VERBOSE is deferred; it is added together with its output type and implementation. */
+/** No VERBOSE: see Dropped. A later format is added together with its output type and implementation. */
 sealed class OutputFormat<T : ValidationOutput> {
     object Flag : OutputFormat<FlagOutput>()
     object Basic : OutputFormat<BasicOutput>()
@@ -128,8 +128,9 @@ Decisions:
   make kotlinx-serialization add a `"type"` discriminator, which is not standard output. `toJson()`
   serialises the concrete type with a fixed internal `Json` instance (no defaults encoded, nulls
   omitted), independent of the caller's configuration. The KDoc warns against polymorphic encoding.
-- **Adding `Verbose` later** adds a subclass to two sealed hierarchies. That is source-compatible
-  except for exhaustive `when` expressions over them; the KDoc says so.
+- **Adding a format later** (for example the next draft's `hierarchical`) adds a subclass to two
+  sealed hierarchies. That is source-compatible except for exhaustive `when` expressions over them;
+  the KDoc says so.
 
 ### Mapping a `ValidationError` to a unit
 
@@ -179,9 +180,17 @@ the `flag` branch.)
   (`schemaAbsoluteUris`, `registerAbsoluteUri`) for relative `$id` resolution. Threading the resource
   URI alongside the keyword location — as `validateElement` already threads `resourceRoot` — and
   adding it to `ValidationError` is enough. It touches the recursive validation path.
-- **`Verbose`.** Requires recording *successful* applications, which the validator does not keep.
 - **Annotations** (`annotation`/`annotations` in output units). KtSON does not collect annotations;
-  the suite's `readOnly` output test depends on them.
+  the suite's `readOnly` output test depends on them. Tracked in
+  [#5](https://github.com/rawo/ktson/issues/5).
+
+## Dropped
+
+- **`Verbose`.** Not planned. The next output-format draft removes it: the suite's
+  `output-tests/v1/output-schema.json` defines only `flag`, `basic` and `hierarchical` (which also
+  replaces `detailed`). Building it would mean recording every *successful* application — work
+  inside the validation path, at a cost to every caller — for a format on its way out, and nobody
+  has asked for it. Later output work targets the v1 shapes instead.
 
 ## Caveats
 
