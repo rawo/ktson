@@ -50,6 +50,20 @@ class OfficialOutputTestRunner :
                                 }
                             }
                         }
+
+                    // The output schema's outputUnit requires absoluteKeywordLocation on any unit whose
+                    // keywordLocation passes through $ref; the suite's content tests never exercise that.
+                    it("KtSON's Basic output for a \$ref schema satisfies the output schema's basic definition") {
+                        val refSchema = JsonSchema.fromString(
+                            """{"${'$'}id":"https://example.com/root","properties":{"n":{"${'$'}ref":"#/${'$'}defs/p"}},"${'$'}defs":{"p":{"minimum":0}}}""",
+                            version,
+                        )
+                        val output = validator.validate(Json.parseToJsonElement("""{"n":-1}"""), refSchema, OutputFormat.Basic)
+                        val basicDefinition = JsonSchema.fromString("""{"${'$'}ref":"$outputSchemaId#/${'$'}defs/basic"}""", version)
+                        val check = outputChecker.validate(Json.parseToJsonElement(output.toJson()), basicDefinition)
+                        if (check.isInvalid) println("\n=== FAILED OUTPUT SCHEMA CHECK ===\nOutput: ${output.toJson()}\n$check\n")
+                        check.isValid shouldBe true
+                    }
                 }
             }
         } else {

@@ -63,6 +63,8 @@ data class BasicUnit(
     val keywordLocation: String,
     val instanceLocation: String,
     val error: String,
+    /** See [ValidationError.absoluteKeywordLocation]; omitted when the schema has no absolute URI. */
+    val absoluteKeywordLocation: String? = null,
 )
 
 /**
@@ -76,6 +78,8 @@ data class DetailedOutput(
     val instanceLocation: String,
     val error: String? = null,
     val errors: List<DetailedOutput>? = null,
+    /** See [ValidationError.absoluteKeywordLocation]; omitted on the root and when the schema has no absolute URI. */
+    val absoluteKeywordLocation: String? = null,
 ) : ValidationOutput {
     override fun toJson(): String = outputJson.encodeToString(serializer(), this)
 }
@@ -124,7 +128,7 @@ fun <T : ValidationOutput> ValidationResult.toOutput(format: OutputFormat<T>): T
 /** The validator always sets schemaPath; only a hand-built error can lack one, and maps to the root. */
 private fun ValidationError.keywordLocationOrRoot(): String = schemaPath ?: ""
 
-private fun ValidationError.toBasicUnits(): List<BasicUnit> = listOf(BasicUnit(valid = false, keywordLocation = keywordLocationOrRoot(), instanceLocation = instanceLocation, error = message)) +
+private fun ValidationError.toBasicUnits(): List<BasicUnit> = listOf(BasicUnit(valid = false, keywordLocation = keywordLocationOrRoot(), instanceLocation = instanceLocation, error = message, absoluteKeywordLocation = absoluteKeywordLocation)) +
         causes.flatMap { it.toBasicUnits() }
 
 private fun ValidationError.toDetailed(): DetailedOutput = DetailedOutput(
@@ -133,4 +137,5 @@ private fun ValidationError.toDetailed(): DetailedOutput = DetailedOutput(
     instanceLocation = instanceLocation,
     error = message,
     errors = causes.takeIf { it.isNotEmpty() }?.map { it.toDetailed() },
+    absoluteKeywordLocation = absoluteKeywordLocation,
 )

@@ -213,6 +213,23 @@ class OutputFormatTest :
                 Json.decodeFromString(DetailedOutput.serializer(), output.toJson()) shouldBe output
             }
 
+            it("carries absoluteKeywordLocation in Basic units and Detailed nodes") {
+                val schema = JsonSchema.fromString(
+                    """{"${'$'}id":"https://example.com/root","properties":{"n":{"${'$'}ref":"#/${'$'}defs/p"}},"${'$'}defs":{"p":{"minimum":0}}}""",
+                )
+                val result = JsonValidator().validate(Json.parseToJsonElement("""{"n":-1}"""), schema)
+                val expected = "https://example.com/root#/${'$'}defs/p/minimum"
+
+                val basic = result.toOutput(OutputFormat.Basic)
+                basic.errors!!.single().absoluteKeywordLocation shouldBe expected
+                Json.parseToJsonElement(basic.toJson()).jsonObject["errors"]!!.jsonArray.single().jsonObject["absoluteKeywordLocation"]!!.jsonPrimitive.content shouldBe expected
+                Json.decodeFromString(BasicOutput.serializer(), basic.toJson()) shouldBe basic
+
+                val detailed = result.toOutput(OutputFormat.Detailed)
+                detailed.absoluteKeywordLocation shouldBe expected
+                Json.decodeFromString(DetailedOutput.serializer(), detailed.toJson()) shouldBe detailed
+            }
+
             it("has no type discriminator in Detailed output") {
                 val json = ValidationResult.Valid.toOutput(OutputFormat.Detailed).toJson()
                 (Json.parseToJsonElement(json) as JsonObject).containsKey("type") shouldBe false
