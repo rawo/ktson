@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-21
+
+Additive release: no breaking changes and no changed verdicts.
+
 ### Added
 - Standard JSON Schema output formats (2020-12 §12): `validate(instance, schema, format)` and
   `ValidationResult.toOutput(format)` return `FlagOutput`, `BasicOutput` or `DetailedOutput`,

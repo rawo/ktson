@@ -1,6 +1,6 @@
 # Spec: standard JSON Schema output formats
 
-**Status**: `Flag`, `Basic` and `Detailed` implemented, unreleased; `Verbose`, annotations and
+**Status**: `Flag`, `Basic` and `Detailed` implemented in 3.1.0; `Verbose`, annotations and
 `absoluteKeywordLocation` deferred (see [Deferred](#deferred))
 **Depends on**: [SPEC_INSTANCE_LOCATION.md](SPEC_INSTANCE_LOCATION.md) (implemented in 3.0.0)
 

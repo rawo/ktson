@@ -79,7 +79,7 @@ Most of the code refactoring were performed by AI agent with supervision and cod
 
 ```kotlin
 dependencies {
-    implementation("org.ktson:ktson:3.0.0")
+    implementation("org.ktson:ktson:3.1.0")
 }
 ```
 
@@ -87,7 +87,7 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'org.ktson:ktson:3.0.0'
+    implementation 'org.ktson:ktson:3.1.0'
 }
 ```
 
@@ -97,7 +97,7 @@ dependencies {
 <dependency>
     <groupId>org.ktson</groupId>
     <artifactId>ktson</artifactId>
-    <version>3.0.0</version>
+    <version>3.1.0</version>
 </dependency>
 ```
 
@@ -344,6 +344,15 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
      schema with an absolute `$id`.
    - No `Verbose` format and no annotations in output.
 
+## Upgrading from 3.0.0
+
+3.1.0 only adds API, so it is a drop-in replacement: no code changes and no changed verdicts.
+
+- [Standard output formats](#standard-output-formats): `validate(instance, schema, OutputFormat.Basic)`
+  and `result.toOutput(format)` return JSON Schema 2020-12 §12 output.
+- [Java-friendly API](#using-ktson-from-java): static factories on `JsonSchema` and `JsonPointer`,
+  and overloads that let Java omit defaulted arguments.
+
 ## Upgrading from 2.0.0
 
 3.0.0 has two breaking changes: one to the error API, one to numeric verdicts.
@@ -400,7 +409,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ## Project Status
 
-**Version**: 3.0.0  
+**Version**: 3.1.0  
 **Status**: ✅ Stable
 
 ### Test Coverage
