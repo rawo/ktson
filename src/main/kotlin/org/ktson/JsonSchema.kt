@@ -5,7 +5,7 @@ import kotlinx.serialization.json.*
 /**
  * Represents a JSON Schema
  */
-data class JsonSchema(
+data class JsonSchema @JvmOverloads constructor(
     val schema: JsonElement,
     val version: SchemaVersion = SchemaVersion.DRAFT_2020_12,
     val baseUri: String = "",
@@ -40,6 +40,8 @@ data class JsonSchema(
         /**
          * Parse a JSON schema from a string
          */
+        @JvmStatic
+        @JvmOverloads
         fun fromString(
             schemaJson: String,
             defaultVersion: SchemaVersion = SchemaVersion.DRAFT_2020_12,
@@ -52,6 +54,8 @@ data class JsonSchema(
         /**
          * Create a schema from a JsonElement
          */
+        @JvmStatic
+        @JvmOverloads
         fun fromElement(
             element: JsonElement,
             defaultVersion: SchemaVersion = SchemaVersion.DRAFT_2020_12,
@@ -61,6 +65,7 @@ data class JsonSchema(
 		/**
 		 * Extracts the $id value from a schema element if present.
 		 */
+		@JvmStatic
 		fun extractId(element: JsonElement): String? = (element as? JsonObject)?.get(SchemaKeywords.ID)?.jsonPrimitive?.contentOrNull
     }
 }
