@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still returns `ValidationResult`. `Verbose` and `absoluteKeywordLocation` are not supported yet.
   Java calls the conversion as `ValidationOutputs.toOutput(result, OutputFormat.Basic.INSTANCE)`.
 - The suite's `output-tests` run against Basic output for both drafts (`readOnly` skipped).
+- Java-friendly API: `JsonSchema.fromString`/`fromElement`/`extractId` and `JsonPointer.resolve`/
+  `encodeToken` are static, and defaulted parameters can be omitted from Java on the `JsonSchema`
+  and `JsonValidator` constructors, the `JsonSchema` factories and `validate(instanceJson, schemaJson)`.
+  The `Companion`/`INSTANCE` and all-argument forms keep working.
 
 ## [3.0.0] - 2026-10-15
 

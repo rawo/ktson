@@ -126,6 +126,7 @@ validate()
 - **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
 - **OutputFormatTest.kt** - 39 tests for the Flag, Basic and Detailed output formats
 - **JavaOutputUsageTest.kt** - 2 tests running `src/test/java/org/ktson/JavaOutputUsage.java`, a Java caller of the output API
+- **JavaApiUsageTest.kt** - 10 tests running `src/test/java/org/ktson/JavaApiUsage.java`, a Java caller of `JsonSchema`, `JsonValidator` and `JsonPointer`
 - **OfficialOutputTestRunner.kt** - Runs the suite's `output-tests` content files against Basic output (skips `readOnly.json`, which needs annotations); fails if a draft has no runnable files
 - **OutputTestFilesTest.kt** - 4 tests for the runner's file discovery (missing, empty or fully skipped `content/` must fail)
 - **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (draft2019-09 + draft2020-12), including `optional/format`
@@ -203,6 +204,9 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - Use ktlint with IntelliJ IDEA default Kotlin conventions
 - Always run `./gradlew ktlintFormat` before committing
 - Use constants from `SchemaKeywords` instead of string literals
+- Keep public API Java-friendly: `@JvmStatic` on companion/object functions, `@JvmOverloads` on
+  functions and constructors with default arguments. Cover new public calls in
+  `src/test/java/org/ktson/JavaApiUsage.java` (run by `JavaApiUsageTest`)
 
 ### Testing Approach
 1. Run standard tests during development: `./gradlew test`

@@ -22,6 +22,7 @@ Most of the code refactoring were performed by AI agent with supervision and cod
   - [Installation](#installation)
   - [Basic Usage](#basic-usage)
   - [Standard output formats](#standard-output-formats)
+  - [Using KtSON from Java](#using-ktson-from-java)
 - [Available Scripts](#available-scripts)
 - [Project Scope](#project-scope)
   - [Supported JSON Schema Versions](#supported-json-schema-versions)
@@ -231,6 +232,27 @@ BasicOutput basic = validator.validate(instance, schema, OutputFormat.Basic.INST
 DetailedOutput detailed = ValidationOutputs.toOutput(result, OutputFormat.Detailed.INSTANCE);
 ```
 
+### Using KtSON from Java
+
+The API is callable from Java without `Companion` or `INSTANCE` on the core types, and defaulted
+parameters can be left out from the end:
+
+```java
+JsonSchema schema = JsonSchema.fromString(schemaJson);                    // version defaults to 2020-12
+JsonSchema older = JsonSchema.fromString(schemaJson, SchemaVersion.DRAFT_2019_09);
+
+JsonValidator validator = new JsonValidator();
+JsonValidator lenient = new JsonValidator(true, false);                   // format assertion off
+JsonValidator remote = new JsonValidator(true, true, 1000, uri -> loadSchema(uri)); // schemaLoader as a lambda
+
+ValidationResult result = validator.validate(instanceJson, schemaJson);
+JsonElement value = JsonPointer.resolve(document, "/users/0/age");
+```
+
+Constructor arguments are positional (`enableMetaSchemaValidation`, `formatAssertion`,
+`maxValidationDepth`, `schemaLoader`), so setting a later one means passing the earlier ones too.
+Kotlin objects such as `OutputFormat.Basic` and `ValidationResult.Valid` are reached through `INSTANCE`.
+
 ## Available Scripts
 
 ### Build
@@ -383,7 +405,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 755 tests (100% passing)
+- **Custom Tests**: 765 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -396,6 +418,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Output formats: 39 tests
   - Output-tests runner file discovery: 4 tests
   - Java interop for output formats: 2 tests
+  - Java interop for the core API: 10 tests
 
 - **Official JSON Schema Test Suite**: 4,314 tests
   - ✅ Passing: 4,314 (100%)
