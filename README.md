@@ -24,6 +24,7 @@ Most of the code refactoring were performed by AI agent with supervision and cod
   - [Standard output formats](#standard-output-formats)
   - [Using KtSON from Java](#using-ktson-from-java)
   - [Memory and validator lifecycle](#memory-and-validator-lifecycle)
+  - [Large datasets and streams](#large-datasets-and-streams)
 - [Available Scripts](#available-scripts)
 - [Project Scope](#project-scope)
   - [Supported JSON Schema Versions](#supported-json-schema-versions)
@@ -278,6 +279,31 @@ long-running service should use it:
   memory they may use and when to refresh them are application decisions, made by choosing which
   validators to keep.
 
+### Large datasets and streams
+
+KtSON validates complete JSON values; it does not parse streams. A validator cannot give a verdict on
+an incomplete document, so framing and buffering belong to whatever reads the stream: it collects
+one complete, self-contained unit (a record, a message, a request body) and passes it to KtSON.
+Memory is then bounded by the largest unit, not by the size of the stream.
+
+For newline-delimited JSON, that is one parse and one validation per line:
+
+```kotlin
+val validator = JsonValidator()
+val schema = JsonSchema.fromString(recordSchemaJson)
+
+File("records.ndjson").useLines { lines ->
+    lines.filter { it.isNotBlank() }.forEachIndexed { index, line ->
+        val result = validator.validate(Json.parseToJsonElement(line), schema)
+        if (result.isInvalid) println("record $index: ${result.getErrors()}")
+    }
+}
+```
+
+A `JsonValidator` is thread-safe, so units can be validated in parallel with one shared validator.
+Validation is CPU work: to keep it off an I/O or UI thread, run it on a worker thread or
+`Dispatchers.Default` rather than expecting a non-blocking API from KtSON.
+
 ## Available Scripts
 
 ### Build
@@ -505,7 +531,6 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 - [ ] Annotations in standard output ([#5](https://github.com/rawo/ktson/issues/5))
 - [x] [Arbitrary-precision numbers](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md) — exact comparisons beyond 2^53
 - [x] [No global state](#memory-and-validator-lifecycle): dropping a validator frees its schemas and caches (tested); schema pooling is left to applications
-- [ ] Streaming validation for large datasets
 - [ ] GraalVM native image support
 
 ## Documentation
