@@ -130,6 +130,7 @@ validate()
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
 - **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
 - **OutputFormatTest.kt** - 40 tests for the Flag, Basic and Detailed output formats
+- **ValidatorLifecycleTest.kt** - 2 garbage-collection tests: a dropped validator frees its schema, remote schemas and caches; a live one keeps schemas with `$id` it validated
 - **AbsoluteKeywordLocationTest.kt** - 29 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
 - **JavaOutputUsageTest.kt** - 2 tests running `src/test/java/org/ktson/JavaOutputUsage.java`, a Java caller of the output API
 - **JavaApiUsageTest.kt** - 10 tests running `src/test/java/org/ktson/JavaApiUsage.java`, a Java caller of `JsonSchema`, `JsonValidator` and `JsonPointer`
@@ -192,7 +193,8 @@ for both drafts. Decimal validation costs more than approximate `Double` arithme
 ### 4. Other Notes
 - API is synchronous (migrated from async coroutines)
 - Format validation in assertion mode only
-- Thread-safe (immutable validator, stateless ReferenceResolver)
+- Thread-safe (immutable validator configuration; ReferenceResolver holds concurrent per-validator caches)
+- No global state: every cache is an instance field, so a dropped validator is fully collectible (`ValidatorLifecycleTest`)
 
 ## Development Guidelines
 
@@ -229,6 +231,8 @@ Release notes are generated from the commit log, so commits must follow Conventi
    (`properties/name`, `anyOf/0`). Recursive calls pass the sub-schema's location, so `$ref` hops are
    visible in the result (`/properties/n/$ref/minimum`)
 5. Maintain thread safety (avoid mutable shared state)
+   - Never add mutable state to a companion object, singleton or top-level value: caches must be
+     instance fields so a dropped validator is collectible. `ValidatorLifecycleTest` fails otherwise
 6. Instance paths are RFC 6901 pointers. Use `childOf(path, token)` for properties and array
    indices; the root is `""`. `propertyNames` errors stay at the owning object's location.
    Construct errors with `instanceLocation`, and migrate `copy(path = ...)` to

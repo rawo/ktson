@@ -23,6 +23,7 @@ Most of the code refactoring were performed by AI agent with supervision and cod
   - [Basic Usage](#basic-usage)
   - [Standard output formats](#standard-output-formats)
   - [Using KtSON from Java](#using-ktson-from-java)
+  - [Memory and validator lifecycle](#memory-and-validator-lifecycle)
 - [Available Scripts](#available-scripts)
 - [Project Scope](#project-scope)
   - [Supported JSON Schema Versions](#supported-json-schema-versions)
@@ -258,6 +259,25 @@ Constructor arguments are positional (`enableMetaSchemaValidation`, `formatAsser
 `maxValidationDepth`, `schemaLoader`), so setting a later one means passing the earlier ones too.
 Kotlin objects such as `OutputFormat.Basic` and `ValidationResult.Valid` are reached through `INSTANCE`.
 
+### Memory and validator lifecycle
+
+KtSON keeps no global state: every cache (remote schemas loaded through `schemaLoader`, `$id`
+registrations, compiled patterns, numeric limits) belongs to one `JsonValidator`. That shapes how a
+long-running service should use it:
+
+- **Dropping a validator frees everything it built.** Once a `JsonValidator` is unreachable, its
+  caches, the schemas it validated and the remote schemas it loaded can all be garbage-collected
+  (`ValidatorLifecycleTest` checks this). A service holding one validator per schema can retire a
+  schema by dropping its validator.
+- **A live validator keeps what it has seen.** Its caches grow with the schemas it validates and
+  are not evicted, so reuse the parsed `JsonSchema` (or the validator) rather than parsing the same
+  schema again for every call through one shared validator.
+- **Remote schemas are loaded once per validator.** To pick up a changed remote schema, create a new
+  validator.
+- **Pooling is up to the application.** KtSON has no schema pool: how many schemas to keep, how much
+  memory they may use and when to refresh them are application decisions, made by choosing which
+  validators to keep.
+
 ## Available Scripts
 
 ### Build
@@ -416,7 +436,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 795 tests (100% passing)
+- **Custom Tests**: 797 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -428,6 +448,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Instance locations, legacy access and JSON Pointer resolution: 117 tests
   - Output formats: 40 tests
   - Absolute keyword locations: 29 tests
+  - Validator lifecycle (garbage collection): 2 tests
   - Output-tests runner file discovery: 4 tests
   - Java interop for output formats: 2 tests
   - Java interop for the core API: 10 tests
@@ -483,7 +504,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 - [x] `absoluteKeywordLocation` in errors and standard output
 - [ ] Annotations in standard output ([#5](https://github.com/rawo/ktson/issues/5))
 - [x] [Arbitrary-precision numbers](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md) — exact comparisons beyond 2^53
-- [ ] Schema caching improvements
+- [x] [No global state](#memory-and-validator-lifecycle): dropping a validator frees its schemas and caches (tested); schema pooling is left to applications
 - [ ] Streaming validation for large datasets
 - [ ] GraalVM native image support
 
