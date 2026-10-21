@@ -57,7 +57,7 @@ Most of the code refactoring were performed by AI agent with supervision and cod
 ## Tech Stack
 
 **Core**
-- **Language**: Kotlin 2.2.20
+- **Language**: Kotlin 2.4.0
 - **JVM**: Java 21
 - **Build Tool**: Gradle 9.1.0
 

@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   against 3.1 that calls `ValidationError.copy(...)`, `BasicUnit.copy(...)` or
   `DetailedOutput.copy(...)` must be recompiled.
 
+### Changed
+- `kotlinx-coroutines-core` is no longer a runtime dependency. Nothing in KtSON's API used it since
+  the move to a synchronous API; the published POM now lists only `kotlinx-serialization-json`
+  (and the Kotlin standard library). Projects that used coroutines without declaring them must now
+  add the dependency themselves.
+
 ## [3.1.0] - 2026-10-21
 
 Additive release: no breaking changes and no changed verdicts.

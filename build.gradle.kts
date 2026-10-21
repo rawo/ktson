@@ -13,14 +13,13 @@ repositories {
 }
 
 dependencies {
-    // Kotlin coroutines for suspend functions
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-
     // JSON serialization
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 
     // Testing
     testImplementation(kotlin("test"))
+    // Coroutines are used only by the tests (Kotest); the validator API is synchronous
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     testImplementation("io.kotest:kotest-runner-junit5:5.7.2")
     testImplementation("io.kotest:kotest-assertions-core:5.7.2")
