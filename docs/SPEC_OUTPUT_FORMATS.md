@@ -1,7 +1,8 @@
 # Spec: standard JSON Schema output formats
 
-**Status**: `Flag`, `Basic` and `Detailed` implemented in 3.1.0; annotations and
-`absoluteKeywordLocation` deferred (see [Deferred](#deferred)); `Verbose` dropped (see [Dropped](#dropped))
+**Status**: `Flag`, `Basic` and `Detailed` implemented in 3.1.0; `absoluteKeywordLocation`
+implemented, unreleased (see [absoluteKeywordLocation](#absolutekeywordlocation)); annotations
+deferred (see [Deferred](#deferred)); `Verbose` dropped (see [Dropped](#dropped))
 **Depends on**: [SPEC_INSTANCE_LOCATION.md](SPEC_INSTANCE_LOCATION.md) (implemented in 3.0.0)
 
 ## Motivation
@@ -26,9 +27,10 @@ ValidationError(
 )
 ```
 
-Against the spec's output unit, KtSON has `keywordLocation`, `error` and `instanceLocation`,
-and has no `absoluteKeywordLocation` (the URI of the schema resource plus fragment,
-which matters once `$ref` crosses into another document).
+Against the spec's output unit, KtSON had `keywordLocation`, `error` and `instanceLocation`,
+but no `absoluteKeywordLocation` (the URI of the schema resource plus fragment, which matters once
+`$ref` crosses into another document). That was added after 3.1.0; see
+[absoluteKeywordLocation](#absolutekeywordlocation).
 
 Only `allOf`, `anyOf` and `oneOf` nest errors through `causes`; every other keyword reports a flat
 leaf carrying its own keyword location. Every error the validator constructs sets `schemaPath`,
@@ -39,8 +41,8 @@ including depth-limit errors; it can only be `null` on a hand-built `ValidationE
 `Flag`, `Basic` and `Detailed`, implemented as a pure mapping over `ValidationResult`. The
 validation path does not change, so callers who never ask for output pay nothing.
 
-`absoluteKeywordLocation` is not a field of any output type in this round: it is added with its
-implementation (see [Deferred](#deferred)).
+`absoluteKeywordLocation` was not a field of any output type in 3.1.0; it was added afterwards
+with its implementation (see [absoluteKeywordLocation](#absolutekeywordlocation)).
 
 ## Design
 
@@ -78,6 +80,7 @@ data class BasicUnit(                             // a flat list entry: never ne
     val keywordLocation: String,
     val instanceLocation: String,
     val error: String,
+    val absoluteKeywordLocation: String? = null,  // added after 3.1.0
 )
 
 @Serializable
@@ -87,6 +90,7 @@ data class DetailedOutput(                        // a node of the failure tree
     val instanceLocation: String,
     val error: String? = null,                    // null on an uncollapsed root
     val errors: List<DetailedOutput>? = null,     // null on leaves and when valid
+    val absoluteKeywordLocation: String? = null,  // added after 3.1.0
 ) : ValidationOutput
 
 /** No VERBOSE: see Dropped. A later format is added together with its output type and implementation. */
@@ -161,25 +165,46 @@ Decisions:
   them, but the output schema's `outputUnit` definition requires `keywordLocation` and
   `instanceLocation`, so including them is the stricter reading.
 
-## Known limitation: `absoluteKeywordLocation`
+## absoluteKeywordLocation
 
 2020-12 §12.3.3 allows `absoluteKeywordLocation` to be omitted only if the dynamic scope did not
 pass over a reference, or if the schema declares no absolute URI as its `$id`. The official output
 schema likewise requires it for any unit whose `keywordLocation` contains `/$ref/` or
-`/$dynamicRef/`.
+`/$dynamicRef/`. 3.1.0 always omitted it; it is now produced.
 
-This round always omits it, so every unit reached through `$ref`, `$dynamicRef` or `$recursiveRef`
-is not fully compliant: against the output schema whatever the `$id`, and against §12.3.3 when the
-schema has an absolute `$id`. The KDoc and README say so. (The official output schema
-does not catch this in practice: its root `anyOf` admits any object with a boolean `valid` through
-the `flag` branch.)
+**Value.** The canonical URI of the schema resource holding the failing keyword, `#`, and a JSON
+Pointer within that resource: `https://example.com/root#/$defs/p/minimum` where `keywordLocation`
+is `/properties/n/$ref/minimum`. The resource URI is the absolute `$id` of the innermost resource;
+for the root without one, `JsonSchema.baseUri`. Anchors and `$id`-identified targets are reported as
+JSON Pointers, as §12.3.3 requires.
+
+**Where it lives.** `ValidationError.absoluteKeywordLocation`, copied to `BasicUnit` and
+`DetailedOutput` (omitted when null). `ValidationError` keeps a secondary five-argument constructor;
+the data-class `copy()` signatures change, so callers compiled against 3.1 must recompile.
+
+**How it is filled** (`AbsoluteLocations.kt`). The evaluation path and the absolute location agree
+until the first reference hop. After each `$ref` / `$dynamicRef` / `$recursiveRef` hop, `stamp()`
+finds the hop's target by identity in its resource (an iterative depth-first search that switches
+resource at each nested `$id`) and stamps the errors the hop produced, including their `causes`,
+with the target's location plus the rest of their evaluation path. Errors a deeper hop already
+stamped are kept, so the innermost hop wins. `finish()` in `validateInternal()` stamps the rest
+against the root URI.
+
+**Cost.** Stamping runs only when a hop produced errors, so valid instances pay nothing; the
+search runs once per failing hop.
+
+**Never wrong, never failing.** Where the target cannot be located, or a remaining path still
+crosses an unlocated hop, the field stays null rather than wrong. An unparsable URI (the suite's
+URN `$id` cases exposed one) counts as not absolute instead of throwing.
+
+**Tests.** `AbsoluteKeywordLocationTest` (local `$ref`, `$anchor`, relative `$id`, remote refs via
+`schemaLoader`, reference chains, combiner causes, unresolvable refs, `$dynamicRef`, `$recursiveRef`,
+URN `$id`, `baseUri`, and omission without an absolute URI); `OfficialOutputTestRunner` checks KtSON's
+Basic output for a `$ref` schema against the official output schema's `basic` definition, and the
+suite's `type` and `escape` output tests now compare the exact value.
 
 ## Deferred
 
-- **`absoluteKeywordLocation`.** `ReferenceResolver` already tracks absolute URIs per schema element
-  (`schemaAbsoluteUris`, `registerAbsoluteUri`) for relative `$id` resolution. Threading the resource
-  URI alongside the keyword location — as `validateElement` already threads `resourceRoot` — and
-  adding it to `ValidationError` is enough. It touches the recursive validation path.
 - **Annotations** (`annotation`/`annotations` in output units). KtSON does not collect annotations;
   the suite's `readOnly` output test depends on them. Tracked in
   [#5](https://github.com/rawo/ktson/issues/5).

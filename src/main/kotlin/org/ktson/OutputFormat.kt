@@ -13,10 +13,8 @@ import kotlinx.serialization.json.Json
  * Everything about the standard output lives in this file, so that a later revision of the output
  * section (the next draft reworks it) is a local change. See docs/SPEC_OUTPUT_FORMATS.md.
  *
- * Known limitation: absoluteKeywordLocation is never produced, so units reached through $ref,
- * $dynamicRef or $recursiveRef are not fully compliant. The official output schema requires it for
- * any unit whose keywordLocation passes through $ref or $dynamicRef, whatever the $id; 2020-12
- * §12.3.3 requires it whenever evaluation passed through a reference in a schema with an absolute $id.
+ * absoluteKeywordLocation comes from ValidationError (filled by AbsoluteLocations during validation)
+ * and is omitted when the schema has no absolute URI, which 2020-12 §12.3.3 allows.
  */
 
 /**

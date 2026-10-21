@@ -223,6 +223,11 @@ println(basic.toJson())
 - Serialise with `toJson()`. Encoding through the `ValidationOutput` interface would add a type
   discriminator that is not part of the standard.
 - `error` texts are KtSON's messages, which the standard does not fix; do not match on them.
+- Each failing unit carries `absoluteKeywordLocation`: the canonical URI of the schema resource
+  holding the keyword plus a JSON Pointer within it, following `$ref`, `$dynamicRef` and
+  `$recursiveRef` (`https://example.com/root#/$defs/p/minimum` where `keywordLocation` is
+  `/properties/n/$ref/minimum`). It needs an absolute `$id` or `JsonSchema.fromString(json, version,
+  baseUri)`; without either it is omitted. The same value is on `ValidationError.absoluteKeywordLocation`.
 - There is no `Verbose` format: the next output-format draft removes it.
 
 From Java, pass the token's `INSTANCE`; the conversion lives on `ValidationOutputs`:
@@ -337,12 +342,9 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
      versions. Exotic code points may be misjudged; everyday names are not affected.
 
 3. **Output Formats**
-   - `absoluteKeywordLocation` is never produced, so output units reached through `$ref`,
-     `$dynamicRef` or `$recursiveRef` are not fully compliant. The official output schema requires it
-     for any unit whose `keywordLocation` passes through `$ref` or `$dynamicRef`, whatever the `$id`;
-     JSON Schema 2020-12 §12.3.3 requires it whenever evaluation passed through a reference in a
-     schema with an absolute `$id`.
    - No annotations in output ([#5](https://github.com/rawo/ktson/issues/5)).
+   - `absoluteKeywordLocation` is omitted when the schema has neither an absolute `$id` nor a base
+     URI, as JSON Schema 2020-12 §12.3.3 allows.
 
 ## Upgrading from 3.0.0
 
@@ -414,7 +416,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 765 tests (100% passing)
+- **Custom Tests**: 795 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -424,7 +426,8 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Error messages: 32 tests
   - Numeric precision and concurrent numeric validation: 88 tests
   - Instance locations, legacy access and JSON Pointer resolution: 117 tests
-  - Output formats: 39 tests
+  - Output formats: 40 tests
+  - Absolute keyword locations: 29 tests
   - Output-tests runner file discovery: 4 tests
   - Java interop for output formats: 2 tests
   - Java interop for the core API: 10 tests
@@ -435,7 +438,8 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Includes the `optional/format` files and `optional/bignum.json` for both drafts; `vocabulary.json`,
     `infinite-loop-detection.json` and the rest of `optional/` are not run yet
 
-- **Official output-tests**: 6 (Basic format, both drafts; `readOnly.json` needs annotations and is not run)
+- **Official output-tests**: 6 (Basic format, both drafts; `readOnly.json` needs annotations and is not run),
+  plus 2 checks of KtSON's Basic output for a `$ref` schema against the official output schema
 
 - **Performance Tests**: 9 tests (100% passing)
   - Tested with schemas up to 50MB
@@ -476,7 +480,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 **Future Enhancements:**
 - [x] [RFC 6901 instance locations](docs/SPEC_INSTANCE_LOCATION.md) in errors (`instanceLocation`, deprecated legacy `path` getter)
 - [x] [Standard output formats](docs/SPEC_OUTPUT_FORMATS.md): flag, basic, detailed
-- [ ] `absoluteKeywordLocation` in standard output
+- [x] `absoluteKeywordLocation` in errors and standard output
 - [ ] Annotations in standard output ([#5](https://github.com/rawo/ktson/issues/5))
 - [x] [Arbitrary-precision numbers](docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md) — exact comparisons beyond 2^53
 - [ ] Schema caching improvements

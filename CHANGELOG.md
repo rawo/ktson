@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `ValidationError.absoluteKeywordLocation` and the same field on `BasicUnit` and `DetailedOutput`:
+  the canonical URI of the schema resource holding the failing keyword plus a JSON Pointer within
+  it (JSON Schema 2020-12 §12.3.3), following `$ref`, `$dynamicRef` and `$recursiveRef`. It comes
+  from the schema's absolute `$id`, else `JsonSchema.baseUri`, and is omitted when neither gives an
+  absolute URI. Basic output for `$ref` schemas now satisfies the official output schema.
+- `ValidationError` keeps its five-argument constructor for Java and compiled callers; code compiled
+  against 3.1 that calls `ValidationError.copy(...)`, `BasicUnit.copy(...)` or
+  `DetailedOutput.copy(...)` must be recompiled.
+
 ## [3.1.0] - 2026-10-21
 
 Additive release: no breaking changes and no changed verdicts.

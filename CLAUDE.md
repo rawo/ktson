@@ -71,7 +71,7 @@ The validator architecture is straightforward with minimal abstractions:
 3. **ValidationResult** (`ValidationError.kt`) - Sealed class result type
    - `Valid` - validation succeeded
    - `Invalid(validationErrors: List<ValidationError>)` - validation failed
-   - Each error contains: instanceLocation (RFC 6901), message, keyword, schemaPath, causes
+   - Each error contains: instanceLocation (RFC 6901), message, keyword, schemaPath, causes, absoluteKeywordLocation
    - `path` is a deprecated computed legacy display string; never use it for navigation
 
 4. **SchemaKeywords** (`SchemaKeywords.kt`) - Constants object
@@ -93,6 +93,11 @@ The validator architecture is straightforward with minimal abstractions:
    - `validate(instance, schema, format)` / `result.toOutput(format)`; a pure mapping over `ValidationResult`
    - Serialise with `toJson()`, never through the `ValidationOutput` interface
    - `@file:JvmName("ValidationOutputs")`: Java calls `ValidationOutputs.toOutput(...)`; renaming it breaks Java callers
+
+9. **AbsoluteLocations** (`AbsoluteLocations.kt`) - Fills `ValidationError.absoluteKeywordLocation`
+   - After each `$ref`/`$dynamicRef`/`$recursiveRef` hop, `stamp()` locates the target in its resource and stamps the hop's new errors; the innermost hop wins
+   - `finish()` in `validateInternal()` stamps the rest against the root URI (absolute `$id`, else `JsonSchema.baseUri`)
+   - Only runs when a hop produced errors; an unknown or unparsable URI leaves the field null, never fails validation
 
 ### Validation Flow
 
@@ -124,10 +129,11 @@ validate()
 - **ErrorMessageTest.kt** - 32 tests for error content (instance path, keyword, keyword location, wording)
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
 - **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
-- **OutputFormatTest.kt** - 39 tests for the Flag, Basic and Detailed output formats
+- **OutputFormatTest.kt** - 40 tests for the Flag, Basic and Detailed output formats
+- **AbsoluteKeywordLocationTest.kt** - 29 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
 - **JavaOutputUsageTest.kt** - 2 tests running `src/test/java/org/ktson/JavaOutputUsage.java`, a Java caller of the output API
 - **JavaApiUsageTest.kt** - 10 tests running `src/test/java/org/ktson/JavaApiUsage.java`, a Java caller of `JsonSchema`, `JsonValidator` and `JsonPointer`
-- **OfficialOutputTestRunner.kt** - Runs the suite's `output-tests` content files against Basic output (skips `readOnly.json`, which needs annotations); fails if a draft has no runnable files
+- **OfficialOutputTestRunner.kt** - Runs the suite's `output-tests` content files against Basic output (skips `readOnly.json`, which needs annotations); fails if a draft has no runnable files; also checks KtSON's Basic output for a `$ref` schema against the output schema's `basic` definition
 - **OutputTestFilesTest.kt** - 4 tests for the runner's file discovery (missing, empty or fully skipped `content/` must fail)
 - **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (draft2019-09 + draft2020-12), including `optional/format`
 - **PerformanceTest.kt** - 9 performance tests, including three numeric benchmarks (excluded from default test run)
@@ -227,6 +233,9 @@ Release notes are generated from the commit log, so commits must follow Conventi
    indices; the root is `""`. `propertyNames` errors stay at the owning object's location.
    Construct errors with `instanceLocation`, and migrate `copy(path = ...)` to
    `copy(instanceLocation = ...)`. `toString()` prints canonical pointers.
+7. A new reference hop (anything that recurses into a resolved target) must call
+   `absoluteLocations.stamp(...)` after its `validateElement` call, as the `$ref`, `$dynamicRef` and
+   `$recursiveRef` hops do; otherwise errors under it get no `absoluteKeywordLocation`
 
 ### Reference Resolution
 - `$ref` resolution uses `ReferenceResolver` in `JsonPointer.kt`
@@ -255,7 +264,7 @@ Release notes are generated from the commit log, so commits must follow Conventi
 ### Documentation
 - `docs/STACK_OVERFLOW_RISK_ANALYSIS.md` - **Read this before production deployment**
 - `docs/SPEC_INSTANCE_LOCATION.md` - implemented in 3.0.0: RFC 6901 instance locations and legacy `path` deprecation
-- `docs/SPEC_OUTPUT_FORMATS.md` - Flag/Basic/Detailed implemented in 3.1.0; annotations and absoluteKeywordLocation deferred; Verbose dropped
+- `docs/SPEC_OUTPUT_FORMATS.md` - Flag/Basic/Detailed implemented in 3.1.0; absoluteKeywordLocation implemented, unreleased; annotations deferred; Verbose dropped
 - `docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md` - implemented: exact numeric comparisons, regression coverage and benchmarks
 - `docs/IMPLEMENTATION_STATUS.md` - Feature completeness tracking
 - `docs/OFFICIAL_TEST_SUITE_RESULTS.md` - Detailed test results (100% pass rate)
