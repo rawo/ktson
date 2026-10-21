@@ -30,4 +30,24 @@ class JavaApiUsageTest :
                 JavaApiUsage.extractId(schemaJson) shouldBe "https://example.com/s"
             }
         }
+
+        describe("JsonValidator from Java") {
+            val emailSchema = """{"format":"email"}"""
+
+            it("new JsonValidator(true, false) switches format assertion off") {
+                JavaApiUsage.isValidWithoutFormatAssertion("\"not-an-email\"", emailSchema) shouldBe true
+                JsonValidator().validate("\"not-an-email\"", emailSchema).isValid shouldBe false
+            }
+
+            it("validate(instanceJson, schemaJson) uses the default version") {
+                JavaApiUsage.isValid("1", """{"type":"string"}""") shouldBe false
+                JavaApiUsage.isValid("\"x\"", """{"type":"string"}""") shouldBe true
+            }
+
+            it("accepts a schemaLoader written as a Java lambda") {
+                val schema = """{"${'$'}ref":"https://example.com/remote"}"""
+                JavaApiUsage.isValidWithLoader("\"x\"", schema, "https://example.com/remote", """{"type":"string"}""") shouldBe true
+                JavaApiUsage.isValidWithLoader("1", schema, "https://example.com/remote", """{"type":"string"}""") shouldBe false
+            }
+        }
     })

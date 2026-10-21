@@ -39,4 +39,20 @@ public final class JavaApiUsage {
     public static String extractId(String schemaJson) {
         return JsonSchema.extractId(parse(schemaJson));
     }
+
+    /** A validator with format assertion switched off, the trailing arguments left at their defaults. */
+    public static boolean isValidWithoutFormatAssertion(String instanceJson, String schemaJson) {
+        return new JsonValidator(true, false).validate(instanceJson, schemaJson).isValid();
+    }
+
+    /** validate(instanceJson, schemaJson) with the schema version left at its default. */
+    public static boolean isValid(String instanceJson, String schemaJson) {
+        return new JsonValidator().validate(instanceJson, schemaJson).isValid();
+    }
+
+    /** A schemaLoader passed as a plain Java lambda that serves one remote schema. */
+    public static boolean isValidWithLoader(String instanceJson, String schemaJson, String remoteUri, String remoteJson) {
+        JsonValidator validator = new JsonValidator(true, true, 500, uri -> uri.equals(remoteUri) ? parse(remoteJson) : null);
+        return validator.validate(instanceJson, schemaJson).isValid();
+    }
 }

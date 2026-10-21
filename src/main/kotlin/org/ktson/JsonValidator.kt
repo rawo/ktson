@@ -79,7 +79,7 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * Main JSON Schema validator with thread-safe synchronous validation
  */
-class JsonValidator(
+class JsonValidator @JvmOverloads constructor(
     private val enableMetaSchemaValidation: Boolean = true,
     // Draft 2020-12 uses annotation by default
     private val formatAssertion: Boolean = true,
@@ -107,6 +107,7 @@ class JsonValidator(
     /**
      * Validates a JSON instance from string against a schema from string
      */
+    @JvmOverloads
     fun validate(instanceJson: String, schemaJson: String, schemaVersion: SchemaVersion = SchemaVersion.DRAFT_2020_12): ValidationResult {
         val instance = Json.parseToJsonElement(instanceJson)
         val schema = JsonSchema.fromString(schemaJson, schemaVersion)
