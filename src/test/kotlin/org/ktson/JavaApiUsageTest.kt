@@ -31,6 +31,18 @@ class JavaApiUsageTest :
             }
         }
 
+        describe("JsonPointer from Java") {
+            it("resolve matches Kotlin") {
+                val document = """{"a/b":[10,20]}"""
+                JavaApiUsage.resolvePointer(document, "/a~1b/1") shouldBe JsonPointer.resolve(Json.parseToJsonElement(document), "/a~1b/1")
+                JavaApiUsage.resolvePointer(document, "/a~1b/1").toString() shouldBe "20"
+            }
+
+            it("encodeToken matches Kotlin") {
+                JavaApiUsage.encodePointerToken("~a/b") shouldBe "~0a~1b"
+            }
+        }
+
         describe("JsonValidator from Java") {
             val emailSchema = """{"format":"email"}"""
 

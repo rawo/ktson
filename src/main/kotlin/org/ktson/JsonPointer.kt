@@ -14,6 +14,7 @@ object JsonPointer {
      * @param pointer The JSON Pointer string (e.g., "/foo/bar/0")
      * @return The element at the pointer location, or null if not found
      */
+    @JvmStatic
     fun resolve(document: JsonElement, pointer: String): JsonElement? {
         if (pointer.isEmpty() || pointer == "#") {
             return document
@@ -61,6 +62,7 @@ object JsonPointer {
     /**
      * Encode a string as a JSON Pointer token
      */
+    @JvmStatic
     fun encodeToken(token: String): String = token
             .replace("~", "~0")
             .replace("/", "~1")

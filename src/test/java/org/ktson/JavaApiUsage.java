@@ -50,6 +50,16 @@ public final class JavaApiUsage {
         return new JsonValidator().validate(instanceJson, schemaJson).isValid();
     }
 
+    /** JsonPointer.resolve without going through INSTANCE. */
+    public static JsonElement resolvePointer(String documentJson, String pointer) {
+        return JsonPointer.resolve(parse(documentJson), pointer);
+    }
+
+    /** JsonPointer.encodeToken without going through INSTANCE. */
+    public static String encodePointerToken(String token) {
+        return JsonPointer.encodeToken(token);
+    }
+
     /** A schemaLoader passed as a plain Java lambda that serves one remote schema. */
     public static boolean isValidWithLoader(String instanceJson, String schemaJson, String remoteUri, String remoteJson) {
         JsonValidator validator = new JsonValidator(true, true, 500, uri -> uri.equals(remoteUri) ? parse(remoteJson) : null);
