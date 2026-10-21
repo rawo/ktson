@@ -10,7 +10,23 @@ data class ValidationError(
     val keyword: String? = null,
     val schemaPath: String? = null,
     val causes: List<ValidationError> = emptyList(),
+    /**
+     * Canonical URI of the schema resource holding the failing keyword, plus a JSON Pointer within
+     * that resource, e.g. `https://example.com/root#/$defs/p/minimum` (JSON Schema 2020-12 §12.3.3).
+     * Unlike [schemaPath], it follows `$ref`, `$dynamicRef` and `$recursiveRef` to where the keyword
+     * is written. Null when the schema has no absolute URI (no absolute `$id` and no base URI).
+     */
+    val absoluteKeywordLocation: String? = null,
 ) {
+    /** The constructor before [absoluteKeywordLocation] was added, kept for Java and compiled callers. */
+    constructor(
+        instanceLocation: String,
+        message: String,
+        keyword: String?,
+        schemaPath: String?,
+        causes: List<ValidationError>,
+    ) : this(instanceLocation, message, keyword, schemaPath, causes, null)
+
     /**
      * Legacy dotted/bracket notation. This projection is ambiguous for numeric object keys,
      * empty keys, and keys containing dots or brackets. Use [instanceLocation] for navigation.

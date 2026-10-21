@@ -87,6 +87,7 @@ class JsonValidator @JvmOverloads constructor(
     private val schemaLoader: ((String) -> JsonElement?)? = null,
 ) {
     private val referenceResolver = ReferenceResolver(schemaLoader)
+    private val absoluteLocations = AbsoluteLocations(referenceResolver)
     private val patternCache = ConcurrentHashMap<String, Regex>()
     private val numericLimitCache = ConcurrentHashMap<String, BigDecimal>()
 
@@ -143,7 +144,7 @@ class JsonValidator @JvmOverloads constructor(
         return if (errors.isEmpty()) {
             ValidationResult.Valid
         } else {
-            ValidationResult.Invalid(errors)
+            ValidationResult.Invalid(absoluteLocations.finish(errors, schema))
         }
     }
 
@@ -256,7 +257,9 @@ class JsonValidator @JvmOverloads constructor(
                             } else {
                                 effectiveScope
                             }
+                        val before = errors.size
                         validateElement(instance, resolvedSchema, path, at(schemaPath, REF), errors, version, rootSchema, depth + 1, newResourceRoot, refScope)
+                        absoluteLocations.stamp(errors, before, at(schemaPath, REF), resolvedSchema, listOf(newResourceRoot, effectiveResourceRoot) + refScope.asReversed() + rootSchema, rootSchema)
                     } else {
                         errors.add(ValidationError(path, "Could not resolve reference: $ref", REF, at(schemaPath, REF)))
                     }
@@ -275,7 +278,9 @@ class JsonValidator @JvmOverloads constructor(
                         } else {
                             resolved
                         }
+                        val before = errors.size
                         validateElement(instance, target, path, at(schemaPath, RECURSIVE_REF), errors, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope)
+                        absoluteLocations.stamp(errors, before, at(schemaPath, RECURSIVE_REF), target, listOf(effectiveResourceRoot) + effectiveScope.asReversed() + rootSchema, rootSchema)
                     } else {
                         errors.add(ValidationError(path, "Could not resolve recursive reference: $recursiveRef", RECURSIVE_REF, at(schemaPath, RECURSIVE_REF)))
                     }
@@ -309,7 +314,9 @@ class JsonValidator @JvmOverloads constructor(
                             } else {
                                 initialTarget
                             }
+                        val before = errors.size
                         validateElement(instance, target, path, at(schemaPath, DYNAMIC_REF), errors, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope)
+                        absoluteLocations.stamp(errors, before, at(schemaPath, DYNAMIC_REF), target, listOf(effectiveResourceRoot) + effectiveScope.asReversed() + rootSchema, rootSchema)
                     } else {
                         errors.add(ValidationError(path, "Could not resolve dynamic reference: $dynamicRef", DYNAMIC_REF, at(schemaPath, DYNAMIC_REF)))
                     }
