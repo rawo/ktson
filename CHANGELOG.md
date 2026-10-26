@@ -17,6 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   against 3.1 that calls `ValidationError.copy(...)`, `BasicUnit.copy(...)` or
   `DetailedOutput.copy(...)` must be recompiled.
 
+### Fixed
+- **Breaking verdict changes** (bug fixes that turn wrongly rejected instances valid):
+  - `unevaluatedProperties` / `unevaluatedItems` no longer reject properties and items evaluated by a
+    subschema reached through a URI-based `$ref` that uses local refs of its own resource (#6).
+  - References to anchors declared beside a property named `$id` now resolve (#7).
+  - References whose fragment percent-encodes non-ASCII characters (`#/$defs/%C3%A9`) now resolve (#8).
+  - References inside loaded documents with nested relative `$id` resolve the same way on every
+    validation; before, each search re-registered the resource one directory deeper (#15).
+- **Breaking loader change:** relative `$ref`s now resolve against `JsonSchema.baseUri` (and a relative
+  root `$id` against it), so with a `baseUri` set `schemaLoader` receives the absolute URI
+  (`https://ex.com/schemas/other.json`, not `other.json`), and schemas with different base URIs no
+  longer share one cached document (#9).
+- A schema with a property named `$id`, `$anchor` or `$dynamicAnchor` no longer makes `validate()` throw (#7).
+- `absoluteKeywordLocation` is filled under subresources whose `$id` is relative to `baseUri` (#10).
+
 ### Changed
 - `kotlinx-coroutines-core` is no longer a runtime dependency. Nothing in KtSON's API used it since
   the move to a synchronous API; the published POM now lists only `kotlinx-serialization-json`

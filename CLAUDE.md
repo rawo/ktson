@@ -116,7 +116,7 @@ validate()
       → Validates conditionals (if/then/else) → recursive
 ```
 
-**CRITICAL**: `validateElement()` has **32 recursive call sites** (plus one entry point from `validateInternal()`). See "Known Limitations" below.
+**CRITICAL**: `validateElement()` has **30 recursive call sites** (plus one entry point from `validateInternal()`). See "Known Limitations" below.
 
 ### Test Structure
 
@@ -131,7 +131,10 @@ validate()
 - **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
 - **OutputFormatTest.kt** - 40 tests for the Flag, Basic and Detailed output formats
 - **ValidatorLifecycleTest.kt** - 2 garbage-collection tests: a dropped validator frees its schema, remote schemas and caches; a live one keeps schemas with `$id` it validated
-- **AbsoluteKeywordLocationTest.kt** - 29 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
+- **ReferenceResolutionTest.kt** - 26 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
+- **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
+- **UnevaluatedAcrossResourcesTest.kt** - 6 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated
+- **AbsoluteKeywordLocationTest.kt** - 31 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
 - **JavaOutputUsageTest.kt** - 2 tests running `src/test/java/org/ktson/JavaOutputUsage.java`, a Java caller of the output API
 - **JavaApiUsageTest.kt** - 10 tests running `src/test/java/org/ktson/JavaApiUsage.java`, a Java caller of `JsonSchema`, `JsonValidator` and `JsonPointer`
 - **OfficialOutputTestRunner.kt** - Runs the suite's `output-tests` content files against Basic output (skips `readOnly.json`, which needs annotations); fails if a draft has no runnable files; also checks KtSON's Basic output for a `$ref` schema against the output schema's `basic` definition
@@ -226,7 +229,7 @@ Release notes are generated from the commit log, so commits must follow Conventi
 4. Thread safety is critical - use `EdgeCaseAndThreadSafetyTest` as reference
 
 ### When Modifying Validation Logic
-1. Changes to `validateElement()` affect 32 recursive call sites
+1. Changes to `validateElement()` affect 30 recursive call sites
 2. Test against both Draft 2019-09 and 2020-12 test suites
 3. Consider stack depth implications for recursive changes
 4. Pass the keyword location on every error: `ValidationError(path, msg, KEYWORD, at(schemaPath, KEYWORD))`.
@@ -240,9 +243,11 @@ Release notes are generated from the commit log, so commits must follow Conventi
    indices; the root is `""`. `propertyNames` errors stay at the owning object's location.
    Construct errors with `instanceLocation`, and migrate `copy(path = ...)` to
    `copy(instanceLocation = ...)`. `toString()` prints canonical pointers.
-7. A new reference hop (anything that recurses into a resolved target) must call
-   `absoluteLocations.stamp(...)` after its `validateElement` call, as the `$ref`, `$dynamicRef` and
-   `$recursiveRef` hops do; otherwise errors under it get no `absoluteKeywordLocation`
+7. Reference keywords (`$ref`, `$recursiveRef`, `$dynamicRef`) are resolved only in `resolveReferences()`,
+   which returns each hop's target, resource root and dynamic scope. `validateElement()` and both
+   `collectEvaluated*()` functions use it, so validation and `unevaluated*` always agree on where a
+   reference leads, and `validateElement()` stamps `absoluteKeywordLocation` for every hop. A new
+   reference keyword goes into `resolveReferences()`, never into a copy
 
 ### Reference Resolution
 - `$ref` resolution uses `ReferenceResolver` in `JsonPointer.kt`
@@ -251,7 +256,10 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - Schema cache: `ConcurrentHashMap<String, JsonElement>` keyed by absolute URI
 - Absolute URI tracking: `IdentityHashMap<JsonElement, String>` for schemas with relative `$id`
 - `resourceRoot` passed through recursive calls so fragment refs resolve in the correct document
-- When adding new ref types, update `ReferenceResolver` in `JsonPointer.kt`
+- When adding new ref types, update `ReferenceResolver` in `JsonPointer.kt` and `resolveReferences()` in `JsonValidator.kt`
+- The root's absolute base (`JsonSchema.absoluteBaseUri()`: absolute `$id`, else `$id` resolved against `baseUri`, else `baseUri`) is registered before validation, so `schemaLoader` receives absolute URIs
+- `$id` registrations only improve: an absolute URI is never replaced by a relative one, and a registered resource is not re-resolved (its relative `$id` would otherwise nest again)
+- `$id`, `$anchor` and `$dynamicAnchor` count only when their value is a string (`stringKeyword()`): a property may be named `$id`
 
 ### Format Validation
 - Format validation controlled by `formatAssertion` constructor parameter (default: true)
