@@ -114,7 +114,7 @@ class ReferenceResolver(
     internal fun getAbsoluteUri(schema: JsonElement): String {
         schemaAbsoluteUris[schema]?.let { return it }
         loadedSchemaUris[schema]?.let { return it }
-        val rawId = (schema as? JsonObject)?.get(SchemaKeywords.ID)?.jsonPrimitive?.contentOrNull ?: ""
+        val rawId = (schema as? JsonObject)?.stringKeyword(SchemaKeywords.ID) ?: ""
         return if (rawId.isNotEmpty() && UriResolver.isAbsoluteUri(rawId)) rawId else ""
     }
 
@@ -277,9 +277,9 @@ class ReferenceResolver(
         isRoot: Boolean = true,
     ): JsonElement? {
         if (schema !is JsonObject) return null
-        if (!isRoot && schema.containsKey(SchemaKeywords.ID)) return null
-        val schemaAnchor = schema[SchemaKeywords.ANCHOR]?.jsonPrimitive?.contentOrNull
-        val schemaDynamicAnchor = schema[SchemaKeywords.DYNAMIC_ANCHOR]?.jsonPrimitive?.contentOrNull
+        if (!isRoot && schema.stringKeyword(SchemaKeywords.ID) != null) return null
+        val schemaAnchor = schema.stringKeyword(SchemaKeywords.ANCHOR)
+        val schemaDynamicAnchor = schema.stringKeyword(SchemaKeywords.DYNAMIC_ANCHOR)
         if (schemaAnchor == anchorName || schemaDynamicAnchor == anchorName) return schema
         return schema.values.firstNotNullOfOrNull { value ->
             when (value) {
@@ -301,8 +301,8 @@ class ReferenceResolver(
         isRoot: Boolean = true,
     ): JsonElement? {
         if (schema !is JsonObject) return null
-        if (!isRoot && schema.containsKey(SchemaKeywords.ID)) return null
-        if (schema[SchemaKeywords.DYNAMIC_ANCHOR]?.jsonPrimitive?.contentOrNull == anchorName) return schema
+        if (!isRoot && schema.stringKeyword(SchemaKeywords.ID) != null) return null
+        if (schema.stringKeyword(SchemaKeywords.DYNAMIC_ANCHOR) == anchorName) return schema
         return schema.values.firstNotNullOfOrNull { value ->
             when (value) {
                 is JsonObject -> findDynamicAnchorInResource(value, anchorName, false)
@@ -322,7 +322,7 @@ class ReferenceResolver(
         rootSchema: JsonElement,
         targetUri: String,
     ): JsonElement? {
-        val rootId = (rootSchema as? JsonObject)?.get(SchemaKeywords.ID)?.jsonPrimitive?.contentOrNull ?: ""
+        val rootId = (rootSchema as? JsonObject)?.stringKeyword(SchemaKeywords.ID) ?: ""
         val resolvedTarget =
             if (rootId.isNotEmpty()) {
                 try {
@@ -343,7 +343,7 @@ class ReferenceResolver(
         baseUri: String,
     ): JsonElement? {
         if (element !is JsonObject) return null
-        val id = element[SchemaKeywords.ID]?.jsonPrimitive?.contentOrNull
+        val id = element.stringKeyword(SchemaKeywords.ID)
         val currentUri =
             if (id != null) {
                 val resolved =
@@ -379,3 +379,10 @@ class ReferenceResolver(
         resourceRoot: JsonElement,
     ): JsonElement? = findSchemaByUri(rootSchema, uriPart) ?: resolveExternalRef(resourceRoot, uriPart)
 }
+
+/**
+ * The string value of [keyword] (`$id`, `$anchor`, `$dynamicAnchor`), or null. Searches walk every
+ * object, including `properties` maps, where a key like "$id" names a property whose value is a
+ * schema: such a value is not an identifier and must neither throw nor count as one.
+ */
+internal fun JsonObject.stringKeyword(keyword: String): String? = (this[keyword] as? JsonPrimitive)?.takeIf { it.isString }?.content
