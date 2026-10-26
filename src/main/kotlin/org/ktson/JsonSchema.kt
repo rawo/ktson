@@ -36,6 +36,18 @@ data class JsonSchema @JvmOverloads constructor(
      */
     val effectiveBaseUri: String = id ?: baseUri
 
+    /**
+     * The absolute URI that relative references in this schema resolve against: an absolute `$id`,
+     * else `$id` resolved against [baseUri], else [baseUri]; without fragment. Null when none of
+     * them is an absolute URI.
+     */
+    internal fun absoluteBaseUri(): String? {
+        fun absolute(uri: String?): String? = uri?.substringBefore('#')?.takeIf { it.isNotEmpty() && runCatching { UriResolver.isAbsoluteUri(it) }.getOrDefault(false) }
+        val base = absolute(baseUri)
+        val rawId = id ?: return base
+        return absolute(rawId) ?: base?.let { absolute(runCatching { UriResolver.resolveUri(it, rawId) }.getOrNull()) }
+    }
+
     companion object {
         /**
          * Parse a JSON schema from a string

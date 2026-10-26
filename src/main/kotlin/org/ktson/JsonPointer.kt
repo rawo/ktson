@@ -102,7 +102,11 @@ class ReferenceResolver(
         schema: JsonElement,
         absoluteUri: String,
     ) {
-        if (absoluteUri.isNotEmpty()) schemaAbsoluteUris[schema] = absoluteUri
+        if (absoluteUri.isEmpty()) return
+        // Never downgrade: a later search that only knows a relative $id must not replace the absolute
+        // URI registered for the same schema (that made resolution depend on evaluation order).
+        val replacesAbsolute = schemaAbsoluteUris[schema]?.let { isAbsolute(it) } == true
+        if (!replacesAbsolute || isAbsolute(absoluteUri)) schemaAbsoluteUris[schema] = absoluteUri
     }
 
     /**
@@ -111,6 +115,10 @@ class ReferenceResolver(
      *  2. Checks the [loadedSchemaUris] map (handles schemas without $id loaded externally)
      *  3. Falls back to the raw $id if it is already absolute
      */
+
+    /** Whether [schema] already has an absolute URI registered (see [registerAbsoluteUri]). */
+    internal fun hasAbsoluteUri(schema: JsonElement): Boolean = schemaAbsoluteUris[schema]?.let { isAbsolute(it) } == true
+
     internal fun getAbsoluteUri(schema: JsonElement): String {
         schemaAbsoluteUris[schema]?.let { return it }
         loadedSchemaUris[schema]?.let { return it }
@@ -325,7 +333,8 @@ class ReferenceResolver(
         rootSchema: JsonElement,
         targetUri: String,
     ): JsonElement? {
-        val rootId = (rootSchema as? JsonObject)?.stringKeyword(SchemaKeywords.ID) ?: ""
+        // Start from the root's registered absolute URI (it may come from JsonSchema.baseUri), not its raw $id.
+        val rootId = getAbsoluteUri(rootSchema).ifEmpty { (rootSchema as? JsonObject)?.stringKeyword(SchemaKeywords.ID) ?: "" }
         val resolvedTarget =
             if (rootId.isNotEmpty()) {
                 try {
@@ -348,18 +357,22 @@ class ReferenceResolver(
         if (element !is JsonObject) return null
         val id = element.stringKeyword(SchemaKeywords.ID)
         val currentUri =
-            if (id != null) {
-                val resolved =
-                    try {
-                        UriResolver.resolveUri(baseUri, id)
-                    } catch (_: Exception) {
-                        id
-                    }
-                // Register the resolved absolute URI so relative $refs within this sub-schema work
-                registerAbsoluteUri(element, resolved)
-                resolved
-            } else {
-                baseUri
+            when {
+                id == null -> baseUri
+                // Already known: use it. A search that starts at a resource gets that resource's own
+                // URI as baseUri, so resolving its relative $id again would nest it once per search.
+                hasAbsoluteUri(element) -> getAbsoluteUri(element)
+                else -> {
+                    val resolved =
+                        try {
+                            UriResolver.resolveUri(baseUri, id)
+                        } catch (_: Exception) {
+                            id
+                        }
+                    // Register the resolved absolute URI so relative $refs within this sub-schema work
+                    registerAbsoluteUri(element, resolved)
+                    resolved
+                }
             }
         if (id != null && (currentUri == resolvedTarget || id == originalTarget)) return element
         return element.values.firstNotNullOfOrNull { value ->
@@ -391,3 +404,5 @@ class ReferenceResolver(
 internal fun JsonObject.stringKeyword(keyword: String): String? = (this[keyword] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
 private fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
+
+private fun isAbsolute(uri: String): Boolean = runCatching { UriResolver.isAbsoluteUri(uri) }.getOrDefault(false)

@@ -89,6 +89,12 @@ class AbsoluteKeywordLocationTest :
                         listOf("/\$ref/minimum" to "https://example.com/base#/\$defs/p/minimum")
                 }
 
+                it("resolves a subresource's relative \$id against JsonSchema.baseUri") {
+                    val schema = """{"${'$'}defs":{"a":{"${'$'}id":"a.json","minimum":5}},"${'$'}ref":"a.json"}"""
+                    locations(validate(schema, "1", version, baseUri = "https://ex.com/schemas/")) shouldBe
+                        listOf("/\$ref/minimum" to "https://ex.com/schemas/a.json#/minimum")
+                }
+
                 it("omits it when the schema has no absolute URI") {
                     val schema = """{"${'$'}ref":"#/${'$'}defs/p","${'$'}defs":{"p":{"minimum":0}}}"""
                     locations(validate(schema, "-1", version)) shouldBe listOf("/\$ref/minimum" to null)

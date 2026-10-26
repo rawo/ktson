@@ -139,6 +139,8 @@ class JsonValidator @JvmOverloads constructor(
      */
     private fun validateInternal(instance: JsonElement, schema: JsonSchema, path: String): ValidationResult {
         val errors = mutableListOf<ValidationError>()
+        // Relative references resolve against the root's absolute base, which may come from JsonSchema.baseUri.
+        schema.absoluteBaseUri()?.let { referenceResolver.registerAbsoluteUri(schema.schema, it) }
         validateElement(instance, schema.schema, path, "", errors, schema.effectiveVersion, schema.schema, depth = 0, resourceRoot = schema.schema, dynamicScope = emptyList())
 
         return if (errors.isEmpty()) {
@@ -200,7 +202,10 @@ class JsonValidator @JvmOverloads constructor(
         // resolve subsequent relative $refs correctly (e.g. base URI change, nested remote refs).
         if (schemaElement is JsonObject && schemaElement.containsKey(SchemaKeywords.ID)) {
             val rawId = schemaElement[SchemaKeywords.ID]?.jsonPrimitive?.contentOrNull ?: ""
-            if (rawId.isNotEmpty()) {
+            // A resource's absolute URI is fixed by where it sits in its document. Once registered, keep
+            // it: re-resolving its relative $id against itself (it can be its own resourceRoot) would
+            // nest it again, e.g. "nested/n.json" -> ".../nested/nested/n.json".
+            if (rawId.isNotEmpty() && !referenceResolver.hasAbsoluteUri(schemaElement)) {
                 val parentUri = referenceResolver.getAbsoluteUri(resourceRoot)
                 val absoluteId =
                     if (parentUri.isNotEmpty()) {

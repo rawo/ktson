@@ -50,7 +50,7 @@ internal class AbsoluteLocations(private val referenceResolver: ReferenceResolve
 
     /** Completes every location in [errors] against the root schema's absolute URI, or clears it when there is none. */
     fun finish(errors: List<ValidationError>, schema: JsonSchema): List<ValidationError> {
-        val rootUri = rootUri(schema)
+        val rootUri = schema.absoluteBaseUri()
         return errors.map { it.finished(rootUri) }
     }
 
@@ -77,18 +77,6 @@ internal class AbsoluteLocations(private val referenceResolver: ReferenceResolve
      * location of such an error depends on a hop that could not be located, so it must stay unknown.
      */
     private fun crossesReference(path: String): Boolean = path.split('/').dropLast(1).any { it in REFERENCE_KEYWORDS }
-
-    /** The root schema's absolute URI: its `$id` (resolved against the base URI if relative), else the base URI. */
-    private fun rootUri(schema: JsonSchema): String? {
-        val base = schema.baseUri.substringBefore('#').takeIf { isAbsolute(it) }
-        val id = schema.id ?: return base
-        val resolved = when {
-            isAbsolute(id) -> id
-            base != null -> runCatching { UriResolver.resolveUri(base, id) }.getOrNull()
-            else -> null
-        }
-        return resolved?.substringBefore('#')?.takeIf { isAbsolute(it) }
-    }
 
     private class Found(val uri: String?, val resource: JsonElement, val pointer: String)
 
