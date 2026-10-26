@@ -225,105 +225,16 @@ class JsonValidator @JvmOverloads constructor(
             is JsonObject -> {
                 // $ref, $recursiveRef, $dynamicRef are evaluated alongside sibling keywords
                 // (Draft 2019-09+ removed the Draft 7 rule that $ref short-circuits siblings)
-                val ref = schemaElement[REF]?.jsonPrimitive?.contentOrNull
-                if (ref != null) {
-                    val refHashIndex = ref.indexOf('#')
-                    val refUriPart = if (refHashIndex >= 0) ref.substring(0, refHashIndex) else ref
-                    // For local refs, resolve against effectiveResourceRoot (current $id boundary);
-                    // for URI-based refs, search the whole document
-                    val resolvedSchema =
-                        if (refUriPart.isEmpty()) {
-                            referenceResolver.resolveRef(ref, effectiveResourceRoot, schemaElement, effectiveResourceRoot)
-                        } else {
-                            referenceResolver.resolveRef(ref, rootSchema, schemaElement, effectiveResourceRoot)
-                        }
-                    if (resolvedSchema != null) {
-                        // For URI-based refs, use the target schema resource as the new resourceRoot
-                        // so local refs within it (#/..., #anchor) resolve against the correct document.
-                        val newResourceRoot =
-                            if (refUriPart.isNotEmpty()) {
-                                referenceResolver.resolveUriToResource(refUriPart, rootSchema, effectiveResourceRoot)
-                                    ?: effectiveResourceRoot
-                            } else {
-                                effectiveResourceRoot
-                            }
-                        // When crossing into a new resource (different $id boundary) via a URI-based $ref,
-                        // register that resource in the dynamic scope so $dynamicRef can find its anchors.
-                        // This handles cases where the ref points to a sub-schema of the resource (not the root),
-                        // which would otherwise never trigger the $id-based scope update in validateElement.
-                        val refScope =
-                            if (refUriPart.isNotEmpty() &&
-                                newResourceRoot !== effectiveResourceRoot &&
-                                newResourceRoot is JsonObject &&
-                                newResourceRoot.containsKey(SchemaKeywords.ID) &&
-                                !effectiveScope.contains(newResourceRoot)
-                            ) {
-                                effectiveScope + newResourceRoot
-                            } else {
-                                effectiveScope
-                            }
+                resolveReferences(schemaElement, rootSchema, effectiveResourceRoot, effectiveScope).forEach { hop ->
+                    val hopPath = at(schemaPath, hop.keyword)
+                    val target = hop.target
+                    if (target != null) {
                         val before = errors.size
-                        validateElement(instance, resolvedSchema, path, at(schemaPath, REF), errors, version, rootSchema, depth + 1, newResourceRoot, refScope)
-                        absoluteLocations.stamp(errors, before, at(schemaPath, REF), resolvedSchema, listOf(newResourceRoot, effectiveResourceRoot) + refScope.asReversed() + rootSchema, rootSchema)
+                        validateElement(instance, target, path, hopPath, errors, version, rootSchema, depth + 1, hop.resourceRoot, hop.dynamicScope)
+                        val candidates = listOf(hop.resourceRoot, effectiveResourceRoot) + hop.dynamicScope.asReversed() + rootSchema
+                        absoluteLocations.stamp(errors, before, hopPath, target, candidates, rootSchema)
                     } else {
-                        errors.add(ValidationError(path, "Could not resolve reference: $ref", REF, at(schemaPath, REF)))
-                    }
-                }
-
-                // Check for $recursiveRef (2019-09) — dynamic scoping behavior
-                val recursiveRef = schemaElement[RECURSIVE_REF]?.jsonPrimitive?.contentOrNull
-                if (recursiveRef != null) {
-                    val resolved = referenceResolver.resolveRef(recursiveRef, effectiveResourceRoot, schemaElement, effectiveResourceRoot)
-                    if (resolved != null) {
-                        // If resolved schema has $recursiveAnchor: true, use outermost in dynamic scope with that flag
-                        val target = if (resolved is JsonObject && resolved[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true) {
-                            effectiveScope.firstOrNull { schema ->
-                                schema is JsonObject && schema[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true
-                            } ?: resolved
-                        } else {
-                            resolved
-                        }
-                        val before = errors.size
-                        validateElement(instance, target, path, at(schemaPath, RECURSIVE_REF), errors, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope)
-                        absoluteLocations.stamp(errors, before, at(schemaPath, RECURSIVE_REF), target, listOf(effectiveResourceRoot) + effectiveScope.asReversed() + rootSchema, rootSchema)
-                    } else {
-                        errors.add(ValidationError(path, "Could not resolve recursive reference: $recursiveRef", RECURSIVE_REF, at(schemaPath, RECURSIVE_REF)))
-                    }
-                }
-
-                // Check for $dynamicRef (2020-12)
-                val dynamicRef = schemaElement[DYNAMIC_REF]?.jsonPrimitive?.contentOrNull
-                if (dynamicRef != null) {
-                    val hashIndex = dynamicRef.indexOf('#')
-                    val uriPart = if (hashIndex >= 0) dynamicRef.substring(0, hashIndex) else dynamicRef
-                    val fragment = if (hashIndex >= 0) dynamicRef.substring(hashIndex + 1) else ""
-                    val isPlainAnchorFragment = fragment.isNotEmpty() && !fragment.startsWith("/")
-
-                    // For local refs resolve against effectiveResourceRoot; for URI-based search whole document
-                    val initialTarget =
-                        if (uriPart.isEmpty()) {
-                            referenceResolver.resolveRef(dynamicRef, effectiveResourceRoot, schemaElement, effectiveResourceRoot)
-                        } else {
-                            referenceResolver.resolveRef(dynamicRef, rootSchema, schemaElement, effectiveResourceRoot)
-                        }
-
-                    if (initialTarget != null) {
-                        val target =
-                            if (isPlainAnchorFragment && initialTarget is JsonObject &&
-                                initialTarget[DYNAMIC_ANCHOR]?.jsonPrimitive?.contentOrNull == fragment
-                            ) {
-                                // Dynamic resolution: walk scope from outermost, find first resource with $dynamicAnchor
-                                effectiveScope.firstNotNullOfOrNull { scopeSchema ->
-                                    referenceResolver.findDynamicAnchorInResource(scopeSchema, fragment)
-                                } ?: initialTarget
-                            } else {
-                                initialTarget
-                            }
-                        val before = errors.size
-                        validateElement(instance, target, path, at(schemaPath, DYNAMIC_REF), errors, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope)
-                        absoluteLocations.stamp(errors, before, at(schemaPath, DYNAMIC_REF), target, listOf(effectiveResourceRoot) + effectiveScope.asReversed() + rootSchema, rootSchema)
-                    } else {
-                        errors.add(ValidationError(path, "Could not resolve dynamic reference: $dynamicRef", DYNAMIC_REF, at(schemaPath, DYNAMIC_REF)))
+                        errors.add(ValidationError(path, "Could not resolve ${hop.description}: ${hop.reference}", hop.keyword, hopPath))
                     }
                 }
 
@@ -340,6 +251,83 @@ class JsonValidator @JvmOverloads constructor(
             }
             else -> {} // Arrays and nulls are ignored as schemas
         }
+    }
+
+    /** Where one reference keyword of a schema leads; [target] is null when it cannot be resolved. */
+    private class ReferenceHop(
+        val keyword: String,
+        val reference: String,
+        val description: String,
+        val target: JsonElement?,
+        val resourceRoot: JsonElement,
+        val dynamicScope: List<JsonElement>,
+    )
+
+    /**
+     * Resolves the `$ref`, `$recursiveRef` and `$dynamicRef` of [schemaElement], in that order, with the
+     * resource root and dynamic scope each target must be evaluated in. Validation and the collection
+     * of evaluated properties/items both use this, so they always agree on where a reference leads.
+     */
+    private fun resolveReferences(
+        schemaElement: JsonObject,
+        rootSchema: JsonElement,
+        resourceRoot: JsonElement,
+        dynamicScope: List<JsonElement>,
+    ): List<ReferenceHop> {
+        val hops = ArrayList<ReferenceHop>(1)
+
+        schemaElement[REF]?.jsonPrimitive?.contentOrNull?.let { ref ->
+            val refUriPart = ref.substringBefore('#')
+            // Local refs resolve within the current $id boundary; URI-based refs search the whole document
+            val target = referenceResolver.resolveRef(ref, if (refUriPart.isEmpty()) resourceRoot else rootSchema, schemaElement, resourceRoot)
+            // A URI-based ref enters the target's resource, so local refs inside it (#/..., #anchor)
+            // resolve against that document, and the resource joins the dynamic scope for $dynamicRef.
+            val targetResource =
+                if (target != null && refUriPart.isNotEmpty()) {
+                    referenceResolver.resolveUriToResource(refUriPart, rootSchema, resourceRoot) ?: resourceRoot
+                } else {
+                    resourceRoot
+                }
+            val scope =
+                if (targetResource !== resourceRoot && targetResource is JsonObject &&
+                    targetResource.containsKey(SchemaKeywords.ID) && !dynamicScope.contains(targetResource)
+                ) {
+                    dynamicScope + targetResource
+                } else {
+                    dynamicScope
+                }
+            hops += ReferenceHop(REF, ref, "reference", target, targetResource, scope)
+        }
+
+        // $recursiveRef (2019-09): a target with $recursiveAnchor: true yields to the outermost such schema in scope
+        schemaElement[RECURSIVE_REF]?.jsonPrimitive?.contentOrNull?.let { recursiveRef ->
+            val resolved = referenceResolver.resolveRef(recursiveRef, resourceRoot, schemaElement, resourceRoot)
+            val target =
+                if (resolved is JsonObject && resolved[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true) {
+                    dynamicScope.firstOrNull { it is JsonObject && it[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true } ?: resolved
+                } else {
+                    resolved
+                }
+            hops += ReferenceHop(RECURSIVE_REF, recursiveRef, "recursive reference", target, resourceRoot, dynamicScope)
+        }
+
+        // $dynamicRef (2020-12): a plain-anchor target with a matching $dynamicAnchor yields to the outermost
+        // resource in scope that declares that dynamic anchor
+        schemaElement[DYNAMIC_REF]?.jsonPrimitive?.contentOrNull?.let { dynamicRef ->
+            val uriPart = dynamicRef.substringBefore('#')
+            val fragment = if ('#' in dynamicRef) dynamicRef.substringAfter('#') else ""
+            val initialTarget = referenceResolver.resolveRef(dynamicRef, if (uriPart.isEmpty()) resourceRoot else rootSchema, schemaElement, resourceRoot)
+            val isPlainAnchorFragment = fragment.isNotEmpty() && !fragment.startsWith("/")
+            val target =
+                if (isPlainAnchorFragment && initialTarget is JsonObject && initialTarget[DYNAMIC_ANCHOR]?.jsonPrimitive?.contentOrNull == fragment) {
+                    dynamicScope.firstNotNullOfOrNull { referenceResolver.findDynamicAnchorInResource(it, fragment) } ?: initialTarget
+                } else {
+                    initialTarget
+                }
+            hops += ReferenceHop(DYNAMIC_REF, dynamicRef, "dynamic reference", target, resourceRoot, dynamicScope)
+        }
+
+        return hops
     }
 
     /**
@@ -2022,60 +2010,11 @@ class JsonValidator @JvmOverloads constructor(
             }
         }
 
-        // $ref
-        schemaElement[REF]?.jsonPrimitive?.contentOrNull?.let { ref ->
-            val refHashIndex = ref.indexOf('#')
-            val refUriPart = if (refHashIndex >= 0) ref.substring(0, refHashIndex) else ref
-            val resolved = if (refUriPart.isEmpty()) {
-                referenceResolver.resolveRef(ref, effectiveResourceRoot, schemaElement)
-            } else {
-                referenceResolver.resolveRef(ref, rootSchema, schemaElement)
-            }
-            resolved?.let {
-                evaluated.addAll(collectEvaluatedIndices(instance, it, path, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope))
-            }
-        }
-
-        // $recursiveRef
-        schemaElement[RECURSIVE_REF]?.jsonPrimitive?.contentOrNull?.let { recursiveRef ->
-            val resolved = referenceResolver.resolveRef(recursiveRef, effectiveResourceRoot, schemaElement)
-            if (resolved != null) {
-                val target =
-                    if (resolved is JsonObject && resolved[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true) {
-                        effectiveScope.firstOrNull { s ->
-                            s is JsonObject && s[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true
-                        } ?: resolved
-                    } else {
-                        resolved
-                    }
-                evaluated.addAll(collectEvaluatedIndices(instance, target, path, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope))
-            }
-        }
-
-        // $dynamicRef
-        schemaElement[SchemaKeywords.DYNAMIC_REF]?.jsonPrimitive?.contentOrNull?.let { dynamicRef ->
-            val hashIndex = dynamicRef.indexOf('#')
-            val uriPart = if (hashIndex >= 0) dynamicRef.substring(0, hashIndex) else dynamicRef
-            val fragment = if (hashIndex >= 0) dynamicRef.substring(hashIndex + 1) else ""
-            val isPlainAnchorFragment = fragment.isNotEmpty() && !fragment.startsWith("/")
-            val initialTarget =
-                if (uriPart.isEmpty()) {
-                    referenceResolver.resolveRef(dynamicRef, effectiveResourceRoot, schemaElement)
-                } else {
-                    referenceResolver.resolveRef(dynamicRef, rootSchema, schemaElement)
-                }
-            if (initialTarget != null) {
-                val target =
-                    if (isPlainAnchorFragment && initialTarget is JsonObject &&
-                        initialTarget[DYNAMIC_ANCHOR]?.jsonPrimitive?.contentOrNull == fragment
-                    ) {
-                        effectiveScope.firstNotNullOfOrNull { scopeSchema ->
-                            referenceResolver.findDynamicAnchorInResource(scopeSchema, fragment)
-                        } ?: initialTarget
-                    } else {
-                        initialTarget
-                    }
-                evaluated.addAll(collectEvaluatedIndices(instance, target, path, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope))
+        // $ref, $recursiveRef, $dynamicRef: collect from the target, in the target's resource and dynamic
+        // scope, exactly as validateElement evaluates it (resolveReferences is shared with it)
+        resolveReferences(schemaElement, rootSchema, effectiveResourceRoot, effectiveScope).forEach { hop ->
+            hop.target?.let { target ->
+                evaluated.addAll(collectEvaluatedIndices(instance, target, path, version, rootSchema, depth + 1, hop.resourceRoot, hop.dynamicScope))
             }
         }
 
@@ -2193,61 +2132,11 @@ class JsonValidator @JvmOverloads constructor(
             }
         }
 
-        // $ref — resolve and collect from the referenced schema
-        schemaElement[REF]?.jsonPrimitive?.contentOrNull?.let { ref ->
-            val refHashIndex = ref.indexOf('#')
-            val refUriPart = if (refHashIndex >= 0) ref.substring(0, refHashIndex) else ref
-            val resolved =
-                if (refUriPart.isEmpty()) {
-                    referenceResolver.resolveRef(ref, effectiveResourceRoot, schemaElement)
-                } else {
-                    referenceResolver.resolveRef(ref, rootSchema, schemaElement)
-                }
-            resolved?.let {
-                evaluated.addAll(collectEvaluatedProperties(instance, it, path, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope))
-            }
-        }
-
-        // $recursiveRef — resolve with dynamic scope, collect from target
-        schemaElement[RECURSIVE_REF]?.jsonPrimitive?.contentOrNull?.let { recursiveRef ->
-            val resolved = referenceResolver.resolveRef(recursiveRef, effectiveResourceRoot, schemaElement)
-            if (resolved != null) {
-                val target =
-                    if (resolved is JsonObject && resolved[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true) {
-                        effectiveScope.firstOrNull { s ->
-                            s is JsonObject && s[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true
-                        } ?: resolved
-                    } else {
-                        resolved
-                    }
-                evaluated.addAll(collectEvaluatedProperties(instance, target, path, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope))
-            }
-        }
-
-        // $dynamicRef — resolve with dynamic anchor scope, collect from target
-        schemaElement[SchemaKeywords.DYNAMIC_REF]?.jsonPrimitive?.contentOrNull?.let { dynamicRef ->
-            val hashIndex = dynamicRef.indexOf('#')
-            val uriPart = if (hashIndex >= 0) dynamicRef.substring(0, hashIndex) else dynamicRef
-            val fragment = if (hashIndex >= 0) dynamicRef.substring(hashIndex + 1) else ""
-            val isPlainAnchorFragment = fragment.isNotEmpty() && !fragment.startsWith("/")
-            val initialTarget =
-                if (uriPart.isEmpty()) {
-                    referenceResolver.resolveRef(dynamicRef, effectiveResourceRoot, schemaElement)
-                } else {
-                    referenceResolver.resolveRef(dynamicRef, rootSchema, schemaElement)
-                }
-            if (initialTarget != null) {
-                val target =
-                    if (isPlainAnchorFragment && initialTarget is JsonObject &&
-                        initialTarget[DYNAMIC_ANCHOR]?.jsonPrimitive?.contentOrNull == fragment
-                    ) {
-                        effectiveScope.firstNotNullOfOrNull { scopeSchema ->
-                            referenceResolver.findDynamicAnchorInResource(scopeSchema, fragment)
-                        } ?: initialTarget
-                    } else {
-                        initialTarget
-                    }
-                evaluated.addAll(collectEvaluatedProperties(instance, target, path, version, rootSchema, depth + 1, effectiveResourceRoot, effectiveScope))
+        // $ref, $recursiveRef, $dynamicRef: collect from the target, in the target's resource and dynamic
+        // scope, exactly as validateElement evaluates it (resolveReferences is shared with it)
+        resolveReferences(schemaElement, rootSchema, effectiveResourceRoot, effectiveScope).forEach { hop ->
+            hop.target?.let { target ->
+                evaluated.addAll(collectEvaluatedProperties(instance, target, path, version, rootSchema, depth + 1, hop.resourceRoot, hop.dynamicScope))
             }
         }
 
