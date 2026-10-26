@@ -251,20 +251,23 @@ class ReferenceResolver(
      */
     private fun percentDecode(s: String): String {
         if (!s.contains('%')) return s
-        val sb = StringBuilder(s.length)
+        // %XX escapes are UTF-8 bytes (RFC 3986 §2.5): collect them and decode together, so that
+        // "%C3%A9" becomes "é" rather than two Latin-1 characters.
+        val bytes = java.io.ByteArrayOutputStream(s.length)
         var i = 0
         while (i < s.length) {
-            if (s[i] == '%' && i + 2 < s.length) {
-                val code = s.substring(i + 1, i + 3).toIntOrNull(16)
-                if (code != null) {
-                    sb.append(code.toChar())
-                    i += 3
-                    continue
-                }
+            val isEscape = s[i] == '%' && i + 2 < s.length && s[i + 1].isHexDigit() && s[i + 2].isHexDigit()
+            val code = if (isEscape) s.substring(i + 1, i + 3).toInt(16) else null
+            if (code != null) {
+                bytes.write(code)
+                i += 3
+            } else {
+                val codePointLength = Character.charCount(s.codePointAt(i))
+                bytes.write(s.substring(i, i + codePointLength).toByteArray(Charsets.UTF_8))
+                i += codePointLength
             }
-            sb.append(s[i++])
         }
-        return sb.toString()
+        return bytes.toString(Charsets.UTF_8)
     }
 
     /**
@@ -386,3 +389,5 @@ class ReferenceResolver(
  * schema: such a value is not an identifier and must neither throw nor count as one.
  */
 internal fun JsonObject.stringKeyword(keyword: String): String? = (this[keyword] as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+private fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
