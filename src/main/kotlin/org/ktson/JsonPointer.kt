@@ -284,16 +284,17 @@ class ReferenceResolver(
         schema: JsonElement,
         anchorName: String,
         isRoot: Boolean = true,
+        isSchema: Boolean = true,
     ): JsonElement? {
         if (schema !is JsonObject) return null
-        if (!isRoot && schema.stringKeyword(SchemaKeywords.ID) != null) return null
-        val schemaAnchor = schema.stringKeyword(SchemaKeywords.ANCHOR)
-        val schemaDynamicAnchor = schema.stringKeyword(SchemaKeywords.DYNAMIC_ANCHOR)
-        if (schemaAnchor == anchorName || schemaDynamicAnchor == anchorName) return schema
-        return schema.values.firstNotNullOfOrNull { value ->
+        if (isSchema) {
+            if (!isRoot && schema.stringKeyword(SchemaKeywords.ID) != null) return null
+            if (schema.stringKeyword(SchemaKeywords.ANCHOR) == anchorName || schema.stringKeyword(SchemaKeywords.DYNAMIC_ANCHOR) == anchorName) return schema
+        }
+        return schema.subschemaValues(isSchema).firstNotNullOfOrNull { (value, childIsSchema) ->
             when (value) {
-                is JsonObject -> findAnchorInResource(value, anchorName, false)
-                is JsonArray -> value.firstNotNullOfOrNull { findAnchorInResource(it, anchorName, false) }
+                is JsonObject -> findAnchorInResource(value, anchorName, false, childIsSchema)
+                is JsonArray -> value.firstNotNullOfOrNull { findAnchorInResource(it, anchorName, false, childIsSchema) }
                 else -> null
             }
         }
@@ -308,14 +309,23 @@ class ReferenceResolver(
         schema: JsonElement,
         anchorName: String,
         isRoot: Boolean = true,
+    ): JsonElement? = findDynamicAnchor(schema, anchorName, isRoot, isSchema = true)
+
+    private fun findDynamicAnchor(
+        schema: JsonElement,
+        anchorName: String,
+        isRoot: Boolean,
+        isSchema: Boolean,
     ): JsonElement? {
         if (schema !is JsonObject) return null
-        if (!isRoot && schema.stringKeyword(SchemaKeywords.ID) != null) return null
-        if (schema.stringKeyword(SchemaKeywords.DYNAMIC_ANCHOR) == anchorName) return schema
-        return schema.values.firstNotNullOfOrNull { value ->
+        if (isSchema) {
+            if (!isRoot && schema.stringKeyword(SchemaKeywords.ID) != null) return null
+            if (schema.stringKeyword(SchemaKeywords.DYNAMIC_ANCHOR) == anchorName) return schema
+        }
+        return schema.subschemaValues(isSchema).firstNotNullOfOrNull { (value, childIsSchema) ->
             when (value) {
-                is JsonObject -> findDynamicAnchorInResource(value, anchorName, false)
-                is JsonArray -> value.firstNotNullOfOrNull { findDynamicAnchorInResource(it, anchorName, false) }
+                is JsonObject -> findDynamicAnchor(value, anchorName, false, childIsSchema)
+                is JsonArray -> value.firstNotNullOfOrNull { findDynamicAnchor(it, anchorName, false, childIsSchema) }
                 else -> null
             }
         }
@@ -351,9 +361,11 @@ class ReferenceResolver(
         resolvedTarget: String,
         originalTarget: String,
         baseUri: String,
+        isSchema: Boolean = true,
     ): JsonElement? {
         if (element !is JsonObject) return null
-        val id = element.stringKeyword(SchemaKeywords.ID)
+        // Only a schema has an $id; a map of named schemas (under properties, $defs, ...) does not.
+        val id = if (isSchema) element.stringKeyword(SchemaKeywords.ID) else null
         val currentUri =
             when {
                 id == null -> baseUri
@@ -375,10 +387,10 @@ class ReferenceResolver(
         // Compare resolved URIs. A raw $id match is accepted only when there is no absolute URI to compare:
         // two resources may share a relative $id under different bases (a/target and b/target).
         if (id != null && (currentUri == resolvedTarget || (id == originalTarget && !isAbsolute(currentUri)))) return element
-        return element.values.firstNotNullOfOrNull { value ->
+        return element.subschemaValues(isSchema).firstNotNullOfOrNull { (value, childIsSchema) ->
             when (value) {
-                is JsonObject -> searchById(value, resolvedTarget, originalTarget, currentUri)
-                is JsonArray -> value.firstNotNullOfOrNull { searchById(it, resolvedTarget, originalTarget, currentUri) }
+                is JsonObject -> searchById(value, resolvedTarget, originalTarget, currentUri, childIsSchema)
+                is JsonArray -> value.firstNotNullOfOrNull { searchById(it, resolvedTarget, originalTarget, currentUri, childIsSchema) }
                 else -> null
             }
         }
@@ -406,3 +418,17 @@ internal fun JsonObject.stringKeyword(keyword: String): String? = (this[keyword]
 private fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
 
 private fun isAbsolute(uri: String): Boolean = runCatching { UriResolver.isAbsoluteUri(uri) }.getOrDefault(false)
+
+/**
+ * The values of this object that can contain schemas, each paired with whether it is itself a schema
+ * (false for a map of named schemas such as the value of `properties`). For a schema, data keywords
+ * (`const`, `enum`, `default`, `examples`) are skipped: a "$id" or "$anchor" inside them is data. For a map
+ * of named schemas every value is a schema, whatever its name ("default" can be a property).
+ */
+internal fun JsonObject.subschemaValues(isSchema: Boolean): Sequence<Pair<JsonElement, Boolean>> = if (isSchema) {
+        entries.asSequence()
+            .filter { it.key !in SchemaKeywords.DATA_KEYWORDS }
+            .map { (keyword, value) -> value to (keyword !in SchemaKeywords.NAMED_SUBSCHEMA_KEYWORDS) }
+    } else {
+        values.asSequence().map { it to true }
+    }

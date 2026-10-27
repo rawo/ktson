@@ -110,4 +110,17 @@ object SchemaKeywords {
 
     // Boolean schemas
     const val SCHEMA_FALSE = "false"
+
+    // Annotation keywords whose values are data, not schemas
+    const val DEFAULT = "default"
+    const val EXAMPLES = "examples"
+
+    /** Keywords whose value maps names to subschemas: the level below them holds names, not keywords. */
+    internal val NAMED_SUBSCHEMA_KEYWORDS = setOf(PROPERTIES, PATTERN_PROPERTIES, DEFS, DEFINITIONS, DEPENDENT_SCHEMAS)
+
+    /** Keywords whose value may be an array of subschemas: a numeric token after them is an index. */
+    internal val ARRAY_SUBSCHEMA_KEYWORDS = setOf(ALL_OF, ANY_OF, ONE_OF, PREFIX_ITEMS, ITEMS)
+
+    /** Keywords whose value is instance data, never a schema: a "$id" or "$anchor" inside it is just data. */
+    internal val DATA_KEYWORDS = setOf(CONST, ENUM, DEFAULT, EXAMPLES)
 }

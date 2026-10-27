@@ -37,6 +37,33 @@ class KeywordNamedPropertyTest :
             }
         }
 
+        SchemaVersion.entries.forEach { version ->
+            describe("$version data keywords hold data, not schemas (#36)") {
+                it("an \$anchor inside a const value does not capture a \$ref") {
+                    val schema = """{"${'$'}defs":{"unused":{"const":{"${'$'}anchor":"real","type":"string"}},"actual":{"${'$'}anchor":"real","type":"integer"}},"${'$'}ref":"#real"}"""
+                    isValid(schema, "1", version) shouldBe true
+                    isValid(schema, "\"s\"", version) shouldBe false
+                }
+
+                it("an \$id inside a default value does not capture a \$ref") {
+                    val schema = """{"${'$'}id":"https://ex.com/root","${'$'}defs":{"d":{"default":{"${'$'}id":"x.json","type":"string"}},"x":{"${'$'}id":"x.json","type":"integer"}},"${'$'}ref":"x.json"}"""
+                    isValid(schema, "1", version) shouldBe true
+                    isValid(schema, "\"s\"", version) shouldBe false
+                }
+
+                it("anchors in enum and examples values are ignored too") {
+                    val schema = """{"${'$'}defs":{"e":{"enum":[{"${'$'}anchor":"a","type":"string"}],"examples":[{"${'$'}anchor":"a","type":"string"}]},"real":{"${'$'}anchor":"a","type":"integer"}},"${'$'}ref":"#a"}"""
+                    isValid(schema, "1", version) shouldBe true
+                }
+
+                it("a property named default or const is still a schema") {
+                    val schema = """{"properties":{"default":{"${'$'}anchor":"d","type":"integer"},"const":{"${'$'}anchor":"c","type":"string"}},"allOf":[{"${'$'}ref":"#d"},{"not":{"${'$'}ref":"#c"}}]}"""
+                    isValid(schema, "1", version) shouldBe true
+                    isValid(schema, "\"s\"", version) shouldBe false
+                }
+            }
+        }
+
         describe("DRAFT_2020_12 dynamic anchors") {
             it("a property named \$dynamicAnchor does not break a \$dynamicRef") {
                 val schema = """{"properties":{"${'$'}dynamicAnchor":{"type":"string"}},"${'$'}defs":{"n":{"${'$'}dynamicAnchor":"node","type":"object"}},"${'$'}dynamicRef":"#node"}"""

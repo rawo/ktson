@@ -87,8 +87,8 @@ internal class AbsoluteLocations(private val referenceResolver: ReferenceResolve
             if (keyword in REFERENCE_KEYWORDS && index < tokens.lastIndex) return true
             val next = tokens.getOrNull(index + 1)
             index += when {
-                keyword in NAMED_SUBSCHEMA_KEYWORDS -> 2
-                keyword in ARRAY_SUBSCHEMA_KEYWORDS && next != null && next.all { it.isDigit() } -> 2
+                keyword in SchemaKeywords.NAMED_SUBSCHEMA_KEYWORDS -> 2
+                keyword in SchemaKeywords.ARRAY_SUBSCHEMA_KEYWORDS && next != null && next.all { it.isDigit() } -> 2
                 else -> 1
             }
         }
@@ -157,23 +157,5 @@ internal class AbsoluteLocations(private val referenceResolver: ReferenceResolve
         val FRAGMENT_SAFE: Set<Char> = (('a'..'z') + ('A'..'Z') + ('0'..'9') + "-._~!$&'()*+,;=:@/?".toList()).toSet()
 
         val REFERENCE_KEYWORDS = setOf(SchemaKeywords.REF, SchemaKeywords.DYNAMIC_REF, SchemaKeywords.RECURSIVE_REF)
-
-        /** Keywords whose value maps names to subschemas: the token after them is a name, not a keyword. */
-        val NAMED_SUBSCHEMA_KEYWORDS = setOf(
-            SchemaKeywords.PROPERTIES,
-            SchemaKeywords.PATTERN_PROPERTIES,
-            SchemaKeywords.DEFS,
-            SchemaKeywords.DEFINITIONS,
-            SchemaKeywords.DEPENDENT_SCHEMAS,
-        )
-
-        /** Keywords whose value may be an array of subschemas: a numeric token after them is an index. */
-        val ARRAY_SUBSCHEMA_KEYWORDS = setOf(
-            SchemaKeywords.ALL_OF,
-            SchemaKeywords.ANY_OF,
-            SchemaKeywords.ONE_OF,
-            SchemaKeywords.PREFIX_ITEMS,
-            SchemaKeywords.ITEMS,
-        )
     }
 }

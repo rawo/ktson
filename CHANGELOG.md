@@ -42,6 +42,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`urn:example:schema` was reduced to `urn:`), percent-encoded characters stay encoded (`a%2Fb`, `%23`),
   empty path segments are kept, and only the scheme and host are lowercased. A fragment-only reference
   now resolves against an opaque base (`#/x` against `urn:uuid:…`) (#33).
+- `$id`, `$anchor` and `$dynamicAnchor` inside `const`, `enum`, `default` or `examples` values are data,
+  so they no longer capture references meant for real schemas; a property named `default` or `const`
+  is still a schema (#36).
 - JSON Pointers no longer resolve non-canonical array indices such as `/01` or `/+1` (RFC 6901 §4), in
   `JsonPointer.resolve` and in `$ref` fragments (#47).
 - `absoluteKeywordLocation` is filled under subresources whose `$id` is relative to `baseUri` (#10).
