@@ -1,6 +1,7 @@
 package org.ktson
 
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import kotlinx.serialization.json.*
@@ -313,5 +314,19 @@ class DepthLimitTest :
         result.isInvalid shouldBe true
         val error = result.getErrors().first()
         error.keyword shouldBe "depth"
+    }
+
+    // The collectors behind unevaluatedProperties / unevaluatedItems follow references too, so they must
+    // stop at the same depth as validation instead of recursing until the stack overflows (#29).
+    listOf("{}" to "unevaluatedProperties", "[]" to "unevaluatedItems").forEach { (instance, keyword) ->
+        test("circular \$ref with $keyword stops at the depth limit instead of overflowing") {
+            val schema = JsonSchema.fromString("""{"${'$'}ref":"#","$keyword":false}""")
+            for (limit in listOf(2, 50, 1000)) {
+                val result = JsonValidator(maxValidationDepth = limit).validate(Json.parseToJsonElement(instance), schema)
+                result.isValid shouldBe false
+                fun keywords(errors: List<ValidationError>): List<String?> = errors.flatMap { listOf(it.keyword) + keywords(it.causes) }
+                keywords(result.getErrors()) shouldContain "depth"
+            }
+        }
     }
 })

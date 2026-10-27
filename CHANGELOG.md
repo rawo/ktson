@@ -50,6 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is tracked in #49.
 - `idn-email` validates the local part (RFC 6531: the `email` dot-atom/quoted-string rules with non-ASCII
   allowed), so `a b@…`, `a..b@…` and `a@b@…` are rejected; only the domain was checked before (#44).
+- The evaluation tracking behind `unevaluatedProperties` / `unevaluatedItems` respects
+  `maxValidationDepth`: a circular `$ref` with either keyword reports a `depth` error instead of
+  overflowing the stack (#29).
 - JSON Pointers no longer resolve non-canonical array indices such as `/01` or `/+1` (RFC 6901 §4), in
   `JsonPointer.resolve` and in `$ref` fragments (#47).
 - `absoluteKeywordLocation` is filled under subresources whose `$id` is relative to `baseUri` (#10).

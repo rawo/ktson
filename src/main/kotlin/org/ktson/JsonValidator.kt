@@ -1973,6 +1973,8 @@ class JsonValidator @JvmOverloads constructor(
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
     ): Set<Int> {
+        // Same limit as validateElement, which has already reported the depth error (#29)
+        if (depth > maxValidationDepth) return emptySet()
         if (schemaElement is JsonPrimitive) return emptySet()
         if (schemaElement !is JsonObject) return emptySet()
 
@@ -2122,6 +2124,8 @@ class JsonValidator @JvmOverloads constructor(
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
     ): Set<String> {
+        // Same limit as validateElement, which has already reported the depth error (#29)
+        if (depth > maxValidationDepth) return emptySet()
         if (schemaElement is JsonPrimitive) {
             // Boolean schemas have no property-evaluating keywords — they evaluate nothing
             return emptySet()
