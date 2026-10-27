@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`https://ex.com/schemas/other.json`, not `other.json`), and schemas with different base URIs no
   longer share one cached document (#9).
 - A schema with a property named `$id`, `$anchor` or `$dynamicAnchor` no longer makes `validate()` throw (#7).
+- A `false` schema reports its error at its own location (`/properties/a`, not `/properties/a/false`);
+  the error's `keyword` stays `"false"` (#46).
 - JSON Pointers no longer resolve non-canonical array indices such as `/01` or `/+1` (RFC 6901 §4), in
   `JsonPointer.resolve` and in `$ref` fragments (#47).
 - `absoluteKeywordLocation` is filled under subresources whose `$id` is relative to `baseUri` (#10).

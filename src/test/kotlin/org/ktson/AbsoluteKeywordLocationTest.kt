@@ -168,6 +168,27 @@ class AbsoluteKeywordLocationTest :
             }
         }
 
+        describe("false schemas (#46)") {
+            fun error(result: ValidationResult) = result.getErrors().single()
+
+            it("locate the failure at the boolean schema itself, not at a nonexistent /false member") {
+                val result = JsonValidator().validate(Json.parseToJsonElement("1"), JsonSchema(Json.parseToJsonElement("false"), baseUri = "https://example.com/schema"))
+                error(result).schemaPath shouldBe ""
+                error(result).absoluteKeywordLocation shouldBe "https://example.com/schema#"
+                error(result).keyword shouldBe "false"
+            }
+
+            it("locate a nested false schema at its own position") {
+                val schema = """{"${'$'}id":"$root","properties":{"a":false}}"""
+                locations(validate(schema, """{"a":1}""")) shouldBe listOf("/properties/a" to "$root#/properties/a")
+            }
+
+            it("locate a false schema reached through a reference at its definition") {
+                val schema = """{"${'$'}id":"$root","${'$'}ref":"#/${'$'}defs/no","${'$'}defs":{"no":false}}"""
+                locations(validate(schema, "1")) shouldBe listOf("/\$ref" to "$root#/\$defs/no")
+            }
+        }
+
         describe("dynamic references") {
             it("follows \$dynamicRef to the outermost resource with the dynamic anchor (2020-12)") {
                 val schema = """

@@ -245,7 +245,8 @@ class JsonValidator @JvmOverloads constructor(
                 if (schemaElement.isString) return
                 val boolValue = schemaElement.booleanOrNull
                 if (boolValue == false) {
-                    errors.add(ValidationError(path, "Schema is false, no instance is valid", SCHEMA_FALSE, at(schemaPath, SCHEMA_FALSE)))
+                    // The failing location is the boolean schema itself; it has no "false" member to point at.
+                    errors.add(ValidationError(path, "Schema is false, no instance is valid", SCHEMA_FALSE, schemaPath))
                 }
                 // true schema allows everything
             }
