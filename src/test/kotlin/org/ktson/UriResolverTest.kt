@@ -144,4 +144,43 @@ class UriResolverTest :
 			JsonSchema.extractId(schema.schema).shouldBe("https://h.com/x")
 		}
 	}
+
+	describe("URI identity is preserved (#33)") {
+		it("keeps an opaque URI such as a URN whole") {
+			UriResolver.normalizeUri("urn:example:schema").shouldBe("urn:example:schema")
+			UriResolver.normalizeUri("URN:uuid:deadbeef-1234#frag").shouldBe("urn:uuid:deadbeef-1234#frag")
+		}
+
+		it("keeps percent-encoded reserved characters encoded") {
+			UriResolver.normalizeUri("https://example.com/a%2Fb").shouldBe("https://example.com/a%2Fb")
+			UriResolver.normalizeUri("https://example.com/a?x=%23").shouldBe("https://example.com/a?x=%23")
+			UriResolver.normalizeUri("https://example.com/a#x%20y").shouldBe("https://example.com/a#x%20y")
+		}
+
+		it("keeps empty path segments, which are part of the path") {
+			UriResolver.normalizeUri("https://example.com/a//b").shouldBe("https://example.com/a//b")
+		}
+
+		it("lowercases only the scheme and host, not the user info") {
+			UriResolver.normalizeUri("HTTPS://User:Secret@EXAMPLE.com:8080/a").shouldBe("https://User:Secret@example.com:8080/a")
+		}
+
+		it("still removes dot segments") {
+			UriResolver.normalizeUri("https://example.com/a/./b/../c").shouldBe("https://example.com/a/c")
+		}
+
+		it("resolves a fragment-only reference against an opaque base") {
+			UriResolver.resolveUri("urn:uuid:deadbeef", "#/${'$'}defs/x").shouldBe("urn:uuid:deadbeef#/${'$'}defs/x")
+			UriResolver.resolveUri("urn:uuid:deadbeef#old", "#new").shouldBe("urn:uuid:deadbeef#new")
+		}
+
+		it("resolves an absolute reference against an opaque base to itself") {
+			UriResolver.resolveUri("urn:uuid:deadbeef", "urn:uuid:other").shouldBe("urn:uuid:other")
+			UriResolver.resolveUri("urn:uuid:deadbeef", "https://example.com/x").shouldBe("https://example.com/x")
+		}
+
+		it("keeps encoded characters when resolving a relative reference") {
+			UriResolver.resolveUri("https://example.com/a/b", "c%2Fd").shouldBe("https://example.com/a/c%2Fd")
+		}
+	}
 })

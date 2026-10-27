@@ -31,13 +31,14 @@ object UriResolver {
         }
 
         // Parse and resolve; allow syntax/resolution exceptions to propagate
-        return if (isAbsoluteUri(refUri)) {
-            normalizeUri(refUri)
-        } else {
-            val base = URI(baseUri)
-            val resolved = base.resolve(refUri)
-            normalizeUri(resolved.toString())
-        }
+        if (isAbsoluteUri(refUri)) return normalizeUri(refUri)
+        // A fragment-only reference keeps the whole base and replaces its fragment (RFC 3986 §5.2.2), for any
+        // base: java.net.URI.resolve returns it unchanged for an opaque base such as a URN.
+        if (refUri.startsWith("#")) return normalizeUri(baseUri, removeFragment = true) + refUri
+        val base = URI(baseUri)
+        // An opaque base has no "/" in its path, so a relative path replaces it entirely (RFC 3986 §5.2.3).
+        if (base.isOpaque) return normalizeUri("${base.scheme}:$refUri")
+        return normalizeUri(base.resolve(refUri).toString())
     }
 
     /**
@@ -53,10 +54,12 @@ object UriResolver {
     }
 
     /**
-     * Normalizes a URI according to RFC 3986
-     * - Removes fragment if present (for cache keys)
-     * - Normalizes path (removes /./, resolves /../)
-     * - Lowercases scheme and host
+     * Normalizes a URI according to RFC 3986 §6.2.2 without changing what it identifies:
+     * - lowercases the scheme and the host (not the user info)
+     * - removes "." and ".." path segments (§5.2.4), keeping empty segments ("a//b")
+     * - keeps percent-encoded characters encoded ("a%2Fb" is not "a/b")
+     * - keeps opaque URIs such as URNs whole, apart from the scheme's case
+     * - removes the fragment if requested (for cache keys)
      *
      * @param uri The URI to normalize
      * @param removeFragment Whether to remove the fragment (default: false)
@@ -66,57 +69,67 @@ object UriResolver {
         if (uri.isEmpty()) return uri
 
         val parsed = URI(uri)
+        val fragment = if (removeFragment) null else parsed.rawFragment
 
-        // Build normalized URI
-        val scheme = parsed.scheme?.lowercase()
-        val authority = parsed.authority?.lowercase()
-        val path = normalizePath(parsed.path ?: "")
-        val query = parsed.query
-        val fragment = if (removeFragment) null else parsed.fragment
-
-        return buildUri(scheme, authority, path, query, fragment)
-    }
-
-    /**
-     * Normalizes a URI path
-     * - Removes /./
-     * - Resolves /../
-     *
-     * @param path The path to normalize
-     * @return The normalized path
-     */
-    private fun normalizePath(path: String): String {
-        if (path.isEmpty()) return path
-
-        val segments = path.split("/").toMutableList()
-        val normalized = mutableListOf<String>()
-
-        for (segment in segments) {
-            when (segment) {
-                "", "." -> {
-                    // Skip empty and "." segments, but preserve leading/trailing slashes
-                    if (normalized.isEmpty() && path.startsWith("/")) {
-                        normalized.add("")
-                    }
-                }
-                ".." -> {
-                    // Go up one level if possible
-                    if (normalized.isNotEmpty() && normalized.last() != "" && normalized.last() != "..") {
-                        normalized.removeAt(normalized.size - 1)
-                    } else if (!path.startsWith("/")) {
-                        // For relative paths, keep ..
-                        normalized.add("..")
-                    }
-                }
-                else -> normalized.add(segment)
+        if (parsed.isOpaque) {
+            return buildString {
+                append(parsed.scheme.lowercase()).append(':').append(parsed.rawSchemeSpecificPart)
+                fragment?.let { append('#').append(it) }
             }
         }
 
-        if (path.endsWith("/") && normalized.isNotEmpty()) {
-            normalized.add("")
+        val scheme = parsed.scheme?.lowercase()
+        val authority = parsed.rawAuthority?.let { normalizeAuthority(parsed, it) }
+        val rawPath = parsed.rawPath ?: ""
+        // Dot segments are removed from absolute paths; a relative reference keeps its leading ".." for resolution.
+        val path = if (scheme != null || authority != null || rawPath.startsWith("/")) removeDotSegments(rawPath) else rawPath
+        return buildUri(scheme, authority, path, parsed.rawQuery, fragment)
+    }
+
+    /** Lowercases the host only; user info and port are kept as written. A registry-based authority is left alone. */
+    private fun normalizeAuthority(parsed: URI, rawAuthority: String): String {
+        val host = parsed.host ?: return rawAuthority
+        return buildString {
+            parsed.rawUserInfo?.let { append(it).append('@') }
+            append(host.lowercase())
+            if (parsed.port != -1) append(':').append(parsed.port)
+        }
+    }
+
+    /** RFC 3986 §5.2.4 remove_dot_segments: "." and ".." are removed, other segments (empty ones too) are kept. */
+    private fun removeDotSegments(path: String): String {
+        var input = path
+        val output = StringBuilder()
+
+        fun removeLastSegment() {
+            val slash = output.lastIndexOf("/")
+            output.setLength(if (slash >= 0) slash else 0)
         }
 
-        return normalized.joinToString("/")
+        while (input.isNotEmpty()) {
+            when {
+                input.startsWith("../") -> input = input.substring(3)
+                input.startsWith("./") -> input = input.substring(2)
+                input.startsWith("/./") -> input = input.substring(2)
+                input == "/." -> input = "/"
+                input.startsWith("/../") -> {
+                    input = input.substring(3)
+                    removeLastSegment()
+                }
+                input == "/.." -> {
+                    input = "/"
+                    removeLastSegment()
+                }
+                input == "." || input == ".." -> input = ""
+                else -> {
+                    val next = input.indexOf('/', if (input.startsWith("/")) 1 else 0)
+                    val segment = if (next == -1) input else input.substring(0, next)
+                    output.append(segment)
+                    input = input.substring(segment.length)
+                }
+            }
+        }
+        return output.toString()
     }
 
     /**
