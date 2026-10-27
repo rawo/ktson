@@ -22,7 +22,8 @@ class InstanceLocationTest :
         LocationCase("unevaluated property schema", """{"properties":{"outer":{"unevaluatedProperties":{"type":"integer"}}}}""", """{"outer":{"a/b":"x"}}""", "/outer/a~1b"),
         LocationCase("unevaluated item owner", """{"properties":{"outer":{"unevaluatedItems":false}}}""", """{"outer":[1]}""", "/outer"),
         LocationCase("unevaluated item schema", """{"properties":{"outer":{"unevaluatedItems":{"type":"integer"}}}}""", """{"outer":["x"]}""", "/outer/0"),
-        LocationCase("prefix item", """{"prefixItems":[{"type":"integer"}]}""", """["x"]""", "/0"),
+        // prefixItems is a 2020-12 keyword; in 2019-09 it is ignored (#43), and "tuple item" covers that draft.
+        LocationCase("prefix item", """{"prefixItems":[{"type":"integer"}]}""", """["x"]""", "/0", setOf(SchemaVersion.DRAFT_2020_12)),
         LocationCase("items after prefix", """{"prefixItems":[true],"items":{"type":"integer"}}""", """[1,"x"]""", "/1"),
         LocationCase("tuple item", """{"items":[true,{"type":"integer"}]}""", """[1,"x"]""", "/1"),
         LocationCase("additional item prohibition", """{"items":[true],"additionalItems":false}""", "[1,2]", "/1"),
@@ -37,7 +38,7 @@ class InstanceLocationTest :
 
     SchemaVersion.entries.forEach { version ->
         describe("${version.name} instance locations") {
-            cases.forEach { case ->
+            cases.filter { version in it.versions }.forEach { case ->
                 it(case.description) {
                     val instance = Json.parseToJsonElement(case.instance)
                     val error = validator.validate(instance, JsonSchema.fromString(case.schema, version)).getErrors().single()
@@ -182,6 +183,12 @@ class InstanceLocationTest :
     }
 })
 
-private data class LocationCase(val description: String, val schema: String, val instance: String, val location: String)
+private data class LocationCase(
+    val description: String,
+    val schema: String,
+    val instance: String,
+    val location: String,
+    val versions: Set<SchemaVersion> = SchemaVersion.entries.toSet(),
+)
 
 private fun errorTree(error: ValidationError): List<ValidationError> = listOf(error) + error.causes.flatMap { errorTree(it) }

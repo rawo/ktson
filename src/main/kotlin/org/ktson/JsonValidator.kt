@@ -225,7 +225,7 @@ class JsonValidator @JvmOverloads constructor(
             is JsonObject -> {
                 // $ref, $recursiveRef, $dynamicRef are evaluated alongside sibling keywords
                 // (Draft 2019-09+ removed the Draft 7 rule that $ref short-circuits siblings)
-                resolveReferences(schemaElement, rootSchema, effectiveResourceRoot, effectiveScope).forEach { hop ->
+                resolveReferences(schemaElement, rootSchema, effectiveResourceRoot, effectiveScope, version).forEach { hop ->
                     val hopPath = at(schemaPath, hop.keyword)
                     val target = hop.target
                     if (target != null) {
@@ -274,6 +274,7 @@ class JsonValidator @JvmOverloads constructor(
         rootSchema: JsonElement,
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
+        version: SchemaVersion,
     ): List<ReferenceHop> {
         val hops = ArrayList<ReferenceHop>(1)
 
@@ -302,7 +303,8 @@ class JsonValidator @JvmOverloads constructor(
 
         // $recursiveRef (2019-09): a target with $recursiveAnchor: true yields to the outermost such schema in
         // scope, which is itself a resource root, so the target is evaluated in its own resource
-        schemaElement[RECURSIVE_REF]?.jsonPrimitive?.contentOrNull?.let { recursiveRef ->
+        // $recursiveRef exists only in 2019-09; in 2020-12 it is an unknown keyword and is ignored.
+        schemaElement[RECURSIVE_REF]?.takeIf { version == SchemaVersion.DRAFT_2019_09 }?.jsonPrimitive?.contentOrNull?.let { recursiveRef ->
             val resolved = referenceResolver.resolveRef(recursiveRef, resourceRoot, schemaElement, resourceRoot)
             val override =
                 if (resolved is JsonObject && resolved[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true) {
@@ -316,7 +318,8 @@ class JsonValidator @JvmOverloads constructor(
         // $dynamicRef (2020-12): a plain-anchor target with a matching $dynamicAnchor yields to the outermost
         // resource in scope that declares that dynamic anchor, and is evaluated in that resource; otherwise
         // the target is evaluated in the resource its URI leads to, as for $ref
-        schemaElement[DYNAMIC_REF]?.jsonPrimitive?.contentOrNull?.let { dynamicRef ->
+        // $dynamicRef exists only in 2020-12; in 2019-09 it is an unknown keyword and is ignored.
+        schemaElement[DYNAMIC_REF]?.takeIf { version == SchemaVersion.DRAFT_2020_12 }?.jsonPrimitive?.contentOrNull?.let { dynamicRef ->
             val uriPart = dynamicRef.substringBefore('#')
             val fragment = if ('#' in dynamicRef) dynamicRef.substringAfter('#') else ""
             val initialTarget = referenceResolver.resolveRef(dynamicRef, if (uriPart.isEmpty()) resourceRoot else rootSchema, schemaElement, resourceRoot)
@@ -679,8 +682,8 @@ class JsonValidator @JvmOverloads constructor(
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
     ) {
-        // Prefix items (2020-12)
-        val hasPrefixItems = schema.containsKey(PREFIX_ITEMS)
+        // Prefix items (2020-12 only; in 2019-09 prefixItems is an unknown keyword)
+        val hasPrefixItems = version == SchemaVersion.DRAFT_2020_12 && schema.containsKey(PREFIX_ITEMS)
 
         if (hasPrefixItems) {
             schema[PREFIX_ITEMS]?.jsonArray?.let { prefixItems ->
@@ -1965,8 +1968,9 @@ class JsonValidator @JvmOverloads constructor(
 
         val evaluated = mutableSetOf<Int>()
 
-        // prefixItems: evaluates indices 0 until min(prefixItems.size, instance.size)
-        schemaElement[PREFIX_ITEMS]?.jsonArray?.let { prefixItems ->
+        // prefixItems (2020-12 only): evaluates indices 0 until min(prefixItems.size, instance.size)
+        val prefixItemsSchema = if (version == SchemaVersion.DRAFT_2020_12) schemaElement[PREFIX_ITEMS] else null
+        prefixItemsSchema?.jsonArray?.let { prefixItems ->
             for (i in 0 until minOf(prefixItems.size, instance.size)) evaluated.add(i)
         }
 
@@ -1979,8 +1983,8 @@ class JsonValidator @JvmOverloads constructor(
                 itemsSchema is JsonArray -> {
                     for (i in 0 until minOf(itemsSchema.size, instance.size)) evaluated.add(i)
                 }
-                schemaElement.containsKey(PREFIX_ITEMS) -> {
-                    val prefixCount = schemaElement[PREFIX_ITEMS]!!.jsonArray.size
+                prefixItemsSchema != null -> {
+                    val prefixCount = prefixItemsSchema.jsonArray.size
                     for (i in prefixCount until instance.size) evaluated.add(i)
                 }
                 else -> {
@@ -2020,7 +2024,7 @@ class JsonValidator @JvmOverloads constructor(
 
         // $ref, $recursiveRef, $dynamicRef: collect from the target, in the target's resource and dynamic
         // scope, exactly as validateElement evaluates it (resolveReferences is shared with it)
-        resolveReferences(schemaElement, rootSchema, effectiveResourceRoot, effectiveScope).forEach { hop ->
+        resolveReferences(schemaElement, rootSchema, effectiveResourceRoot, effectiveScope, version).forEach { hop ->
             hop.target?.let { target ->
                 evaluated.addAll(collectEvaluatedIndices(instance, target, path, version, rootSchema, depth + 1, hop.resourceRoot, hop.dynamicScope))
             }
@@ -2142,7 +2146,7 @@ class JsonValidator @JvmOverloads constructor(
 
         // $ref, $recursiveRef, $dynamicRef: collect from the target, in the target's resource and dynamic
         // scope, exactly as validateElement evaluates it (resolveReferences is shared with it)
-        resolveReferences(schemaElement, rootSchema, effectiveResourceRoot, effectiveScope).forEach { hop ->
+        resolveReferences(schemaElement, rootSchema, effectiveResourceRoot, effectiveScope, version).forEach { hop ->
             hop.target?.let { target ->
                 evaluated.addAll(collectEvaluatedProperties(instance, target, path, version, rootSchema, depth + 1, hop.resourceRoot, hop.dynamicScope))
             }
