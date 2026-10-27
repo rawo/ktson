@@ -41,8 +41,8 @@ internal class AbsoluteLocations(private val referenceResolver: ReferenceResolve
         if (errors.size == from) return
         val found = locate(target, candidates) ?: return
         val location = when {
-            found.uri != null -> "${found.uri}#${found.pointer}"
-            found.resource === rootSchema -> "#${found.pointer}"
+            found.uri != null -> "${found.uri}#${encodeFragment(found.pointer)}"
+            found.resource === rootSchema -> "#${encodeFragment(found.pointer)}"
             else -> return
         }
         for (i in from until errors.size) errors[i] = errors[i].stamped(hopPath, location)
@@ -59,13 +59,13 @@ internal class AbsoluteLocations(private val referenceResolver: ReferenceResolve
         val own = absoluteKeywordLocation ?: schemaPath
             ?.let { path -> path.removePrefix(hopPath).takeIf { path.startsWith(hopPath) && (it.isEmpty() || it.startsWith("/")) } }
             ?.takeUnless { crossesReference(it) }
-            ?.let { location + it }
+            ?.let { location + encodeFragment(it) }
         return copy(causes = stampedCauses, absoluteKeywordLocation = own)
     }
 
     private fun ValidationError.finished(rootUri: String?): ValidationError {
         val own = when {
-            absoluteKeywordLocation == null -> schemaPath?.takeUnless { crossesReference(it) }?.let { path -> rootUri?.let { "$it#$path" } }
+            absoluteKeywordLocation == null -> schemaPath?.takeUnless { crossesReference(it) }?.let { path -> rootUri?.let { "$it#${encodeFragment(path)}" } }
             absoluteKeywordLocation.startsWith("#") -> rootUri?.let { it + absoluteKeywordLocation }
             else -> absoluteKeywordLocation
         }
@@ -138,7 +138,24 @@ internal class AbsoluteLocations(private val referenceResolver: ReferenceResolve
     /** An unparsable URI counts as not absolute: filling this optional field must never fail a validation. */
     private fun isAbsolute(uri: String): Boolean = uri.isNotEmpty() && runCatching { UriResolver.isAbsoluteUri(uri) }.getOrDefault(false)
 
+    /**
+     * A JSON Pointer as a URI fragment (RFC 6901 §6): characters the fragment grammar does not allow,
+     * `%` included, become UTF-8 percent-escapes, e.g. "c%d" -> "c%25d", " " -> "%20", "é" -> "%C3%A9".
+     */
+    private fun encodeFragment(pointer: String): String {
+        if (pointer.all { it in FRAGMENT_SAFE }) return pointer
+        return buildString {
+            for (byte in pointer.toByteArray(Charsets.UTF_8)) {
+                val char = (byte.toInt() and 0xFF).toChar()
+                if (char in FRAGMENT_SAFE) append(char) else append('%').append("%02X".format(byte.toInt() and 0xFF))
+            }
+        }
+    }
+
     private companion object {
+        /** RFC 3986 fragment characters: unreserved, sub-delims, ":", "@", "/" and "?". */
+        val FRAGMENT_SAFE: Set<Char> = (('a'..'z') + ('A'..'Z') + ('0'..'9') + "-._~!$&'()*+,;=:@/?".toList()).toSet()
+
         val REFERENCE_KEYWORDS = setOf(SchemaKeywords.REF, SchemaKeywords.DYNAMIC_REF, SchemaKeywords.RECURSIVE_REF)
 
         /** Keywords whose value maps names to subschemas: the token after them is a name, not a keyword. */

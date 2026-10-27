@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * absoluteKeywordLocation: the canonical URI of the schema resource holding the failing keyword,
@@ -116,6 +117,30 @@ class AbsoluteKeywordLocationTest :
                 it("follows a real \$ref to a \$defs entry named \$ref") {
                     val schema = """{"${'$'}id":"$root","${'$'}ref":"#/${'$'}defs/${'$'}ref","${'$'}defs":{"${'$'}ref":{"type":"string"}}}"""
                     locations(validate(schema, "1", version)) shouldBe listOf("/\$ref/type" to "$root#/\$defs/\$ref/type")
+                }
+
+                it("percent-encodes the fragment as RFC 6901 §6 requires (#12)") {
+                    // RFC 6901's own examples: "c%d" -> c%25d, "e^f" -> e%5Ef, "g|h" -> g%7Ch, "k\"l" -> k%22l, " " -> %20
+                    val names = listOf("c%d" to "c%25d", "e^f" to "e%5Ef", "g|h" to "g%7Ch", "k\"l" to "k%22l", " " to "%20", "é" to "%C3%A9")
+                    names.forEach { (name, encoded) ->
+                        val quoted = JsonPrimitive(name).toString()
+                        val schema = """{"${'$'}id":"$root","properties":{$quoted:{"type":"string"}}}"""
+                        val location = locations(validate(schema, """{$quoted:1}""", version)).single().second
+                        location shouldBe "$root#/properties/$encoded/type"
+                        // A consumer can parse it as a URI, and decoding the fragment gives back the pointer.
+                        java.net.URI(location!!).fragment shouldBe "/properties/$name/type"
+                    }
+                }
+
+                it("percent-encodes the pointer of a reference target") {
+                    val schema = """{"${'$'}id":"$root","${'$'}ref":"#/${'$'}defs/a%20b","${'$'}defs":{"a b":{"minimum":0}}}"""
+                    locations(validate(schema, "-1", version)) shouldBe listOf("/\$ref/minimum" to "$root#/\$defs/a%20b/minimum")
+                }
+
+                it("keeps characters the fragment allows, such as the pointer escapes ~0 and ~1") {
+                    val schema = """{"${'$'}id":"$root","properties":{"~a/b${'$'}!":{"type":"string"}}}"""
+                    locations(validate(schema, """{"~a/b${'$'}!":1}""", version)) shouldBe
+                        listOf("/properties/~0a~1b\$!/type" to "$root#/properties/~0a~1b\$!/type")
                 }
 
                 it("omits it when the schema has no absolute URI") {
