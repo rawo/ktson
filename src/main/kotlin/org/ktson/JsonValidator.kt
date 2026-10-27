@@ -354,14 +354,14 @@ class JsonValidator @JvmOverloads constructor(
         // Const validation
         schema[CONST]?.let { constValue ->
             if (!jsonEquals(instance, constValue)) {
-                errors.add(ValidationError(path, "Value must be const: $constValue, but was: $instance", CONST, at(schemaPath, CONST)))
+                errors.add(ValidationError(path, "Value must be const: ${constValue.preview()}, but was: ${instance.preview()}", CONST, at(schemaPath, CONST)))
             }
         }
 
         // Enum validation
         schema[ENUM]?.jsonArray?.let { enumValues ->
             if (enumValues.none { jsonEquals(it, instance) }) {
-                errors.add(ValidationError(path, "Value $instance is not one of: $enumValues", ENUM, at(schemaPath, ENUM)))
+                errors.add(ValidationError(path, "Value ${instance.preview()} is not one of: ${enumValues.preview(2 * MAX_PREVIEW_LENGTH)}", ENUM, at(schemaPath, ENUM)))
             }
         }
 

@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A schema with a property named `$id`, `$anchor` or `$dynamicAnchor` no longer makes `validate()` throw (#7).
 - A `false` schema reports its error at its own location (`/properties/a`, not `/properties/a/false`);
   the error's `keyword` stays `"false"` (#46).
+- `const` and `enum` messages render the values they quote within a fixed budget (about 100 characters
+  per value) instead of embedding them whole, so a huge instance no longer produces a huge message (#48).
 - JSON Pointers no longer resolve non-canonical array indices such as `/01` or `/+1` (RFC 6901 §4), in
   `JsonPointer.resolve` and in `$ref` fragments (#47).
 - `absoluteKeywordLocation` is filled under subresources whose `$id` is relative to `baseUri` (#10).
