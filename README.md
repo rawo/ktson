@@ -78,9 +78,27 @@ Most of the code refactoring were performed by AI agent with supervision and cod
 
 ### Installation
 
+KtSON is not yet published to Maven Central or another public repository, so dependency
+coordinates alone will not resolve. Build a release into your local Maven repository first (the
+official test suite is not needed for this):
+
+```bash
+git clone https://github.com/rawo/ktson.git
+cd ktson
+git checkout v3.1.0            # a release tag; master may contain unreleased changes
+./gradlew publishToMavenLocal  # installs org.ktson:ktson:3.1.0 into ~/.m2/repository
+```
+
+Then add `mavenLocal()` to your repositories and depend on that version.
+
 #### Gradle (Kotlin DSL)
 
 ```kotlin
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
 dependencies {
     implementation("org.ktson:ktson:3.1.0")
 }
@@ -89,12 +107,19 @@ dependencies {
 #### Gradle (Groovy)
 
 ```groovy
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
 dependencies {
     implementation 'org.ktson:ktson:3.1.0'
 }
 ```
 
 #### Maven
+
+Maven reads `~/.m2/repository` by default, so no extra repository is needed:
 
 ```xml
 <dependency>
