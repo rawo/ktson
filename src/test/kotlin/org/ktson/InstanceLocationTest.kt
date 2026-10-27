@@ -1,6 +1,7 @@
 package org.ktson
 
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import kotlinx.serialization.json.*
@@ -125,13 +126,15 @@ class InstanceLocationTest :
             """{"prefixItems":[{"type":"invalid"}]}""" to "/prefixItems/0",
             """{"not":{"properties":{"":{"type":"invalid"}}}}""" to "/not/properties/",
         )
+        // validateSchema checks against the meta-schema (#38): the schema is the instance, so its errors point
+        // at the offending keyword inside the schema, and schemaPath is the location in the meta-schema.
         schemas.forEach { (text, location) ->
-            it("locates the schema node at ${JsonPrimitive(location)}") {
+            it("locates the invalid type keyword at ${JsonPrimitive("$location/type")}") {
                 val schema = JsonSchema.fromString(text)
-                val error = validator.validateSchema(schema).getErrors().single()
-                error.instanceLocation shouldBe location
-                error.schemaPath shouldBe location
-                (JsonPointer.resolve(schema.schema, location) != null) shouldBe true
+                val errors = validator.validateSchema(schema).getErrors().flatMap { errorTree(it) }
+                errors.map { it.instanceLocation } shouldContain "$location/type"
+                // Every reported location resolves to a value in the schema that was checked.
+                errors.forEach { (JsonPointer.resolve(schema.schema, it.instanceLocation) != null) shouldBe true }
             }
         }
     }

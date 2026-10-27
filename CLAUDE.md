@@ -99,6 +99,12 @@ The validator architecture is straightforward with minimal abstractions:
    - `finish()` in `validateInternal()` stamps the rest against the root URI (absolute `$id`, else `JsonSchema.baseUri`)
    - Only runs when a hop produced errors; an unknown or unparsable URI leaves the field null, never fails validation
 
+10. **MetaSchemas** (`MetaSchemas.kt`) - The official 2019-09 and 2020-12 meta-schemas, embedded as source
+   - Used by `validateSchema()`, which validates the schema against its draft's meta-schema with a separate,
+     lazily created validator (format assertion on) on a thread with a 64 MB stack, after an iterative
+     nesting check against `maxValidationDepth`
+   - Generated from `src/test/resources/schemas/draft/`; keep the two in sync (no runtime resources)
+
 ### Validation Flow
 
 ```

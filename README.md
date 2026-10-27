@@ -195,6 +195,12 @@ val result = validator.validate(instance, jsonSchema)
 
 #### Validating Schema Structure
 
+`validateSchema` checks a schema against the official meta-schema of its draft (embedded in KtSON, no
+network access), with format assertion on, so for example an invalid `pattern` regex is reported. Errors
+point into the schema (`instanceLocation` is `/properties/a/type`, say). Schemas nested deeper than
+`maxValidationDepth` get a `depth` error; the check itself runs on a dedicated thread with a large stack,
+so it does not depend on the caller's stack size.
+
 ```kotlin
 val validator = JsonValidator(enableMetaSchemaValidation = true)
 val schema = JsonSchema.fromString(schemaJson, SchemaVersion.DRAFT_2020_12)

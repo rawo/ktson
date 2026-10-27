@@ -53,9 +53,13 @@ class DeepStructureTest :
         }
 
         describe("schema structure checks") {
-            it("checks a schema nested 10,000 levels deep") {
-                shallow.validateSchema(JsonSchema(nestedNot(10_000))).isValid shouldBe true
-                shallow.validateSchema(JsonSchema(nestedNot(10_000, buildJsonObject { put("type", JsonPrimitive("bogus")) }))).isValid shouldBe false
+            it("refuses a schema nested 10,000 levels deep with a depth error instead of overflowing") {
+                // validateSchema checks against the meta-schema (#38); nesting is measured iteratively first.
+                listOf(shallow, JsonValidator()).forEach { validator ->
+                    val result = validator.validateSchema(JsonSchema(nestedNot(10_000)))
+                    result.isValid shouldBe false
+                    result.getErrors().single().keyword shouldBe "depth"
+                }
             }
         }
 

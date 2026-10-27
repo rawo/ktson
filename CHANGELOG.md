@@ -60,6 +60,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   engine recurses per repetition of a group such as `(a|b)*`) is reported as "could not be checked"
   and fails validation instead of throwing `StackOverflowError` (#32). Catastrophic backtracking (CPU
   time) is not limited.
+- **Breaking:** `validateSchema` now checks schemas against the official meta-schema of their draft
+  (embedded, format assertion on) instead of a few structural rules, so it rejects schemas it used to
+  accept: a string root, `{"required":1}`, `{"minLength":-1}`, an invalid `pattern` regex, bad keywords
+  under `$defs` or `unevaluated*`. Its errors point at the offending keyword inside the schema
+  (`instanceLocation`), and their `schemaPath` is a location in the meta-schema. Schemas nested deeper
+  than `maxValidationDepth` get a `depth` error (#38).
 - JSON Pointers no longer resolve non-canonical array indices such as `/01` or `/+1` (RFC 6901 §4), in
   `JsonPointer.resolve` and in `$ref` fragments (#47).
 - `absoluteKeywordLocation` is filled under subresources whose `$id` is relative to `baseUri` (#10).
