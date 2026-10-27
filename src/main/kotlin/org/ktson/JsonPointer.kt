@@ -81,7 +81,8 @@ class ReferenceResolver(
     private val schemaLoader: ((String) -> JsonElement?)? = null,
 ) {
     /** Cache of externally-loaded schemas keyed by their absolute URI. */
-    private val schemaCache = java.util.concurrent.ConcurrentHashMap<String, JsonElement>()
+    // Nullable value type only so computeIfAbsent's loader may return null; a ConcurrentHashMap never stores null.
+    private val schemaCache = java.util.concurrent.ConcurrentHashMap<String, JsonElement?>()
 
     /**
      * Maps externally-loaded schema elements → the URI they were loaded from.
@@ -239,10 +240,13 @@ class ReferenceResolver(
             findSchemaByUri(baseSchema, absoluteUri)?.let { return it }
         }
 
-        val loaded = schemaLoader?.invoke(absoluteUri) ?: return null
-        schemaCache[absoluteUri] = loaded
-        loadedSchemaUris[loaded] = absoluteUri
-        return loaded
+        val loader = schemaLoader ?: return null
+        // Single flight: concurrent validations needing the same URI wait for one load instead of each
+        // calling the loader, and the URI is registered before the schema becomes visible in the cache.
+        // A null result is not cached, so a later validation may try again.
+        return schemaCache.computeIfAbsent(absoluteUri) { uri ->
+            loader(uri)?.also { loadedSchemaUris[it] = uri }
+        }
     }
 
     /** Resolve a reference that has no URI part — only a fragment. */
