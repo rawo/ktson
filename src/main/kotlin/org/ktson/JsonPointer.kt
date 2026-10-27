@@ -7,6 +7,8 @@ import kotlinx.serialization.json.*
  * Provides navigation within JSON documents using a string notation
  */
 object JsonPointer {
+    private val ARRAY_INDEX = Regex("0|[1-9][0-9]*")
+
     /**
      * Resolve a JSON Pointer path in a document
      *
@@ -39,8 +41,10 @@ object JsonPointer {
                     current[token] ?: return null
                 }
                 is JsonArray -> {
+                    // RFC 6901 §4: "0" or [1-9][0-9]*; toIntOrNull alone also accepts "01" and "+1"
+                    if (!ARRAY_INDEX.matches(token)) return null
                     val index = token.toIntOrNull() ?: return null
-                    if (index < 0 || index >= current.size) return null
+                    if (index >= current.size) return null
                     current[index]
                 }
                 else -> return null
