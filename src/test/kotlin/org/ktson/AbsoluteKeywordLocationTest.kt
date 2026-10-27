@@ -168,6 +168,36 @@ class AbsoluteKeywordLocationTest :
             }
         }
 
+        describe("nested resources reached without a reference (#45)") {
+            it("starts a new resource at a subschema with its own \$id") {
+                val schema = """{"${'$'}id":"$root","properties":{"x":{"${'$'}id":"child","type":"integer"}}}"""
+                locations(validate(schema, """{"x":"bad"}""")) shouldBe listOf("/properties/x/type" to "https://example.com/child#/type")
+            }
+
+            it("does so below a reference target too") {
+                val schema = """{"${'$'}id":"$root","${'$'}ref":"#/${'$'}defs/a","${'$'}defs":{"a":{"properties":{"x":{"${'$'}id":"inner","minimum":0}}}}}"""
+                locations(validate(schema, """{"x":-1}""")) shouldBe listOf("/\$ref/properties/x/minimum" to "https://example.com/inner#/minimum")
+            }
+
+            it("locates a nested resource inside an array applicator, and its causes") {
+                val schema = """{"${'$'}id":"$root","allOf":[{"${'$'}id":"part","type":"string"}]}"""
+                locations(validate(schema, "1")) shouldBe listOf(
+                    "/allOf/0" to "https://example.com/part#",
+                    "/allOf/0/type" to "https://example.com/part#/type",
+                )
+            }
+
+            it("does not treat an \$id inside const data as a resource") {
+                val schema = """{"${'$'}id":"$root","const":{"${'$'}id":"x"}}"""
+                locations(validate(schema, "1")) shouldBe listOf("/const" to "$root#/const")
+            }
+
+            it("does not treat a property named \$id as a resource") {
+                val schema = """{"${'$'}id":"$root","properties":{"${'$'}id":{"type":"string"}}}"""
+                locations(validate(schema, """{"${'$'}id":1}""")) shouldBe listOf("/properties/\$id/type" to "$root#/properties/\$id/type")
+            }
+        }
+
         describe("false schemas (#46)") {
             fun error(result: ValidationResult) = result.getErrors().single()
 

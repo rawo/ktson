@@ -54,6 +54,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `JsonPointer.resolve` and in `$ref` fragments (#47).
 - `absoluteKeywordLocation` is filled under subresources whose `$id` is relative to `baseUri` (#10).
 - `absoluteKeywordLocation` is kept for keywords under a property (or `$defs` entry) named `$ref` (#11).
+- `absoluteKeywordLocation` names the innermost resource holding the keyword also when it is reached
+  without a reference: under `properties/x` with `$id: "child"`, `type` is `…/child#/type`, not
+  `…/root#/properties/x/type`. `$id` inside `const` data or a property named `$id` is not a resource (#45).
 - `absoluteKeywordLocation` percent-encodes its fragment (RFC 6901 §6), so keys with spaces, `%` or
   non-ASCII characters give a valid URI (#12).
 
