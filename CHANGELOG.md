@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   non-ASCII characters give a valid URI (#12).
 
 ### Changed
+- `kotlinx-serialization-json` is now an `api` dependency (compile scope in the POM): `JsonElement` is
+  part of KtSON's public API, and consumers could not compile code touching it (#39).
 - `kotlinx-coroutines-core` is no longer a runtime dependency. Nothing in KtSON's API used it since
   the move to a synchronous API; the published POM now lists only `kotlinx-serialization-json`
   (and the Kotlin standard library). Projects that used coroutines without declaring them must now

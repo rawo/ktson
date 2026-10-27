@@ -13,8 +13,9 @@ repositories {
 }
 
 dependencies {
-    // JSON serialization
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+    // JSON serialization. `api`, not `implementation`: JsonElement is part of KtSON's public API
+    // (JsonSchema.schema, validate(JsonElement, ...), schemaLoader), so consumers need it to compile.
+    api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
 
     // Testing
     testImplementation(kotlin("test"))
@@ -98,3 +99,19 @@ publishing {
         }
     }
 }
+
+// JsonElement is part of the public API, so the published POM must give consumers
+// kotlinx-serialization-json at compile scope (an `implementation` dependency becomes runtime scope).
+val verifyPublishedApiDependencies by tasks.registering {
+    description = "Fails if the published POM does not expose kotlinx-serialization-json at compile scope"
+    group = "verification"
+    dependsOn("generatePomFileForMavenPublication")
+    val pomFile = layout.buildDirectory.file("publications/maven/pom-default.xml")
+    doLast {
+        val pom = pomFile.get().asFile.readText()
+        val exposed = Regex("<artifactId>kotlinx-serialization-json-jvm</artifactId>\\s*<version>[^<]+</version>\\s*<scope>compile</scope>")
+        check(exposed.containsMatchIn(pom)) { "kotlinx-serialization-json must be an api dependency: JsonElement is in KtSON's public API" }
+    }
+}
+
+tasks.named("check") { dependsOn(verifyPublishedApiDependencies) }
