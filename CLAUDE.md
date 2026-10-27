@@ -201,6 +201,15 @@ for both drafts. Decimal validation costs more than approximate `Double` arithme
 
 ## Development Guidelines
 
+### Releasing
+Bump `version` in `build.gradle.kts` (and the README/CLAUDE.md version references, CHANGELOG section),
+commit, then push a tag `v<version>`. `.github/workflows/release.yml` then:
+1. `check` - fails unless the tag is on master and equals `v` + the `build.gradle.kts` version
+2. `build` - calls `build.yml` (the same build as CI: tests, official suite at `TEST_SUITE_REF`, ktlint)
+3. `release` - creates the GitHub release with generated notes and attaches the JAR and sources JAR
+
+Only tags matching `v*` trigger it. KtSON is not published to Maven Central (out of scope for now).
+
 ### Commit Messages
 Release notes are generated from the commit log, so commits must follow Conventional Commits:
 - `feat: ...` and `fix: ...` become the **What's New** and **Bug Fixes** sections; a scope

@@ -75,6 +75,11 @@ kotlin {
     jvmToolchain(21)
 }
 
+// A sources JAR next to the main one, attached to GitHub releases (and included when publishing locally).
+java {
+    withSourcesJar()
+}
+
 ktlint {
     version.set("1.7.1")
     android.set(false)

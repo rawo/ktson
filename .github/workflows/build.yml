@@ -9,6 +9,13 @@ on:
   pull_request:
     branches:
       - master
+  # The release workflow calls this one, so a release is built exactly like CI builds master.
+  workflow_call:
+    inputs:
+      upload-jar:
+        description: Upload build/libs/*.jar as the "ktson-jars" artifact for the release job
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -39,3 +46,12 @@ jobs:
 
       - name: Build with Gradle
         run: ./gradlew build
+
+      - name: Upload JARs for the release
+        if: ${{ inputs.upload-jar }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ktson-jars
+          path: build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 7
