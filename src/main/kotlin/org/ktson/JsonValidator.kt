@@ -1083,10 +1083,11 @@ class JsonValidator @JvmOverloads constructor(
         return true
     }
 
-    private fun isValidEmailLocalUnquoted(local: String): Boolean {
-        if (local.startsWith('.') || local.endsWith('.')) return false
+    /** RFC 5321 Dot-string; with [allowNonAscii] the RFC 6531 extension that also admits non-ASCII characters. */
+    private fun isValidEmailLocalUnquoted(local: String, allowNonAscii: Boolean = false): Boolean {
+        if (local.isEmpty() || local.startsWith('.') || local.endsWith('.')) return false
         if (local.contains("..")) return false
-        return local.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it in EMAIL_LOCAL_SPECIAL_CHARS }
+        return local.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it in EMAIL_LOCAL_SPECIAL_CHARS || (allowNonAscii && it.code > 127) }
     }
 
     private fun isValidEmailDomain(domain: String): Boolean {
@@ -1516,10 +1517,22 @@ class JsonValidator @JvmOverloads constructor(
 
     private fun punycodeChar(digit: Int): Char = if (digit < 26) 'a' + digit else '0' + (digit - 26)
 
+    /**
+     * RFC 6531 Mailbox: the RFC 5321 grammar of [isValidEmail] with non-ASCII characters allowed in the
+     * local part (a quoted local part already admits them), and an internationalised domain.
+     */
     private fun isValidIdnEmail(value: String): Boolean {
-        val atIdx = value.lastIndexOf('@')
-        if (atIdx <= 0 || atIdx >= value.length - 1) return false
-        val domain = value.substring(atIdx + 1)
+        if (value.isEmpty()) return false
+        val (localIsValid, domain) = if (value.startsWith('"')) {
+            val closeQuote = findClosingQuote(value) ?: return false
+            if (closeQuote + 1 >= value.length || value[closeQuote + 1] != '@') return false
+            isValidEmailLocalQuoted(value.substring(1, closeQuote)) to value.substring(closeQuote + 2)
+        } else {
+            val atIdx = value.lastIndexOf('@')
+            if (atIdx <= 0) return false
+            isValidEmailLocalUnquoted(value.substring(0, atIdx), allowNonAscii = true) to value.substring(atIdx + 1)
+        }
+        if (!localIsValid || domain.isEmpty()) return false
         return if (domain.startsWith('[') && domain.endsWith(']')) isValidEmailDomain(domain) else isValidIdnHostname(domain)
     }
 
