@@ -520,33 +520,34 @@ class JsonValidator @JvmOverloads constructor(
      * Compares two JSON elements for equality, considering numeric equivalence.
      * In JSON Schema, 1.0 and 1 are considered equal, as are 0.0 and 0.
      */
+
+    /**
+     * JSON Schema equality: structural, with numbers compared by value (1 equals 1.0). Iterative, so
+     * arbitrarily deep instance values cannot overflow the stack (#31); JsonElement.equals recurses.
+     */
     private fun jsonEquals(a: JsonElement, b: JsonElement): Boolean {
-        // If they're directly equal, return true
-        if (a == b) return true
-
-        // Check numeric equivalence for primitives
-        if (a is JsonPrimitive && b is JsonPrimitive) {
-            val cmp = compareNumerics(a, b)
-            if (cmp != null) {
-                return cmp == 0
+        val pending = ArrayDeque<Pair<JsonElement, JsonElement>>()
+        pending.addLast(a to b)
+        while (pending.isNotEmpty()) {
+            val (x, y) = pending.removeLast()
+            if (x === y) continue
+            when {
+                x is JsonPrimitive && y is JsonPrimitive -> {
+                    if (x == y) continue
+                    if (compareNumerics(x, y) != 0) return false
+                }
+                x is JsonArray && y is JsonArray -> {
+                    if (x.size != y.size) return false
+                    for (index in x.indices.reversed()) pending.addLast(x[index] to y[index])
+                }
+                x is JsonObject && y is JsonObject -> {
+                    if (x.size != y.size) return false
+                    for ((key, value) in x) pending.addLast(value to (y[key] ?: return false))
+                }
+                else -> return false
             }
         }
-
-        // Check arrays recursively
-        if (a is JsonArray && b is JsonArray) {
-            if (a.size != b.size) return false
-            return a.indices.all { jsonEquals(a[it], b[it]) }
-        }
-
-        // Check objects recursively
-        if (a is JsonObject && b is JsonObject) {
-            if (a.size != b.size) return false
-            return a.keys.all { key ->
-                b.containsKey(key) && jsonEquals(a[key]!!, b[key]!!)
-            }
-        }
-
-        return false
+        return true
     }
 
     /**
@@ -2277,79 +2278,92 @@ class JsonValidator @JvmOverloads constructor(
     /**
      * Validates the structure of a schema itself
      */
-    private fun validateSchemaStructure(schema: JsonElement, path: String, schemaPath: String, errors: MutableList<ValidationError>) {
-        when (schema) {
-            is JsonObject -> {
-                // Check for invalid combinations
-                val validTypes = SchemaKeywords.VALID_TYPES
-                if (schema.containsKey(TYPE)) {
-                    when (val type = schema[TYPE]) {
-                        is JsonPrimitive -> {
-                            if (!type.isString) {
-                                errors.add(ValidationError(path, "type must be a string or array of strings", SCHEMA, schemaPath))
-                            } else if (type.content !in validTypes) {
-                                errors.add(ValidationError(path, "type value '${type.content}' is not a valid JSON type", SCHEMA, schemaPath))
-                            }
-                        }
-                        is JsonArray -> {
-                            type.forEach { typeElement ->
-                                if (typeElement !is JsonPrimitive || !typeElement.isString) {
-                                    errors.add(ValidationError(path, "type array must contain only strings", SCHEMA, schemaPath))
-                                } else if (typeElement.content !in validTypes) {
-                                    errors.add(
-                                        ValidationError(path, "type value '${typeElement.content}' is not a valid JSON type", SCHEMA, schemaPath),
-                                    )
-                                }
-                            }
-                        }
-                        else -> {
-                            errors.add(ValidationError(path, "type must be a string or array", SCHEMA, schemaPath))
-                        }
-                    }
-                }
 
-                // Validate $schema if present
-                schema[SCHEMA]?.let { schemaUri ->
-                    if (schemaUri !is JsonPrimitive || !schemaUri.isString) {
-                        errors.add(ValidationError(path, "$SCHEMA must be a string", SCHEMA, schemaPath))
+    /**
+     * Checks the structure of [root] and every subschema below it, depth-first in document order.
+     * Iterative, so a deeply nested schema cannot overflow the stack (#31).
+     */
+    private fun validateSchemaStructure(root: JsonElement, rootPath: String, rootSchemaPath: String, errors: MutableList<ValidationError>) {
+        val pending = ArrayDeque<Triple<JsonElement, String, String>>()
+        pending.addLast(Triple(root, rootPath, rootSchemaPath))
+        while (pending.isNotEmpty()) {
+            val (schema, path, schemaPath) = pending.removeLast()
+            val children = mutableListOf<Triple<JsonElement, String, String>>()
+            when (schema) {
+                is JsonObject -> {
+                    // Check for invalid combinations
+                    val validTypes = SchemaKeywords.VALID_TYPES
+                    if (schema.containsKey(TYPE)) {
+                        when (val type = schema[TYPE]) {
+                            is JsonPrimitive -> {
+                                if (!type.isString) {
+                                    errors.add(ValidationError(path, "type must be a string or array of strings", SCHEMA, schemaPath))
+                                } else if (type.content !in validTypes) {
+                                    errors.add(ValidationError(path, "type value '${type.content}' is not a valid JSON type", SCHEMA, schemaPath))
+                                }
+                            }
+                            is JsonArray -> {
+                                type.forEach { typeElement ->
+                                    if (typeElement !is JsonPrimitive || !typeElement.isString) {
+                                        errors.add(ValidationError(path, "type array must contain only strings", SCHEMA, schemaPath))
+                                    } else if (typeElement.content !in validTypes) {
+                                        errors.add(
+                                            ValidationError(path, "type value '${typeElement.content}' is not a valid JSON type", SCHEMA, schemaPath),
+                                        )
+                                    }
+                                }
+                            }
+                            else -> {
+                                errors.add(ValidationError(path, "type must be a string or array", SCHEMA, schemaPath))
+                            }
+                        }
                     }
-                }
 
-                // Recursively validate nested schemas
-                schema.forEach { (key, value) ->
-                    val newPath = childOf(path, key)
-                    when (key) {
-                        PROPERTIES, PATTERN_PROPERTIES, DEPENDENT_SCHEMAS -> {
-                            if (value is JsonObject) {
-                                value.forEach { (propName, propSchema) ->
-                                    validateSchemaStructure(propSchema, childOf(newPath, propName), at(schemaPath, key, propName), errors)
+                    // Validate $schema if present
+                    schema[SCHEMA]?.let { schemaUri ->
+                        if (schemaUri !is JsonPrimitive || !schemaUri.isString) {
+                            errors.add(ValidationError(path, "$SCHEMA must be a string", SCHEMA, schemaPath))
+                        }
+                    }
+
+                    // Recursively validate nested schemas
+                    schema.forEach { (key, value) ->
+                        val newPath = childOf(path, key)
+                        when (key) {
+                            PROPERTIES, PATTERN_PROPERTIES, DEPENDENT_SCHEMAS -> {
+                                if (value is JsonObject) {
+                                    value.forEach { (propName, propSchema) ->
+                                        children += Triple(propSchema, childOf(newPath, propName), at(schemaPath, key, propName))
+                                    }
                                 }
                             }
-                        }
-                        ITEMS, ADDITIONAL_PROPERTIES, ADDITIONAL_ITEMS, CONTAINS, PROPERTY_NAMES,
-                        IF, THEN, ELSE, NOT,
-                        -> {
-                            validateSchemaStructure(value, newPath, at(schemaPath, key), errors)
-                        }
-                        ALL_OF, ANY_OF, ONE_OF, PREFIX_ITEMS -> {
-                            if (value is JsonArray) {
-                                value.forEachIndexed { index, subSchema ->
-                                    validateSchemaStructure(subSchema, childOf(newPath, index.toString()), at(schemaPath, key, index.toString()), errors)
+                            ITEMS, ADDITIONAL_PROPERTIES, ADDITIONAL_ITEMS, CONTAINS, PROPERTY_NAMES,
+                            IF, THEN, ELSE, NOT,
+                            -> {
+                                children += Triple(value, newPath, at(schemaPath, key))
+                            }
+                            ALL_OF, ANY_OF, ONE_OF, PREFIX_ITEMS -> {
+                                if (value is JsonArray) {
+                                    value.forEachIndexed { index, subSchema ->
+                                        children += Triple(subSchema, childOf(newPath, index.toString()), at(schemaPath, key, index.toString()))
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-            is JsonPrimitive -> {
-                // Boolean schemas are valid
-                if (schema.booleanOrNull == null && !schema.isString) {
+                is JsonPrimitive -> {
+                    // Boolean schemas are valid
+                    if (schema.booleanOrNull == null && !schema.isString) {
+                        errors.add(ValidationError(path, "Schema must be an object or boolean", SCHEMA, schemaPath))
+                    }
+                }
+                else -> {
                     errors.add(ValidationError(path, "Schema must be an object or boolean", SCHEMA, schemaPath))
                 }
             }
-            else -> {
-                errors.add(ValidationError(path, "Schema must be an object or boolean", SCHEMA, schemaPath))
-            }
+            // Push in reverse so that subschemas are checked in document order, as the recursion did
+            children.asReversed().forEach { pending.addLast(it) }
         }
     }
 

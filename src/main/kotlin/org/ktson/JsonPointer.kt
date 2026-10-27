@@ -283,21 +283,19 @@ class ReferenceResolver(
     private fun findAnchorInResource(
         schema: JsonElement,
         anchorName: String,
-        isRoot: Boolean = true,
-        isSchema: Boolean = true,
     ): JsonElement? {
-        if (schema !is JsonObject) return null
-        if (isSchema) {
-            if (!isRoot && schema.stringKeyword(SchemaKeywords.ID) != null) return null
-            if (schema.stringKeyword(SchemaKeywords.ANCHOR) == anchorName || schema.stringKeyword(SchemaKeywords.DYNAMIC_ANCHOR) == anchorName) return schema
-        }
-        return schema.subschemaValues(isSchema).firstNotNullOfOrNull { (value, childIsSchema) ->
-            when (value) {
-                is JsonObject -> findAnchorInResource(value, anchorName, false, childIsSchema)
-                is JsonArray -> value.firstNotNullOfOrNull { findAnchorInResource(it, anchorName, false, childIsSchema) }
-                else -> null
+        // Iterative depth-first search in document order, so deeply nested schemas cannot overflow the stack (#31)
+        val pending = ArrayDeque<SearchNode>()
+        (schema as? JsonObject)?.let { pending.addLast(SearchNode(it, isRoot = true, isSchema = true, baseUri = "")) }
+        while (pending.isNotEmpty()) {
+            val node = pending.removeLast()
+            if (node.isSchema) {
+                if (!node.isRoot && node.element.stringKeyword(SchemaKeywords.ID) != null) continue
+                if (node.element.stringKeyword(SchemaKeywords.ANCHOR) == anchorName || node.element.stringKeyword(SchemaKeywords.DYNAMIC_ANCHOR) == anchorName) return node.element
             }
+            node.element.pushSubschemas(node.isSchema, pending, node.baseUri)
         }
+        return null
     }
 
     /**
@@ -317,18 +315,18 @@ class ReferenceResolver(
         isRoot: Boolean,
         isSchema: Boolean,
     ): JsonElement? {
-        if (schema !is JsonObject) return null
-        if (isSchema) {
-            if (!isRoot && schema.stringKeyword(SchemaKeywords.ID) != null) return null
-            if (schema.stringKeyword(SchemaKeywords.DYNAMIC_ANCHOR) == anchorName) return schema
-        }
-        return schema.subschemaValues(isSchema).firstNotNullOfOrNull { (value, childIsSchema) ->
-            when (value) {
-                is JsonObject -> findDynamicAnchor(value, anchorName, false, childIsSchema)
-                is JsonArray -> value.firstNotNullOfOrNull { findDynamicAnchor(it, anchorName, false, childIsSchema) }
-                else -> null
+        // Iterative depth-first search in document order, so deeply nested schemas cannot overflow the stack (#31)
+        val pending = ArrayDeque<SearchNode>()
+        (schema as? JsonObject)?.let { pending.addLast(SearchNode(it, isRoot, isSchema, baseUri = "")) }
+        while (pending.isNotEmpty()) {
+            val node = pending.removeLast()
+            if (node.isSchema) {
+                if (!node.isRoot && node.element.stringKeyword(SchemaKeywords.ID) != null) continue
+                if (node.element.stringKeyword(SchemaKeywords.DYNAMIC_ANCHOR) == anchorName) return node.element
             }
+            node.element.pushSubschemas(node.isSchema, pending, node.baseUri)
         }
+        return null
     }
 
     /**
@@ -361,39 +359,38 @@ class ReferenceResolver(
         resolvedTarget: String,
         originalTarget: String,
         baseUri: String,
-        isSchema: Boolean = true,
     ): JsonElement? {
-        if (element !is JsonObject) return null
-        // Only a schema has an $id; a map of named schemas (under properties, $defs, ...) does not.
-        val id = if (isSchema) element.stringKeyword(SchemaKeywords.ID) else null
-        val currentUri =
-            when {
-                id == null -> baseUri
-                // Already known: use it. A search that starts at a resource gets that resource's own
-                // URI as baseUri, so resolving its relative $id again would nest it once per search.
-                hasAbsoluteUri(element) -> getAbsoluteUri(element)
-                else -> {
-                    val resolved =
-                        try {
-                            UriResolver.resolveUri(baseUri, id)
-                        } catch (_: Exception) {
-                            id
-                        }
-                    // Register the resolved absolute URI so relative $refs within this sub-schema work
-                    registerAbsoluteUri(element, resolved)
-                    resolved
+        // Iterative depth-first search in document order, so deeply nested schemas cannot overflow the stack (#31)
+        val pending = ArrayDeque<SearchNode>()
+        (element as? JsonObject)?.let { pending.addLast(SearchNode(it, isRoot = true, isSchema = true, baseUri = baseUri)) }
+        while (pending.isNotEmpty()) {
+            val node = pending.removeLast()
+            // Only a schema has an $id; a map of named schemas (under properties, $defs, ...) does not.
+            val id = if (node.isSchema) node.element.stringKeyword(SchemaKeywords.ID) else null
+            val currentUri =
+                when {
+                    id == null -> node.baseUri
+                    // Already known: use it. A search that starts at a resource gets that resource's own
+                    // URI as baseUri, so resolving its relative $id again would nest it once per search.
+                    hasAbsoluteUri(node.element) -> getAbsoluteUri(node.element)
+                    else -> {
+                        val resolved =
+                            try {
+                                UriResolver.resolveUri(node.baseUri, id)
+                            } catch (_: Exception) {
+                                id
+                            }
+                        // Register the resolved absolute URI so relative $refs within this sub-schema work
+                        registerAbsoluteUri(node.element, resolved)
+                        resolved
+                    }
                 }
-            }
-        // Compare resolved URIs. A raw $id match is accepted only when there is no absolute URI to compare:
-        // two resources may share a relative $id under different bases (a/target and b/target).
-        if (id != null && (currentUri == resolvedTarget || (id == originalTarget && !isAbsolute(currentUri)))) return element
-        return element.subschemaValues(isSchema).firstNotNullOfOrNull { (value, childIsSchema) ->
-            when (value) {
-                is JsonObject -> searchById(value, resolvedTarget, originalTarget, currentUri, childIsSchema)
-                is JsonArray -> value.firstNotNullOfOrNull { searchById(it, resolvedTarget, originalTarget, currentUri, childIsSchema) }
-                else -> null
-            }
+            // Compare resolved URIs. A raw $id match is accepted only when there is no absolute URI to compare:
+            // two resources may share a relative $id under different bases (a/target and b/target).
+            if (id != null && (currentUri == resolvedTarget || (id == originalTarget && !isAbsolute(currentUri)))) return node.element
+            node.element.pushSubschemas(node.isSchema, pending, currentUri)
         }
+        return null
     }
 
     /**
@@ -432,3 +429,20 @@ internal fun JsonObject.subschemaValues(isSchema: Boolean): Sequence<Pair<JsonEl
     } else {
         values.asSequence().map { it to true }
     }
+
+/** One object waiting in an iterative schema search, with its position and the base URI in effect there. */
+private class SearchNode(val element: JsonObject, val isRoot: Boolean, val isSchema: Boolean, val baseUri: String)
+
+/**
+ * Pushes the objects below this one that can hold schemas (see [subschemaValues]) onto [pending], in
+ * reverse, so popping visits them in document order: the first match is the same as a recursive search's.
+ */
+private fun JsonObject.pushSubschemas(isSchema: Boolean, pending: ArrayDeque<SearchNode>, baseUri: String) {
+    subschemaValues(isSchema).toList().asReversed().forEach { (value, childIsSchema) ->
+        when (value) {
+            is JsonObject -> pending.addLast(SearchNode(value, isRoot = false, isSchema = childIsSchema, baseUri = baseUri))
+            is JsonArray -> value.asReversed().forEach { item -> if (item is JsonObject) pending.addLast(SearchNode(item, isRoot = false, isSchema = childIsSchema, baseUri = baseUri)) }
+            else -> Unit
+        }
+    }
+}

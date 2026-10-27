@@ -53,6 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The evaluation tracking behind `unevaluatedProperties` / `unevaluatedItems` respects
   `maxValidationDepth`: a circular `$ref` with either keyword reports a `depth` error instead of
   overflowing the stack (#29).
+- Comparing values for `const`, `enum` and `uniqueItems`, checking schema structure in `validateSchema`,
+  and searching for `$anchor`/`$id` are iterative: deeply nested input (tested to 100,000 levels on a
+  256 KB stack) no longer throws `StackOverflowError` (#31).
 - JSON Pointers no longer resolve non-canonical array indices such as `/01` or `/+1` (RFC 6901 §4), in
   `JsonPointer.resolve` and in `$ref` fragments (#47).
 - `absoluteKeywordLocation` is filled under subresources whose `$id` is relative to `baseUri` (#10).
