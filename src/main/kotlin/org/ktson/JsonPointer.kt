@@ -182,23 +182,13 @@ class ReferenceResolver(
         return if (uriPart.isEmpty()) {
             resolveLocalRef(rootSchema, fragment)
         } else {
+            // A relative reference resolves against the base of the resource that contains it (RFC 3986 §5.1),
+            // e.g. $ref "target" inside a resource with $id "b/" means ".../b/target", so try that first; the
+            // document root's base is only a fallback for resources without an absolute base.
+            val baseId = getAbsoluteUri(resourceRoot)
             val targetSchema =
-                findSchemaByUri(rootSchema, uriPart)
-                    // Resolve relative URI against current resource root's base, then search globally.
-                    // This handles e.g. $ref: "./bar.json" inside a nested schema with $id: "nested/foo.json".
-                    ?: run {
-                        val baseId = getAbsoluteUri(resourceRoot)
-                        if (baseId.isNotEmpty()) {
-                            try {
-                                val absoluteUri = UriResolver.resolveUri(baseId, uriPart)
-                                if (absoluteUri != uriPart) findSchemaByUri(rootSchema, absoluteUri) else null
-                            } catch (_: Exception) {
-                                null
-                            }
-                        } else {
-                            null
-                        }
-                    }
+                (if (isAbsolute(baseId)) runCatching { UriResolver.resolveUri(baseId, uriPart) }.getOrNull()?.let { findSchemaByUri(rootSchema, it) } else null)
+                    ?: findSchemaByUri(rootSchema, uriPart)
                     ?: resolveExternalRef(resourceRoot, uriPart)
                     ?: return null
             when {
@@ -382,7 +372,9 @@ class ReferenceResolver(
                     resolved
                 }
             }
-        if (id != null && (currentUri == resolvedTarget || id == originalTarget)) return element
+        // Compare resolved URIs. A raw $id match is accepted only when there is no absolute URI to compare:
+        // two resources may share a relative $id under different bases (a/target and b/target).
+        if (id != null && (currentUri == resolvedTarget || (id == originalTarget && !isAbsolute(currentUri)))) return element
         return element.values.firstNotNullOfOrNull { value ->
             when (value) {
                 is JsonObject -> searchById(value, resolvedTarget, originalTarget, currentUri)

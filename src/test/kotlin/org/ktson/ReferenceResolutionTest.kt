@@ -44,6 +44,24 @@ class ReferenceResolutionTest :
                 }
             }
 
+            describe("$version relative \$id resolved against the reference's own base (#34)") {
+                // a/target (string) and b/target (integer) share the relative $id "target"; a $ref "target"
+                // inside b/ means https://example.com/b/target, wherever a/target sits in the document.
+                val schema = """
+                    {"${'$'}id":"https://example.com/root",
+                     "${'$'}defs":{
+                       "a":{"${'$'}id":"a/","${'$'}defs":{"target":{"${'$'}id":"target","type":"string"}}},
+                       "b":{"${'$'}id":"b/","${'$'}defs":{"target":{"${'$'}id":"target","type":"integer"}},"${'$'}ref":"target"}
+                     },
+                     "${'$'}ref":"b/"}
+                """
+
+                it("selects the resource under the reference's base, not the first one with the same raw \$id") {
+                    isValid(schema, "1", version) shouldBe true
+                    isValid(schema, "\"x\"", version) shouldBe false
+                }
+            }
+
             describe("$version base URI of the root schema") {
                 /** Validates through a loader that serves {"type":"string"} for every URI and records what it was asked for. */
                 fun requested(schemaJson: String, baseUri: String, vararg instances: String): List<String> {
