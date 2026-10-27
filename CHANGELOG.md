@@ -56,6 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comparing values for `const`, `enum` and `uniqueItems`, checking schema structure in `validateSchema`,
   and searching for `$anchor`/`$id` are iterative: deeply nested input (tested to 100,000 levels on a
   256 KB stack) no longer throws `StackOverflowError` (#31).
+- A `pattern` or `patternProperties` regex that overflows the regex engine's stack on a long input (Java's
+  engine recurses per repetition of a group such as `(a|b)*`) is reported as "could not be checked"
+  and fails validation instead of throwing `StackOverflowError` (#32). Catastrophic backtracking (CPU
+  time) is not limited.
 - JSON Pointers no longer resolve non-canonical array indices such as `/01` or `/+1` (RFC 6901 §4), in
   `JsonPointer.resolve` and in `$ref` fragments (#47).
 - `absoluteKeywordLocation` is filled under subresources whose `$id` is relative to `baseUri` (#10).

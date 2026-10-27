@@ -94,6 +94,18 @@ class JsonValidator @JvmOverloads constructor(
     private fun compiledPattern(pattern: String): Regex = patternCache.computeIfAbsent(pattern) { Regex(translatePatternToJava(it)) }
 
     /**
+     * Whether [pattern] matches somewhere in [input], or null when the regex engine could not decide:
+     * Java's engine recurses once per repetition of a group such as `(a|b)*`, so a long input can exhaust
+     * the stack even when it matches (#32). The overflow is confined to this call, so it is caught here
+     * and callers fail closed instead of letting validate() throw.
+     */
+    private fun patternMatches(pattern: String, input: String): Boolean? = try {
+        compiledPattern(pattern).containsMatchIn(input)
+    } catch (_: StackOverflowError) {
+        null
+    }
+
+    /**
      * Validates a JSON instance against a JSON schema
      * Thread-safe synchronous implementation
      */
@@ -611,9 +623,15 @@ class JsonValidator @JvmOverloads constructor(
         schema[PATTERN_PROPERTIES]?.jsonObject?.let { patternProps ->
             patternProps.forEach { (pattern, propSchema) ->
                 instance.keys.forEach { propName ->
-                    if (compiledPattern(pattern).containsMatchIn(propName)) {
-                        val propPath = childOf(path, propName)
-                        validateElement(instance[propName]!!, propSchema, propPath, at(schemaPath, PATTERN_PROPERTIES, pattern), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                    when (patternMatches(pattern, propName)) {
+                        true -> {
+                            val propPath = childOf(path, propName)
+                            validateElement(instance[propName]!!, propSchema, propPath, at(schemaPath, PATTERN_PROPERTIES, pattern), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                        }
+                        false -> Unit
+                        null -> errors.add(
+                            ValidationError(path, "Property name ${quoted(propName)} could not be checked against pattern: $pattern", PATTERN_PROPERTIES, at(schemaPath, PATTERN_PROPERTIES, pattern)),
+                        )
                     }
                 }
             }
@@ -886,8 +904,10 @@ class JsonValidator @JvmOverloads constructor(
 
         // Pattern
         schema[PATTERN]?.jsonPrimitive?.contentOrNull?.let { pattern ->
-            if (!compiledPattern(pattern).containsMatchIn(value)) {
-                errors.add(ValidationError(path, "String ${quoted(value)} does not match pattern: $pattern", PATTERN, at(schemaPath, PATTERN)))
+            when (patternMatches(pattern, value)) {
+                true -> Unit
+                false -> errors.add(ValidationError(path, "String ${quoted(value)} does not match pattern: $pattern", PATTERN, at(schemaPath, PATTERN)))
+                null -> errors.add(ValidationError(path, "String ${quoted(value)} could not be checked against pattern: $pattern", PATTERN, at(schemaPath, PATTERN)))
             }
         }
 
@@ -2148,7 +2168,7 @@ class JsonValidator @JvmOverloads constructor(
         // patternProperties: all instance properties matching any pattern
         schemaElement[PATTERN_PROPERTIES]?.jsonObject?.let { patternProps ->
             patternProps.keys.forEach { pattern ->
-                evaluated.addAll(instance.keys.filter { compiledPattern(pattern).containsMatchIn(it) })
+                evaluated.addAll(instance.keys.filter { patternMatches(pattern, it) == true })
             }
         }
 
@@ -2273,7 +2293,9 @@ class JsonValidator @JvmOverloads constructor(
     /**
      * Checks if a property name matches any pattern
      */
-    private fun matchesAnyPattern(propName: String, patterns: Set<String>): Boolean = patterns.any { compiledPattern(it).containsMatchIn(propName) }
+
+    /** A pattern that could not be evaluated counts as not matching, so additional/unevaluated checks fail closed. */
+    private fun matchesAnyPattern(propName: String, patterns: Set<String>): Boolean = patterns.any { patternMatches(it, propName) == true }
 
     /**
      * Validates the structure of a schema itself
