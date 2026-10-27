@@ -32,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A schema with a property named `$id`, `$anchor` or `$dynamicAnchor` no longer makes `validate()` throw (#7).
 - `absoluteKeywordLocation` is filled under subresources whose `$id` is relative to `baseUri` (#10).
 - `absoluteKeywordLocation` is kept for keywords under a property (or `$defs` entry) named `$ref` (#11).
+- `absoluteKeywordLocation` percent-encodes its fragment (RFC 6901 §6), so keys with spaces, `%` or
+  non-ASCII characters give a valid URI (#12).
 
 ### Changed
 - `kotlinx-coroutines-core` is no longer a runtime dependency. Nothing in KtSON's API used it since

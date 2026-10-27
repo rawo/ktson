@@ -229,7 +229,8 @@ println(basic.toJson())
 - Each failing unit carries `absoluteKeywordLocation`: the canonical URI of the schema resource
   holding the keyword plus a JSON Pointer within it, following `$ref`, `$dynamicRef` and
   `$recursiveRef` (`https://example.com/root#/$defs/p/minimum` where `keywordLocation` is
-  `/properties/n/$ref/minimum`). It needs an absolute `$id` or `JsonSchema.fromString(json, version,
+  `/properties/n/$ref/minimum`), with the pointer percent-encoded as a URI fragment (`a b` becomes
+  `a%20b`). It needs an absolute `$id` or `JsonSchema.fromString(json, version,
   baseUri)`; without either it is omitted. The same value is on `ValidationError.absoluteKeywordLocation`.
 - There is no `Verbose` format: the next output-format draft removes it.
 
@@ -471,7 +472,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 846 tests (100% passing)
+- **Custom Tests**: 852 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -482,7 +483,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Numeric precision and concurrent numeric validation: 88 tests
   - Instance locations, legacy access and JSON Pointer resolution: 117 tests
   - Output formats: 40 tests
-  - Absolute keyword locations: 39 tests
+  - Absolute keyword locations: 45 tests
   - Reference resolution (percent-encoding, base URIs, `$id` registration): 26 tests
   - Keyword-named properties (`$id`, `$anchor`, `$dynamicAnchor`): 7 tests
   - `unevaluated*` across schema resources: 6 tests
