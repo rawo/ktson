@@ -134,7 +134,7 @@ validate()
 - **ReferenceResolutionTest.kt** - 26 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
 - **UnevaluatedAcrossResourcesTest.kt** - 6 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated
-- **AbsoluteKeywordLocationTest.kt** - 31 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
+- **AbsoluteKeywordLocationTest.kt** - 39 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
 - **JavaOutputUsageTest.kt** - 2 tests running `src/test/java/org/ktson/JavaOutputUsage.java`, a Java caller of the output API
 - **JavaApiUsageTest.kt** - 10 tests running `src/test/java/org/ktson/JavaApiUsage.java`, a Java caller of `JsonSchema`, `JsonValidator` and `JsonPointer`
 - **OfficialOutputTestRunner.kt** - Runs the suite's `output-tests` content files against Basic output (skips `readOnly.json`, which needs annotations); fails if a draft has no runnable files; also checks KtSON's Basic output for a `$ref` schema against the output schema's `basic` definition
