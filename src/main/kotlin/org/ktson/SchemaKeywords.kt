@@ -14,6 +14,10 @@ object SchemaKeywords {
     const val RECURSIVE_REF = "\$recursiveRef"
     const val DYNAMIC_REF = "\$dynamicRef"
     const val SCHEMA = "\$schema"
+    const val DEFS = "\$defs"
+
+    /** The pre-2019-09 name of [DEFS], still found in schemas. */
+    const val DEFINITIONS = "definitions"
 
     // Type validation
     const val TYPE = "type"

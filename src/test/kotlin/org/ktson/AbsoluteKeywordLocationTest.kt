@@ -95,6 +95,29 @@ class AbsoluteKeywordLocationTest :
                         listOf("/\$ref/minimum" to "https://ex.com/schemas/a.json#/minimum")
                 }
 
+                it("does not treat a property named \$ref as a reference (#11)") {
+                    val schema = """{"${'$'}id":"$root","properties":{"${'$'}ref":{"type":"string"}}}"""
+                    locations(validate(schema, """{"${'$'}ref":1}""", version)) shouldBe
+                        listOf("/properties/\$ref/type" to "$root#/properties/\$ref/type")
+                }
+
+                it("reads names and keywords in order: a property named properties holding a property named \$ref") {
+                    val schema = """{"${'$'}id":"$root","properties":{"properties":{"properties":{"${'$'}ref":{"type":"string"}}}}}"""
+                    locations(validate(schema, """{"properties":{"${'$'}ref":1}}""", version)) shouldBe
+                        listOf("/properties/properties/properties/\$ref/type" to "$root#/properties/properties/properties/\$ref/type")
+                }
+
+                it("does not treat a dependentSchemas entry named \$ref as a reference") {
+                    val schema = """{"${'$'}id":"$root","dependentSchemas":{"${'$'}ref":{"required":["x"]}}}"""
+                    locations(validate(schema, """{"${'$'}ref":1}""", version)) shouldBe
+                        listOf("/dependentSchemas/\$ref/required" to "$root#/dependentSchemas/\$ref/required")
+                }
+
+                it("follows a real \$ref to a \$defs entry named \$ref") {
+                    val schema = """{"${'$'}id":"$root","${'$'}ref":"#/${'$'}defs/${'$'}ref","${'$'}defs":{"${'$'}ref":{"type":"string"}}}"""
+                    locations(validate(schema, "1", version)) shouldBe listOf("/\$ref/type" to "$root#/\$defs/\$ref/type")
+                }
+
                 it("omits it when the schema has no absolute URI") {
                     val schema = """{"${'$'}ref":"#/${'$'}defs/p","${'$'}defs":{"p":{"minimum":0}}}"""
                     locations(validate(schema, "-1", version)) shouldBe listOf("/\$ref/minimum" to null)
