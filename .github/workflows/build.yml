@@ -1,11 +1,12 @@
 name: Build
 
 on:
+  # Every commit that lands on master is built.
   push:
     branches:
-      - '**'
+      - master
+  # Pull requests are checked when opened, updated and reopened (the default types), before they merge.
   pull_request:
-    types: [closed]
     branches:
       - master
 
