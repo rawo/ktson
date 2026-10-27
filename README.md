@@ -418,6 +418,9 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
 1. **~~Stack Overflow Risk~~** ✅ **RESOLVED**
    - ✅ Global recursion depth limiting implemented (default: 1000 levels)
    - ✅ Configurable via `maxValidationDepth` constructor parameter
+   - Whether the limit fits depends on the thread's stack: on a 1 MB stack a recursive tree schema can
+     run out of stack around 700 levels. `validate()` then reports a `depth` error instead of throwing;
+     use a lower limit (or a larger thread stack) if deep, valid input must pass
    - See [docs/STACK_OVERFLOW_RISK_ANALYSIS.md](docs/STACK_OVERFLOW_RISK_ANALYSIS.md) for historical analysis
 
 2. **Format Validation**

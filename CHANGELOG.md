@@ -66,6 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   under `$defs` or `unevaluated*`. Its errors point at the offending keyword inside the schema
   (`instanceLocation`), and their `schemaPath` is a location in the meta-schema. Schemas nested deeper
   than `maxValidationDepth` get a `depth` error (#38).
+- `validate()` no longer throws `StackOverflowError` when the thread's stack runs out before
+  `maxValidationDepth` (a recursive tree schema on a 1 MB stack overflows around 700 levels, below the
+  default of 1000): it reports a `depth` error instead (#50).
 - JSON Pointers no longer resolve non-canonical array indices such as `/01` or `/+1` (RFC 6901 §4), in
   `JsonPointer.resolve` and in `$ref` fragments (#47).
 - `absoluteKeywordLocation` is filled under subresources whose `$id` is relative to `baseUri` (#10).

@@ -330,4 +330,26 @@ class DepthLimitTest :
             }
         }
     }
+
+    // The default limit (1000) does not fit every thread stack: on a small stack a recursive schema can
+    // exhaust it first. validate() must then report a depth error instead of throwing (#50).
+    test("a recursion that exhausts the thread stack before maxValidationDepth is reported as a depth error") {
+        val schema = JsonSchema.fromString("""{"properties":{"c":{"${'$'}ref":"#"}}}""")
+        var instance: JsonElement = JsonObject(emptyMap())
+        repeat(1_200) { instance = buildJsonObject { put("c", instance) } }
+        var outcome: Any? = null
+        val smallStack = Thread(null, {
+            outcome = try {
+                JsonValidator().validate(instance, schema)
+            } catch (e: StackOverflowError) {
+                e
+            }
+        }, "small-stack", 256L * 1024)
+        smallStack.start()
+        smallStack.join()
+        val result = outcome as ValidationResult
+        result.isValid shouldBe false
+        fun keywords(errors: List<ValidationError>): List<String?> = errors.flatMap { listOf(it.keyword) + keywords(it.causes) }
+        keywords(result.getErrors()) shouldContain "depth"
+    }
 })

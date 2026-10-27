@@ -210,7 +210,17 @@ class JsonValidator @JvmOverloads constructor(
         val errors = mutableListOf<ValidationError>()
         // Relative references resolve against the root's absolute base, which may come from JsonSchema.baseUri.
         schema.absoluteBaseUri()?.let { referenceResolver.registerAbsoluteUri(schema.schema, it) }
-        validateElement(instance, schema.schema, path, "", errors, schema.effectiveVersion, schema.schema, depth = 0, resourceRoot = schema.schema, dynamicScope = emptyList())
+        try {
+            validateElement(instance, schema.schema, path, "", errors, schema.effectiveVersion, schema.schema, depth = 0, resourceRoot = schema.schema, dynamicScope = emptyList())
+        } catch (_: StackOverflowError) {
+            // Whether maxValidationDepth fits depends on the thread's stack size: on a small stack a recursive
+            // schema can exhaust it first (#50). Fail closed with a depth error instead of throwing. The caches
+            // touched on the way are updated atomically (computeIfAbsent, synchronized maps), so none is left
+            // half-written by the unwinding.
+            errors.add(
+                ValidationError(path, "Validation ran out of stack before reaching maxValidationDepth ($maxValidationDepth); use a lower limit or a larger thread stack", "depth", ""),
+            )
+        }
 
         return if (errors.isEmpty()) {
             ValidationResult.Valid

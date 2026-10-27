@@ -184,6 +184,12 @@ val validator = JsonValidator(
 
 **Recommendation**: Use default (1000) for most cases. Lower for untrusted schemas (e.g., 100-500).
 
+**Stack size caveat (#50):** whether a limit fits depends on the thread's stack. On a 1 MB stack a recursive tree
+schema (`{"properties":{"c":{"$ref":"#"}}}`) overflows around 700 levels, before the default limit. `validateInternal()`
+catches `StackOverflowError` and reports a `depth` error, so `validate()` never throws it. Comparisons, schema checks,
+anchor/`$id` searches and error-location walks are iterative and need no limit; `validateSchema()` runs on its own
+64 MB-stack thread.
+
 ### 2. Partial Support
 - IDNA validation (`hostname`, `idn-hostname`, `idn-email`) implements the hyphen rules, Punycode
   round-tripping, the RFC 5892 Appendix A contextual rules and the RFC 5893 Bidi rule, but decides
