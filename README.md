@@ -199,7 +199,9 @@ val result = validator.validate(instance, jsonSchema)
 network access), with format assertion on, so for example an invalid `pattern` regex is reported. Errors
 point into the schema (`instanceLocation` is `/properties/a/type`, say). Schemas nested deeper than
 `maxValidationDepth` get a `depth` error; the check itself runs on a dedicated thread with a large stack,
-so it does not depend on the caller's stack size.
+so it does not depend on the caller's stack size. That thread does not inherit the caller's thread-locals,
+and `validateSchema` always waits for it: like `validate`, the call runs to completion, and an interrupt
+received meanwhile stays set for the caller to handle.
 
 ```kotlin
 val validator = JsonValidator(enableMetaSchemaValidation = true)
@@ -511,7 +513,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 971 tests (100% passing)
+- **Custom Tests**: 974 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -528,6 +530,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - `unevaluated*` across schema resources: 6 tests
   - Validator lifecycle (garbage collection, bounded caches): 3 tests
   - Bounded cache: 4 tests
+  - `validateSchema` worker thread (thread-locals, interrupts): 3 tests
   - Remote loading (single flight, reentrant loaders): 5 tests
   - `formatAssertion` option in both drafts: 4 tests
   - Malformed `$id` / `$schema` values: 10 tests

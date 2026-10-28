@@ -60,6 +60,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer throws `IllegalStateException: Recursive update` when the two URIs' hashes collide, and the loader
   no longer runs while a cache bin is locked. A nested validation that needs the URI still being loaded
   sees it as unresolvable instead of deadlocking (#55).
+- `validateSchema` no longer abandons its worker thread when the caller is interrupted: it waits for the
+  check to finish, returns the result and leaves the interrupt status set (it used to throw
+  `InterruptedException`, even before starting, while the worker kept running). The worker no longer
+  inherits the caller's `InheritableThreadLocal` values (#56).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the

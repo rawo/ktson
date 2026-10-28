@@ -159,11 +159,31 @@ class JsonValidator @JvmOverloads constructor(
             },
             "ktson-validateSchema",
             META_SCHEMA_STACK_SIZE,
+            // The worker is an implementation detail: it must not see the caller's request context (#56).
+            false,
         )
         worker.start()
-        worker.join()
+        joinUninterruptibly(worker)
         failure?.let { throw it }
         return result!!
+    }
+
+    /**
+     * Waits for [worker] to finish even if the caller is interrupted, then restores the interrupt status.
+     * Like validate(), validateSchema runs to completion; abandoning the wait would leave the worker
+     * running with nobody owning it (#56). The worker always finishes: the check is bounded by the schema.
+     */
+    private fun joinUninterruptibly(worker: Thread) {
+        var interrupted = false
+        while (true) {
+            try {
+                worker.join()
+                break
+            } catch (_: InterruptedException) {
+                interrupted = true
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt()
     }
 
     /**

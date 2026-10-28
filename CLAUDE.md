@@ -102,7 +102,8 @@ The validator architecture is straightforward with minimal abstractions:
 10. **MetaSchemas** (`MetaSchemas.kt`) - The official 2019-09 and 2020-12 meta-schemas, embedded as source
    - Used by `validateSchema()`, which validates the schema against its draft's meta-schema with a separate,
      lazily created validator (format assertion on) on a thread with a 64 MB stack, after an iterative
-     nesting check against `maxValidationDepth`
+     nesting check against `maxValidationDepth`. The worker inherits no thread-locals and is joined
+     uninterruptibly (interrupt status restored), so it never outlives the call (#56)
    - Generated from `src/test/resources/schemas/draft/`; keep the two in sync (no runtime resources)
 
 ### Validation Flow
@@ -141,6 +142,7 @@ validate()
 - **SchemaMetadataTest.kt** - 10 tests: non-string `$id`/`$schema` construct, are reported by `validateSchema` and never make `validate()` throw
 - **DynamicRefResourceTest.kt** - 5 tests: `$dynamicRef` targets evaluated in their own resource; percent-encoded anchors keep the dynamic override
 - **ConcurrentLoadingTest.kt** - 5 tests: one `schemaLoader` call per URI under concurrency; loaders may validate through the same validator (#55)
+- **ValidateSchemaWorkerTest.kt** - 3 tests: the `validateSchema` worker inherits no thread-locals and never outlives an interrupted call
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 30 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
