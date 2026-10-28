@@ -81,6 +81,22 @@ class UriResolverTest :
 		it("throws for invalid URI") {
 			shouldThrow<URISyntaxException> { UriResolver.parseUri("ht tps://bad uri") }
 		}
+
+		it("keeps components as written, percent-encoding included, so withoutFragment rebuilds the same URI (#67)") {
+			val c = UriResolver.parseUri("https://ex.com/a%2Fb?x=%23#old")
+			c.path.shouldBe("/a%2Fb")
+			c.query.shouldBe("x=%23")
+			c.fragment.shouldBe("old")
+			c.withoutFragment.shouldBe("https://ex.com/a%2Fb?x=%23")
+		}
+
+		it("keeps the body of an opaque URI such as a URN as its path (#67)") {
+			val c = UriResolver.parseUri("urn:example:schema#old")
+			c.scheme.shouldBe("urn")
+			c.authority.shouldBe(null)
+			c.path.shouldBe("example:schema")
+			c.withoutFragment.shouldBe("urn:example:schema")
+		}
 	}
 
 	describe("resolveUri") {

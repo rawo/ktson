@@ -213,25 +213,23 @@ object UriResolver {
     fun removeFragment(uri: String): String = normalizeUri(uri, removeFragment = true)
 
     /**
-     * Parses a URI into components
+     * Parses a URI into its RFC 3986 components, as written: percent-encoding is kept, since decoding
+     * "%2F" or "%23" would turn data into a delimiter, and an opaque URI's body ("example:schema" in
+     * "urn:example:schema") is its path (#67).
      *
      * @param uri The URI to parse
-     * @return UriComponents containing the parsed URI, or null if parsing fails
+     * @return the components
+     * @throws URISyntaxException if [uri] is not a valid URI reference
      */
     fun parseUri(uri: String): UriComponents {
         require(uri.isNotEmpty()) { "URI must not be empty" }
-        val parsed = URI(uri)
-        return UriComponents(
-            scheme = parsed.scheme,
-            authority = parsed.authority,
-            path = parsed.path ?: "",
-            query = parsed.query,
-            fragment = parsed.fragment,
-        )
+        URI(uri) // validates the syntax
+        val parts = UriParts.of(uri)
+        return UriComponents(scheme = parts.scheme, authority = parts.authority, path = parts.path, query = parts.query, fragment = parts.fragment)
     }
 
     /**
-     * Components of a parsed URI
+     * Components of a parsed URI (RFC 3986 §3), as written: nothing is percent-decoded.
      */
     data class UriComponents(
         val scheme: String?,
