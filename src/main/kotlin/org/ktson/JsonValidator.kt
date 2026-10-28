@@ -86,6 +86,10 @@ class JsonValidator @JvmOverloads constructor(
     private val maxValidationDepth: Int = 1000,
     private val schemaLoader: ((String) -> JsonElement?)? = null,
 ) {
+    init {
+        require(maxValidationDepth >= 0) { "maxValidationDepth must not be negative, was $maxValidationDepth" }
+    }
+
     private val schemaStore = SchemaStore(schemaLoader)
     private val patternCache = BoundedCache<String, Regex>(MAX_CACHED_PATTERNS)
     private val numericLimitCache = BoundedCache<String, BigDecimal>(MAX_CACHED_NUMERIC_LIMITS)
@@ -198,7 +202,7 @@ class JsonValidator @JvmOverloads constructor(
             enableMetaSchemaValidation = false,
             formatAssertion = true,
             // A schema level costs several levels of meta-schema evaluation (allOf, $ref, $dynamicRef).
-            maxValidationDepth = maxValidationDepth * META_SCHEMA_DEPTH_PER_LEVEL,
+            maxValidationDepth = metaSchemaDepth(maxValidationDepth),
             schemaLoader = MetaSchemas::load,
         )
     }
@@ -2608,6 +2612,13 @@ private val REGEX_UUID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
 
         /** Levels of meta-schema evaluation one schema level can take (measured: 5-8). */
         private const val META_SCHEMA_DEPTH_PER_LEVEL = 16
+
+        /**
+         * The meta-schema validator's depth budget for schemas nested up to [maxValidationDepth] levels: one level's
+         * worth per schema level plus one for the root, which needs room even at 0. Computed in Long and capped,
+         * so a large limit cannot wrap negative (#73).
+         */
+        private fun metaSchemaDepth(maxValidationDepth: Int): Int = ((maxValidationDepth.toLong() + 1) * META_SCHEMA_DEPTH_PER_LEVEL).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
 
         /** Compiled patterns and parsed numeric limits one validator keeps; far more than any one schema uses (#40). */
         private const val MAX_CACHED_PATTERNS = 1024

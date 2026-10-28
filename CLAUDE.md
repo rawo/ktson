@@ -104,7 +104,8 @@ The validator architecture is straightforward with minimal abstractions:
 10. **MetaSchemas** (`MetaSchemas.kt`) - The official 2019-09 and 2020-12 meta-schemas, embedded as source
    - Used by `validateSchema()`, which validates the schema against its draft's meta-schema with a separate,
      lazily created validator (format assertion on) on a thread with a 64 MB stack, after an iterative
-     nesting check against `maxValidationDepth`. The worker inherits no thread-locals and is joined
+     nesting check against `maxValidationDepth`. Its depth budget is `metaSchemaDepth()`: (limit + 1) × 16, in Long,
+     capped at `Int.MAX_VALUE` (#73). The worker inherits no thread-locals and is joined
      uninterruptibly (interrupt status restored), so it never outlives the call (#56)
    - Generated from `src/test/resources/schemas/draft/`; keep the two in sync (no runtime resources)
 
@@ -134,7 +135,7 @@ validate()
 - **EdgeCaseAndThreadSafetyTest.kt** - 39 edge case and concurrency tests
 - **FormatValidationTest.kt** - 330 tests covering all supported format validators
 - **UriResolverTest.kt** - 84 tests for RFC 3986 URI resolution, including every §5.4 example and empty path segments
-- **DepthLimitTest.kt** - 14 tests for `maxValidationDepth` protection
+- **DepthLimitTest.kt** - 16 tests for `maxValidationDepth` protection
 - **ErrorMessageTest.kt** - 32 tests for error content (instance path, keyword, keyword location, wording)
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
 - **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
@@ -183,7 +184,7 @@ Test memory configuration: min 512MB, max 2GB heap
 **Configuration:**
 ```kotlin
 val validator = JsonValidator(
-    maxValidationDepth = 1000  // Default: 1000, adjust based on needs
+    maxValidationDepth = 1000  // Default: 1000, adjust based on needs; must be >= 0
 )
 ```
 

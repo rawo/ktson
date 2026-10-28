@@ -99,6 +99,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its own URI already did (#63).
 - `UriResolver.resolveUri(base, "")` drops the base's fragment (`https://ex.com/root?q#old` resolves to
   `https://ex.com/root?q`), as RFC 3986 §5.2.2 specifies; it returned the base unchanged (#74).
+- `validateSchema` works for every `maxValidationDepth`: the meta-schema check's budget (16 levels per schema
+  level) no longer overflows for limits of 2^27 and above, which made every schema invalid, and leaves room
+  for the root at a limit of 0. **Breaking:** a negative `maxValidationDepth` now throws
+  `IllegalArgumentException` when the validator is created; it used to fail every validation (#73).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the

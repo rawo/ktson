@@ -1,5 +1,6 @@
 package org.ktson
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
@@ -351,5 +352,17 @@ class DepthLimitTest :
         result.isValid shouldBe false
         fun keywords(errors: List<ValidationError>): List<String?> = errors.flatMap { listOf(it.keyword) + keywords(it.causes) }
         keywords(result.getErrors()) shouldContain "depth"
+    }
+
+    test("validateSchema accepts a root-only schema for every supported maxValidationDepth (#73)") {
+        // The meta-schema budget is derived from the limit: it must neither overflow nor leave no room at 0.
+        listOf(0, 1, 1000, 1 shl 27, Int.MAX_VALUE).forEach { limit ->
+            JsonValidator(maxValidationDepth = limit).validateSchema(JsonSchema.fromString("{}")).isValid shouldBe true
+            JsonValidator(maxValidationDepth = limit).validateSchema(JsonSchema.fromString("""{"type":7}""")).isValid shouldBe false
+        }
+    }
+
+    test("a negative maxValidationDepth is refused when the validator is created (#73)") {
+        shouldThrow<IllegalArgumentException> { JsonValidator(maxValidationDepth = -1) }.message shouldContain "maxValidationDepth"
     }
 })
