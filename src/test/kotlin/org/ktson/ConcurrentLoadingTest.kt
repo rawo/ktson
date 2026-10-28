@@ -58,6 +58,33 @@ class ConcurrentLoadingTest :
             }
         }
 
+        describe("a schemaLoader that throws while other validations wait for it (#65)") {
+            it("gives every waiting validation the same exception as the one that ran the loader") {
+                val entered = CountDownLatch(1)
+                val release = CountDownLatch(1)
+                val validator = JsonValidator(schemaLoader = {
+                    entered.countDown()
+                    release.await(10, TimeUnit.SECONDS)
+                    throw java.io.IOException("loader failed")
+                })
+                val schema = JsonSchema.fromString("""{"${'$'}ref":"https://example.com/remote"}""")
+                fun outcome(): String = runCatching { validator.validate(JsonPrimitive(1), schema).isValid.toString() }
+                    .getOrElse { "${it.javaClass.simpleName}: ${it.message}" }
+                val pool = Executors.newFixedThreadPool(4)
+                try {
+                    val owner = pool.submit(Callable { outcome() })
+                    entered.await(10, TimeUnit.SECONDS) shouldBe true
+                    val waiters = (1..3).map { pool.submit(Callable { outcome() }) }
+                    Thread.sleep(200) // let the waiters reach the in-flight load
+                    release.countDown()
+                    (listOf(owner) + waiters).map { it.get(10, TimeUnit.SECONDS) } shouldContainOnly listOf("IOException: loader failed")
+                } finally {
+                    release.countDown()
+                    pool.shutdown()
+                }
+            }
+        }
+
         describe("a schemaLoader that validates through the same validator (#55)") {
             it("can load another URI, even one whose String hash collides with the URI being loaded") {
                 val first = "https://ex.com/Aa"

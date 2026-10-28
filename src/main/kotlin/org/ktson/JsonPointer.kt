@@ -82,11 +82,16 @@ internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?
     /** Loads in progress, so concurrent callers needing the same URI wait for one load instead of each calling the loader. */
     private val inFlight = java.util.concurrent.ConcurrentHashMap<String, Load>()
 
-    /** One load of one URI, run by [owner]; others wait on [done] and then read [result]. */
+    /**
+     * One load of one URI, run by [owner]; others wait on [done] and then see the same outcome: [result],
+     * or [failure] if the loader threw (#65). Both are written before [done] is released.
+     */
     private class Load(val owner: Thread) {
         val done = java.util.concurrent.CountDownLatch(1)
 
         @Volatile var result: JsonElement? = null
+
+        @Volatile var failure: Throwable? = null
     }
 
     /** The schema already loaded from [uri], or null. */
@@ -96,7 +101,8 @@ internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?
      * The schema at [uri], loaded on first use. Single flight: concurrent validations needing the same URI
      * wait for one load instead of each calling the loader. The store keeps no URI per schema element: a
      * loader may return one parsed object for several URIs, so the base a document is evaluated under
-     * travels with each reference instead (ResolvedReference, #54). A null result (or a loader that throws) is not cached, so a later
+     * travels with each reference instead (ResolvedReference, #54). Validations waiting for a load get its
+     * result, or rethrow its exception. Neither a null result nor an exception is cached, so a later
      * validation may try again.
      *
      * The loader runs outside any map operation, so it may itself validate through the same validator and
@@ -111,6 +117,8 @@ internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?
         if (running != null) {
             if (running.owner === Thread.currentThread()) return null
             awaitUninterruptibly(running.done)
+            // The waiters of one load share its outcome: a loader exception is not turned into "not found"
+            running.failure?.let { throw it }
             return running.result
         }
         try {
@@ -118,6 +126,9 @@ internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?
             val loaded = schemaCache[uri] ?: loader(uri)?.let { schema -> schemaCache.putIfAbsent(uri, schema) ?: schema }
             load.result = loaded
             return loaded
+        } catch (t: Throwable) {
+            load.failure = t
+            throw t
         } finally {
             inFlight.remove(uri, load)
             load.done.countDown()

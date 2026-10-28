@@ -143,7 +143,7 @@ validate()
 - **FormatAssertionOptionTest.kt** - 4 tests: `formatAssertion` true asserts and false does not, in both drafts
 - **SchemaMetadataTest.kt** - 10 tests: non-string `$id`/`$schema` construct, are reported by `validateSchema` and never make `validate()` throw
 - **DynamicRefResourceTest.kt** - 7 tests: `$dynamicRef` targets evaluated in their own resource; percent-encoded anchors keep the dynamic override; id-less roots and loaded documents are in the dynamic scope
-- **ConcurrentLoadingTest.kt** - 5 tests: one `schemaLoader` call per URI under concurrency; loaders may validate through the same validator (#55)
+- **ConcurrentLoadingTest.kt** - 6 tests: one `schemaLoader` call per URI under concurrency; loaders may validate through the same validator (#55); waiters rethrow the loader's exception (#65)
 - **ValidateSchemaWorkerTest.kt** - 3 tests: the `validateSchema` worker inherits no thread-locals and never outlives an interrupted call
 - **IndeterminateResultTest.kt** - 17 tests: undecided results (depth limit, unevaluable regex) are never inverted into Valid
 - **EcmaPatternTest.kt** - 44 tests: ECMA 262 semantics of `\s`, `\S`, `\c`, `$`, `.` and `\p` aliases in `pattern`

@@ -517,7 +517,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 1050 tests (100% passing)
+- **Custom Tests**: 1051 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -537,7 +537,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - ECMA 262 `pattern` dialect (whitespace, `\c`, `$`, `.`, `\p` aliases): 44 tests
   - Bounded cache: 4 tests
   - `validateSchema` worker thread (thread-locals, interrupts): 3 tests
-  - Remote loading (single flight, reentrant loaders): 5 tests
+  - Remote loading (single flight, reentrant and failing loaders): 6 tests
   - `formatAssertion` option in both drafts: 4 tests
   - Malformed `$id` / `$schema` values: 10 tests
   - `$dynamicRef` resources, encoded anchors and dynamic scope: 7 tests

@@ -91,6 +91,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking verdict change:** the dynamic scope for `$dynamicRef` (and `$recursiveRef`) includes the root schema
   and every resource a reference enters even when it has no `$id` (its URI coming from `JsonSchema.baseUri` or
   from where it was loaded), so their `$dynamicAnchor`s override as the spec requires (#64).
+- Validations waiting for a remote schema that another validation is loading now rethrow the `schemaLoader`'s
+  exception, as the loading validation does; they used to report the reference as unresolvable, turning an
+  I/O or authentication failure into a validation verdict (#65).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the
