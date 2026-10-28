@@ -22,8 +22,9 @@ object UriResolver {
      * - resolveUri("", "https://example.com/schema.json") -> "https://example.com/schema.json"
      */
     fun resolveUri(baseUri: String, refUri: String): String {
+        // An empty reference is the base itself, minus any fragment the base carries (RFC 3986 §5.2.2, #74)
         if (refUri.isEmpty()) {
-            return baseUri
+            return baseUri.substringBefore('#')
         }
 
         if (baseUri.isEmpty()) {

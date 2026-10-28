@@ -133,7 +133,7 @@ validate()
 - **Draft202012ValidationTest.kt** - 54 tests for Draft 2020-12 features
 - **EdgeCaseAndThreadSafetyTest.kt** - 39 edge case and concurrency tests
 - **FormatValidationTest.kt** - 330 tests covering all supported format validators
-- **UriResolverTest.kt** - 82 tests for RFC 3986 URI resolution, including every §5.4 example and empty path segments
+- **UriResolverTest.kt** - 84 tests for RFC 3986 URI resolution, including every §5.4 example and empty path segments
 - **DepthLimitTest.kt** - 14 tests for `maxValidationDepth` protection
 - **ErrorMessageTest.kt** - 32 tests for error content (instance path, keyword, keyword location, wording)
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation

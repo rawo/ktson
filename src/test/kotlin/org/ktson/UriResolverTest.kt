@@ -234,6 +234,16 @@ class UriResolverTest :
 			}
 		}
 
+		it("drops the base's fragment for an empty reference (#74)") {
+			UriResolver.resolveUri("https://ex.com/root?query#old", "").shouldBe("https://ex.com/root?query")
+			UriResolver.resolveUri("urn:example:schema#old", "").shouldBe("urn:example:schema")
+			UriResolver.resolveUri("https://ex.com/root", "").shouldBe("https://ex.com/root")
+		}
+
+		it("keeps the delimiter of an explicit empty fragment reference") {
+			UriResolver.resolveUri("https://ex.com/root#old", "#").shouldBe("https://ex.com/root#")
+		}
+
 		it("keeps the base path for a query-only reference (#58)") {
 			UriResolver.resolveUri("https://ex.com/a/b?old", "?new").shouldBe("https://ex.com/a/b?new")
 			UriResolver.resolveUri("https://ex.com/a/b#frag", "?new").shouldBe("https://ex.com/a/b?new")
