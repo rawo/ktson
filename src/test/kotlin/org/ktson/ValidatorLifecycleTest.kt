@@ -1,7 +1,6 @@
 package org.ktson
 
 import io.kotest.core.spec.style.DescribeSpec
-import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -9,10 +8,10 @@ import java.lang.ref.Reference
 import java.lang.ref.WeakReference
 
 /**
- * KtSON keeps no state outside a JsonValidator instance: every cache (remote schemas, $id
- * registrations, compiled patterns, numeric limits) is an instance field. So when an application
- * drops a validator, everything it built becomes collectible — the guarantee a long-running service
- * with one validator per schema relies on. A mutable companion object, singleton or top-level value
+ * KtSON keeps no state outside a JsonValidator instance: every cache (remote schemas, compiled
+ * patterns, numeric limits) is an instance field, and $id registrations last for one validation.
+ * So when an application drops a validator, everything it built becomes collectible — the guarantee
+ * a long-running service with one validator per schema relies on. A mutable companion object, singleton or top-level value
  * would silently break that; these tests catch it.
  */
 class ValidatorLifecycleTest :
@@ -25,11 +24,12 @@ class ValidatorLifecycleTest :
         }
 
         describe("a validator that is still referenced") {
-            it("keeps a schema with \$id it has validated, even after the application drops that schema") {
+            it("does not keep a schema with \$id it has validated once the application drops that schema") {
+                // \$id registrations belong to one validation (#37), so they cannot pin the schemas a
+                // long-lived validator has seen.
                 val validator = JsonValidator()
                 val schemaRef = validateAndDropSchema(validator)
-                awaitCollected(listOf(schemaRef), timeoutMillis = 2_000) shouldBe false
-                schemaRef.get().shouldNotBeNull()
+                awaitCollected(listOf(schemaRef)) shouldBe true
                 Reference.reachabilityFence(validator)
             }
         }

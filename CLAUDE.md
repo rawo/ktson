@@ -60,7 +60,7 @@ The validator architecture is straightforward with minimal abstractions:
 1. **JsonValidator** (`JsonValidator.kt`) - Main validation engine (~90KB)
    - Thread-safe synchronous validation
    - Contains all validation logic in a single class
-   - Uses `ReferenceResolver` inner class for `$ref` resolution
+   - Creates a per-validation `Evaluation` (`Evaluation.kt`) holding a `ReferenceResolver` for `$ref` resolution
    - Entry point: `validate(instance: JsonElement, schema: JsonSchema): ValidationResult`
 
 2. **JsonSchema** (`JsonSchema.kt`) - Schema representation
@@ -81,7 +81,7 @@ The validator architecture is straightforward with minimal abstractions:
 
 5. **JsonPointer** (`JsonPointer.kt`) - JSON Pointer (RFC 6901) implementation
    - Resolves paths like `/properties/name` or `#/$defs/address`
-   - Also contains the `ReferenceResolver` class used for `$ref` resolution
+   - Also contains `SchemaStore` (remote schemas, per validator) and `ReferenceResolver` (per validation)
 
 6. **UriResolver** (`UriResolver.kt`) - RFC 3986 URI resolution
    - Resolves reference URIs against base URIs, used when following `$id`/`$ref` chains
@@ -136,8 +136,8 @@ validate()
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
 - **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
 - **OutputFormatTest.kt** - 40 tests for the Flag, Basic and Detailed output formats
-- **ValidatorLifecycleTest.kt** - 2 garbage-collection tests: a dropped validator frees its schema, remote schemas and caches; a live one keeps schemas with `$id` it validated
-- **ReferenceResolutionTest.kt** - 26 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
+- **ValidatorLifecycleTest.kt** - 2 garbage-collection tests: a dropped validator frees its schema, remote schemas and caches; a live one does not keep schemas with `$id` it validated
+- **ReferenceResolutionTest.kt** - 28 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
 - **UnevaluatedAcrossResourcesTest.kt** - 6 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated
 - **AbsoluteKeywordLocationTest.kt** - 45 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
@@ -208,7 +208,7 @@ for both drafts. Decimal validation costs more than approximate `Double` arithme
 ### 4. Other Notes
 - API is synchronous (migrated from async coroutines)
 - Format validation in assertion mode only
-- Thread-safe (immutable validator configuration; ReferenceResolver holds concurrent per-validator caches)
+- Thread-safe (immutable validator configuration; `SchemaStore` holds the concurrent per-validator remote-schema cache, and each validation gets its own `Evaluation`)
 - No global state: every cache is an instance field, so a dropped validator is fully collectible (`ValidatorLifecycleTest`)
 
 ## Development Guidelines
@@ -271,11 +271,13 @@ Release notes are generated from the commit log, so commits must follow Conventi
    reference keyword goes into `resolveReferences()`, never into a copy
 
 ### Reference Resolution
-- `$ref` resolution uses `ReferenceResolver` in `JsonPointer.kt`
+- `$ref` resolution uses `ReferenceResolver` in `JsonPointer.kt`, one per validation: `validateInternal()` creates an
+  `Evaluation` (root schema, `ReferenceResolver`, `AbsoluteLocations`) and threads it through every recursive call
 - Fragment references (`#/...`, `#/$defs/...`) and external URIs supported
 - External schemas resolved via `schemaLoader: ((String) -> JsonElement?)?` on `JsonValidator`
-- Schema cache: `ConcurrentHashMap<String, JsonElement>` keyed by absolute URI
-- Absolute URI tracking: `IdentityHashMap<JsonElement, String>` for schemas with relative `$id`
+- Schema cache: `SchemaStore` (per validator, shared by its validations): `ConcurrentHashMap<String, JsonElement>` keyed by absolute URI
+- Absolute URI tracking: `IdentityHashMap<JsonElement, String>` in the per-validation `ReferenceResolver`. It must stay
+  per validation: one element can be validated under different `JsonSchema.baseUri`s (#37)
 - `resourceRoot` passed through recursive calls so fragment refs resolve in the correct document
 - When adding new ref types, update `ReferenceResolver` in `JsonPointer.kt` and `resolveReferences()` in `JsonValidator.kt`
 - The root's absolute base (`JsonSchema.absoluteBaseUri()`: absolute `$id`, else `$id` resolved against `baseUri`, else `baseUri`) is registered before validation, so `schemaLoader` receives absolute URIs

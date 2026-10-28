@@ -86,8 +86,7 @@ class JsonValidator @JvmOverloads constructor(
     private val maxValidationDepth: Int = 1000,
     private val schemaLoader: ((String) -> JsonElement?)? = null,
 ) {
-    private val referenceResolver = ReferenceResolver(schemaLoader)
-    private val absoluteLocations = AbsoluteLocations(referenceResolver)
+    private val schemaStore = SchemaStore(schemaLoader)
     private val patternCache = ConcurrentHashMap<String, Regex>()
     private val numericLimitCache = ConcurrentHashMap<String, BigDecimal>()
 
@@ -208,15 +207,16 @@ class JsonValidator @JvmOverloads constructor(
      */
     private fun validateInternal(instance: JsonElement, schema: JsonSchema, path: String): ValidationResult {
         val errors = mutableListOf<ValidationError>()
+        val evaluation = Evaluation(schema.schema, schemaStore)
         // Relative references resolve against the root's absolute base, which may come from JsonSchema.baseUri.
-        schema.absoluteBaseUri()?.let { referenceResolver.registerAbsoluteUri(schema.schema, it) }
+        schema.absoluteBaseUri()?.let { evaluation.references.registerAbsoluteUri(schema.schema, it) }
         try {
-            validateElement(instance, schema.schema, path, "", errors, schema.effectiveVersion, schema.schema, depth = 0, resourceRoot = schema.schema, dynamicScope = emptyList())
+            validateElement(instance, schema.schema, path, "", errors, schema.effectiveVersion, evaluation, depth = 0, resourceRoot = schema.schema, dynamicScope = emptyList())
         } catch (_: StackOverflowError) {
             // Whether maxValidationDepth fits depends on the thread's stack size: on a small stack a recursive
-            // schema can exhaust it first (#50). Fail closed with a depth error instead of throwing. The caches
-            // touched on the way are updated atomically (computeIfAbsent, synchronized maps), so none is left
-            // half-written by the unwinding.
+            // schema can exhaust it first (#50). Fail closed with a depth error instead of throwing. The shared
+            // caches touched on the way are updated atomically (computeIfAbsent, synchronized maps), so none is
+            // left half-written by the unwinding; the evaluation's own state is discarded with it.
             errors.add(
                 ValidationError(path, "Validation ran out of stack before reaching maxValidationDepth ($maxValidationDepth); use a lower limit or a larger thread stack", "depth", ""),
             )
@@ -225,7 +225,7 @@ class JsonValidator @JvmOverloads constructor(
         return if (errors.isEmpty()) {
             ValidationResult.Valid
         } else {
-            ValidationResult.Invalid(absoluteLocations.finish(errors, schema))
+            ValidationResult.Invalid(evaluation.absoluteLocations.finish(errors, schema))
         }
     }
 
@@ -255,9 +255,9 @@ class JsonValidator @JvmOverloads constructor(
         schemaPath: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement,
+        evaluation: Evaluation,
         depth: Int = 0,
-        resourceRoot: JsonElement = rootSchema,
+        resourceRoot: JsonElement = evaluation.rootSchema,
         dynamicScope: List<JsonElement> = emptyList(),
     ) {
         // Check depth limit to prevent stack overflow
@@ -284,8 +284,8 @@ class JsonValidator @JvmOverloads constructor(
             // A resource's absolute URI is fixed by where it sits in its document. Once registered, keep
             // it: re-resolving its relative $id against itself (it can be its own resourceRoot) would
             // nest it again, e.g. "nested/n.json" -> ".../nested/nested/n.json".
-            if (rawId.isNotEmpty() && !referenceResolver.hasAbsoluteUri(schemaElement)) {
-                val parentUri = referenceResolver.getAbsoluteUri(resourceRoot)
+            if (rawId.isNotEmpty() && !evaluation.references.hasAbsoluteUri(schemaElement)) {
+                val parentUri = evaluation.references.getAbsoluteUri(resourceRoot)
                 val absoluteId =
                     if (parentUri.isNotEmpty()) {
                         try {
@@ -296,7 +296,7 @@ class JsonValidator @JvmOverloads constructor(
                     } else {
                         rawId
                     }
-                referenceResolver.registerAbsoluteUri(schemaElement, absoluteId)
+                evaluation.references.registerAbsoluteUri(schemaElement, absoluteId)
             }
         }
 
@@ -304,20 +304,20 @@ class JsonValidator @JvmOverloads constructor(
             is JsonObject -> {
                 // $ref, $recursiveRef, $dynamicRef are evaluated alongside sibling keywords
                 // (Draft 2019-09+ removed the Draft 7 rule that $ref short-circuits siblings)
-                resolveReferences(schemaElement, rootSchema, effectiveResourceRoot, effectiveScope, version).forEach { hop ->
+                resolveReferences(schemaElement, evaluation, effectiveResourceRoot, effectiveScope, version).forEach { hop ->
                     val hopPath = at(schemaPath, hop.keyword)
                     val target = hop.target
                     if (target != null) {
                         val before = errors.size
-                        validateElement(instance, target, path, hopPath, errors, version, rootSchema, depth + 1, hop.resourceRoot, hop.dynamicScope)
-                        val candidates = listOf(hop.resourceRoot, effectiveResourceRoot) + hop.dynamicScope.asReversed() + rootSchema
-                        absoluteLocations.stamp(errors, before, hopPath, target, candidates, rootSchema)
+                        validateElement(instance, target, path, hopPath, errors, version, evaluation, depth + 1, hop.resourceRoot, hop.dynamicScope)
+                        val candidates = listOf(hop.resourceRoot, effectiveResourceRoot) + hop.dynamicScope.asReversed() + evaluation.rootSchema
+                        evaluation.absoluteLocations.stamp(errors, before, hopPath, target, candidates, evaluation.rootSchema)
                     } else {
                         errors.add(ValidationError(path, "Could not resolve ${hop.description}: ${hop.reference}", hop.keyword, hopPath))
                     }
                 }
 
-                validateAgainstObjectSchema(instance, schemaElement, path, schemaPath, errors, version, rootSchema, depth, effectiveResourceRoot, effectiveScope)
+                validateAgainstObjectSchema(instance, schemaElement, path, schemaPath, errors, version, evaluation, depth, effectiveResourceRoot, effectiveScope)
             }
             is JsonPrimitive -> {
                 // Boolean schema
@@ -350,7 +350,7 @@ class JsonValidator @JvmOverloads constructor(
      */
     private fun resolveReferences(
         schemaElement: JsonObject,
-        rootSchema: JsonElement,
+        evaluation: Evaluation,
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
         version: SchemaVersion,
@@ -358,7 +358,7 @@ class JsonValidator @JvmOverloads constructor(
         val hops = ArrayList<ReferenceHop>(1)
 
         /** The resource a URI part leads into, so local refs inside the target resolve in that document. */
-        fun resourceOf(uriPart: String, target: JsonElement?): JsonElement = if (target != null && uriPart.isNotEmpty()) referenceResolver.resolveUriToResource(uriPart, rootSchema, resourceRoot) ?: resourceRoot else resourceRoot
+        fun resourceOf(uriPart: String, target: JsonElement?): JsonElement = if (target != null && uriPart.isNotEmpty()) evaluation.references.resolveUriToResource(uriPart, evaluation.rootSchema, resourceRoot) ?: resourceRoot else resourceRoot
 
         /** A hop entering [targetResource]: a new resource with $id joins the dynamic scope for $dynamicRef. */
         fun hop(keyword: String, reference: String, description: String, target: JsonElement?, targetResource: JsonElement): ReferenceHop {
@@ -376,7 +376,7 @@ class JsonValidator @JvmOverloads constructor(
         schemaElement[REF]?.jsonPrimitive?.contentOrNull?.let { ref ->
             val refUriPart = ref.substringBefore('#')
             // Local refs resolve within the current $id boundary; URI-based refs search the whole document
-            val target = referenceResolver.resolveRef(ref, if (refUriPart.isEmpty()) resourceRoot else rootSchema, schemaElement, resourceRoot)
+            val target = evaluation.references.resolveRef(ref, if (refUriPart.isEmpty()) resourceRoot else evaluation.rootSchema, schemaElement, resourceRoot)
             hops += hop(REF, ref, "reference", target, resourceOf(refUriPart, target))
         }
 
@@ -384,7 +384,7 @@ class JsonValidator @JvmOverloads constructor(
         // scope, which is itself a resource root, so the target is evaluated in its own resource
         // $recursiveRef exists only in 2019-09; in 2020-12 it is an unknown keyword and is ignored.
         schemaElement[RECURSIVE_REF]?.takeIf { version == SchemaVersion.DRAFT_2019_09 }?.jsonPrimitive?.contentOrNull?.let { recursiveRef ->
-            val resolved = referenceResolver.resolveRef(recursiveRef, resourceRoot, schemaElement, resourceRoot)
+            val resolved = evaluation.references.resolveRef(recursiveRef, resourceRoot, schemaElement, resourceRoot)
             val override =
                 if (resolved is JsonObject && resolved[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true) {
                     dynamicScope.firstOrNull { it is JsonObject && it[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true }
@@ -401,11 +401,11 @@ class JsonValidator @JvmOverloads constructor(
         schemaElement[DYNAMIC_REF]?.takeIf { version == SchemaVersion.DRAFT_2020_12 }?.jsonPrimitive?.contentOrNull?.let { dynamicRef ->
             val uriPart = dynamicRef.substringBefore('#')
             val fragment = if ('#' in dynamicRef) dynamicRef.substringAfter('#') else ""
-            val initialTarget = referenceResolver.resolveRef(dynamicRef, if (uriPart.isEmpty()) resourceRoot else rootSchema, schemaElement, resourceRoot)
+            val initialTarget = evaluation.references.resolveRef(dynamicRef, if (uriPart.isEmpty()) resourceRoot else evaluation.rootSchema, schemaElement, resourceRoot)
             val isPlainAnchorFragment = fragment.isNotEmpty() && !fragment.startsWith("/")
             val override =
                 if (isPlainAnchorFragment && initialTarget is JsonObject && initialTarget[DYNAMIC_ANCHOR]?.jsonPrimitive?.contentOrNull == fragment) {
-                    dynamicScope.firstNotNullOfOrNull { scopeResource -> referenceResolver.findDynamicAnchorInResource(scopeResource, fragment)?.let { it to scopeResource } }
+                    dynamicScope.firstNotNullOfOrNull { scopeResource -> evaluation.references.findDynamicAnchorInResource(scopeResource, fragment)?.let { it to scopeResource } }
                 } else {
                     null
                 }
@@ -430,7 +430,7 @@ class JsonValidator @JvmOverloads constructor(
         schemaPath: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement,
+        evaluation: Evaluation,
         depth: Int,
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
@@ -455,31 +455,31 @@ class JsonValidator @JvmOverloads constructor(
         }
 
         when (instance) {
-            is JsonObject -> validateObject(instance, schema, path, schemaPath, errors, version, rootSchema, depth, resourceRoot, dynamicScope)
-            is JsonArray -> validateArray(instance, schema, path, schemaPath, errors, version, rootSchema, depth, resourceRoot, dynamicScope)
+            is JsonObject -> validateObject(instance, schema, path, schemaPath, errors, version, evaluation, depth, resourceRoot, dynamicScope)
+            is JsonArray -> validateArray(instance, schema, path, schemaPath, errors, version, evaluation, depth, resourceRoot, dynamicScope)
             is JsonPrimitive -> validatePrimitive(instance, schema, path, schemaPath, errors, version)
         }
 
         // Combined schemas
-        schema[ALL_OF]?.jsonArray?.let { validateAllOf(instance, it, path, schemaPath, errors, version, rootSchema, depth, resourceRoot, dynamicScope) }
-        schema[ANY_OF]?.jsonArray?.let { validateAnyOf(instance, it, path, schemaPath, errors, version, rootSchema, depth, resourceRoot, dynamicScope) }
-        schema[ONE_OF]?.jsonArray?.let { validateOneOf(instance, it, path, schemaPath, errors, version, rootSchema, depth, resourceRoot, dynamicScope) }
-        schema[NOT]?.let { validateNot(instance, it, path, schemaPath, errors, version, rootSchema, depth, resourceRoot, dynamicScope) }
+        schema[ALL_OF]?.jsonArray?.let { validateAllOf(instance, it, path, schemaPath, errors, version, evaluation, depth, resourceRoot, dynamicScope) }
+        schema[ANY_OF]?.jsonArray?.let { validateAnyOf(instance, it, path, schemaPath, errors, version, evaluation, depth, resourceRoot, dynamicScope) }
+        schema[ONE_OF]?.jsonArray?.let { validateOneOf(instance, it, path, schemaPath, errors, version, evaluation, depth, resourceRoot, dynamicScope) }
+        schema[NOT]?.let { validateNot(instance, it, path, schemaPath, errors, version, evaluation, depth, resourceRoot, dynamicScope) }
 
         // Conditional schemas (2019-09 and later)
         schema[IF]?.let { ifSchema ->
             val ifErrors = mutableListOf<ValidationError>()
-            validateElement(instance, ifSchema, path, at(schemaPath, IF), ifErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+            validateElement(instance, ifSchema, path, at(schemaPath, IF), ifErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
 
             if (ifErrors.isEmpty()) {
                 // If validation passed, validate against "then"
                 schema[THEN]?.let { thenSchema ->
-                    validateElement(instance, thenSchema, path, at(schemaPath, THEN), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                    validateElement(instance, thenSchema, path, at(schemaPath, THEN), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                 }
             } else {
                 // If validation failed, validate against "else"
                 schema[ELSE]?.let { elseSchema ->
-                    validateElement(instance, elseSchema, path, at(schemaPath, ELSE), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                    validateElement(instance, elseSchema, path, at(schemaPath, ELSE), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                 }
             }
         }
@@ -487,7 +487,7 @@ class JsonValidator @JvmOverloads constructor(
         // Unevaluated properties (2019-09 and later)
         if (instance is JsonObject) {
             schema[UNEVALUATED_PROPERTIES]?.let { unevalPropsSchema ->
-                val evaluated = collectEvaluatedProperties(instance, schema, path, version, rootSchema, depth, resourceRoot, dynamicScope)
+                val evaluated = collectEvaluatedProperties(instance, schema, path, version, evaluation, depth, resourceRoot, dynamicScope)
                 instance.keys.forEach { propName ->
                     if (propName !in evaluated) {
                         val propPath = childOf(path, propName)
@@ -496,7 +496,7 @@ class JsonValidator @JvmOverloads constructor(
                                 errors.add(ValidationError(path, "Unevaluated property '$propName' is not allowed", UNEVALUATED_PROPERTIES, at(schemaPath, UNEVALUATED_PROPERTIES)))
                             unevalPropsSchema is JsonPrimitive && unevalPropsSchema.booleanOrNull == true -> {}
                             else ->
-                                validateElement(instance[propName]!!, unevalPropsSchema, propPath, at(schemaPath, UNEVALUATED_PROPERTIES), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                                validateElement(instance[propName]!!, unevalPropsSchema, propPath, at(schemaPath, UNEVALUATED_PROPERTIES), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                         }
                     }
                 }
@@ -506,7 +506,7 @@ class JsonValidator @JvmOverloads constructor(
         // Unevaluated items (2019-09 and later)
         if (instance is JsonArray) {
             schema[UNEVALUATED_ITEMS]?.let { unevalItemsSchema ->
-                val evaluated = collectEvaluatedIndices(instance, schema, path, version, rootSchema, depth, resourceRoot, dynamicScope)
+                val evaluated = collectEvaluatedIndices(instance, schema, path, version, evaluation, depth, resourceRoot, dynamicScope)
                 instance.indices.forEach { index ->
                     if (index !in evaluated) {
                         val itemPath = childOf(path, index.toString())
@@ -515,7 +515,7 @@ class JsonValidator @JvmOverloads constructor(
                                 errors.add(ValidationError(path, "Unevaluated item at index $index is not allowed", UNEVALUATED_ITEMS, at(schemaPath, UNEVALUATED_ITEMS)))
                             unevalItemsSchema is JsonPrimitive && unevalItemsSchema.booleanOrNull == true -> {}
                             else ->
-                                validateElement(instance[index], unevalItemsSchema, itemPath, at(schemaPath, UNEVALUATED_ITEMS), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                                validateElement(instance[index], unevalItemsSchema, itemPath, at(schemaPath, UNEVALUATED_ITEMS), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                         }
                     }
                 }
@@ -639,7 +639,7 @@ class JsonValidator @JvmOverloads constructor(
         schemaPath: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement,
+        evaluation: Evaluation,
         depth: Int,
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
@@ -649,7 +649,7 @@ class JsonValidator @JvmOverloads constructor(
             properties.forEach { (propName, propSchema) ->
                 instance[propName]?.let { propValue ->
                     val propPath = childOf(path, propName)
-                    validateElement(propValue, propSchema, propPath, at(schemaPath, PROPERTIES, propName), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                    validateElement(propValue, propSchema, propPath, at(schemaPath, PROPERTIES, propName), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                 }
             }
         }
@@ -679,7 +679,7 @@ class JsonValidator @JvmOverloads constructor(
                             }
                         }
                         else -> {
-                            validateElement(instance[propName]!!, additionalPropsSchema, propPath, at(schemaPath, ADDITIONAL_PROPERTIES), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                            validateElement(instance[propName]!!, additionalPropsSchema, propPath, at(schemaPath, ADDITIONAL_PROPERTIES), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                         }
                     }
                 }
@@ -693,7 +693,7 @@ class JsonValidator @JvmOverloads constructor(
                     when (patternMatches(pattern, propName)) {
                         true -> {
                             val propPath = childOf(path, propName)
-                            validateElement(instance[propName]!!, propSchema, propPath, at(schemaPath, PATTERN_PROPERTIES, pattern), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                            validateElement(instance[propName]!!, propSchema, propPath, at(schemaPath, PATTERN_PROPERTIES, pattern), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                         }
                         false -> Unit
                         null -> errors.add(
@@ -724,7 +724,7 @@ class JsonValidator @JvmOverloads constructor(
             instance.keys.forEach { propName ->
                 val propNameElement = JsonPrimitive(propName)
                 val nameErrors = mutableListOf<ValidationError>()
-                validateElement(propNameElement, propNamesSchema, path, at(schemaPath, PROPERTY_NAMES), nameErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                validateElement(propNameElement, propNamesSchema, path, at(schemaPath, PROPERTY_NAMES), nameErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                 errors.addAll(nameErrors.map { it.copy(message = "Property name ${quoted(propName)}: ${it.message}") })
             }
         }
@@ -747,7 +747,7 @@ class JsonValidator @JvmOverloads constructor(
         schema[DEPENDENT_SCHEMAS]?.jsonObject?.let { depSchemas ->
             depSchemas.forEach { (propName, depSchema) ->
                 if (propName in instance) {
-                    validateElement(instance, depSchema, path, at(schemaPath, DEPENDENT_SCHEMAS, propName), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                    validateElement(instance, depSchema, path, at(schemaPath, DEPENDENT_SCHEMAS, propName), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                 }
             }
         }
@@ -763,7 +763,7 @@ class JsonValidator @JvmOverloads constructor(
         schemaPath: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement,
+        evaluation: Evaluation,
         depth: Int,
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
@@ -776,7 +776,7 @@ class JsonValidator @JvmOverloads constructor(
                 prefixItems.forEachIndexed { index, itemSchema ->
                     if (index < instance.size) {
                         val itemPath = childOf(path, index.toString())
-                        validateElement(instance[index], itemSchema, itemPath, at(schemaPath, PREFIX_ITEMS, index.toString()), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                        validateElement(instance[index], itemSchema, itemPath, at(schemaPath, PREFIX_ITEMS, index.toString()), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                     }
                 }
 
@@ -784,7 +784,7 @@ class JsonValidator @JvmOverloads constructor(
                 schema[ITEMS]?.let { itemsSchema ->
                     for (index in prefixItems.size until instance.size) {
                         val itemPath = childOf(path, index.toString())
-                        validateElement(instance[index], itemsSchema, itemPath, at(schemaPath, ITEMS), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                        validateElement(instance[index], itemsSchema, itemPath, at(schemaPath, ITEMS), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                     }
                 }
             }
@@ -796,7 +796,7 @@ class JsonValidator @JvmOverloads constructor(
                         // Single schema for all items
                         instance.forEachIndexed { index, item ->
                             val itemPath = childOf(path, index.toString())
-                            validateElement(item, itemsSchema, itemPath, at(schemaPath, ITEMS), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                            validateElement(item, itemsSchema, itemPath, at(schemaPath, ITEMS), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                         }
                     }
                     is JsonArray -> {
@@ -804,7 +804,7 @@ class JsonValidator @JvmOverloads constructor(
                         itemsSchema.forEachIndexed { index, itemSchema ->
                             if (index < instance.size) {
                                 val itemPath = childOf(path, index.toString())
-                                validateElement(instance[index], itemSchema, itemPath, at(schemaPath, ITEMS, index.toString()), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                                validateElement(instance[index], itemSchema, itemPath, at(schemaPath, ITEMS, index.toString()), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                             }
                         }
                     }
@@ -825,7 +825,7 @@ class JsonValidator @JvmOverloads constructor(
                             }
                         }
                         else -> {
-                            validateElement(instance[index], additionalItemsSchema, itemPath, at(schemaPath, ADDITIONAL_ITEMS), errors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                            validateElement(instance[index], additionalItemsSchema, itemPath, at(schemaPath, ADDITIONAL_ITEMS), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                         }
                     }
                 }
@@ -837,7 +837,7 @@ class JsonValidator @JvmOverloads constructor(
             val matchingIndices = mutableListOf<Int>()
             instance.forEachIndexed { index, item ->
                 val itemErrors = mutableListOf<ValidationError>()
-                validateElement(item, containsSchema, childOf(path, index.toString()), at(schemaPath, CONTAINS), itemErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                validateElement(item, containsSchema, childOf(path, index.toString()), at(schemaPath, CONTAINS), itemErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                 if (itemErrors.isEmpty()) {
                     matchingIndices.add(index)
                 }
@@ -1916,14 +1916,14 @@ class JsonValidator @JvmOverloads constructor(
         schemaPath: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement,
+        evaluation: Evaluation,
         depth: Int,
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
     ) {
         schemas.forEachIndexed { index, schema ->
             val branchErrors = mutableListOf<ValidationError>()
-            validateElement(instance, schema, path, at(schemaPath, ALL_OF, index.toString()), branchErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+            validateElement(instance, schema, path, at(schemaPath, ALL_OF, index.toString()), branchErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
             if (branchErrors.isNotEmpty()) {
                 val depthError = branchErrors.firstOrNull { it.keyword == "depth" }
                 if (depthError != null) {
@@ -1953,7 +1953,7 @@ class JsonValidator @JvmOverloads constructor(
         schemaPath: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement,
+        evaluation: Evaluation,
         depth: Int,
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
@@ -1961,7 +1961,7 @@ class JsonValidator @JvmOverloads constructor(
         val branchErrors = mutableListOf<ValidationError>()
         val anyValid = schemas.mapIndexed { index, schema ->
             val tempErrors = mutableListOf<ValidationError>()
-            validateElement(instance, schema, path, at(schemaPath, ANY_OF, index.toString()), tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+            validateElement(instance, schema, path, at(schemaPath, ANY_OF, index.toString()), tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
             if (tempErrors.isNotEmpty()) {
                 branchErrors.add(
                     ValidationError(path, "Branch $index failed", ANY_OF, at(schemaPath, ANY_OF, index.toString()), causes = tempErrors),
@@ -1998,7 +1998,7 @@ class JsonValidator @JvmOverloads constructor(
         schemaPath: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement,
+        evaluation: Evaluation,
         depth: Int,
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
@@ -2006,7 +2006,7 @@ class JsonValidator @JvmOverloads constructor(
         val branchErrors = mutableListOf<ValidationError>()
         val matchingBranches = schemas.mapIndexedNotNull { index, schema ->
             val tempErrors = mutableListOf<ValidationError>()
-            validateElement(instance, schema, path, at(schemaPath, ONE_OF, index.toString()), tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+            validateElement(instance, schema, path, at(schemaPath, ONE_OF, index.toString()), tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
             if (tempErrors.isNotEmpty()) {
                 branchErrors.add(
                     ValidationError(path, "Branch $index failed", ONE_OF, at(schemaPath, ONE_OF, index.toString()), causes = tempErrors),
@@ -2056,7 +2056,7 @@ class JsonValidator @JvmOverloads constructor(
         schemaElement: JsonElement,
         path: String,
         version: SchemaVersion,
-        rootSchema: JsonElement,
+        evaluation: Evaluation,
         depth: Int,
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
@@ -2116,7 +2116,7 @@ class JsonValidator @JvmOverloads constructor(
             val matchingIndices = mutableListOf<Int>()
             instance.forEachIndexed { index, item ->
                 val tempErrors = mutableListOf<ValidationError>()
-                validateElement(item, containsSchema, childOf(path, index.toString()), "", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                validateElement(item, containsSchema, childOf(path, index.toString()), "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                 if (tempErrors.isEmpty()) matchingIndices.add(index)
             }
             // Annotation only produced when contains validates (minContains satisfied)
@@ -2127,23 +2127,23 @@ class JsonValidator @JvmOverloads constructor(
 
         // $ref, $recursiveRef, $dynamicRef: collect from the target, in the target's resource and dynamic
         // scope, exactly as validateElement evaluates it (resolveReferences is shared with it)
-        resolveReferences(schemaElement, rootSchema, effectiveResourceRoot, effectiveScope, version).forEach { hop ->
+        resolveReferences(schemaElement, evaluation, effectiveResourceRoot, effectiveScope, version).forEach { hop ->
             hop.target?.let { target ->
-                evaluated.addAll(collectEvaluatedIndices(instance, target, path, version, rootSchema, depth + 1, hop.resourceRoot, hop.dynamicScope))
+                evaluated.addAll(collectEvaluatedIndices(instance, target, path, version, evaluation, depth + 1, hop.resourceRoot, hop.dynamicScope))
             }
         }
 
         // allOf: all branches always contribute
         schemaElement[ALL_OF]?.jsonArray?.forEach { subSchema ->
-            evaluated.addAll(collectEvaluatedIndices(instance, subSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+            evaluated.addAll(collectEvaluatedIndices(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
         }
 
         // anyOf: only valid branches contribute
         schemaElement[ANY_OF]?.jsonArray?.forEach { subSchema ->
             val tempErrors = mutableListOf<ValidationError>()
-            validateElement(instance, subSchema, path, "", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+            validateElement(instance, subSchema, path, "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
             if (tempErrors.isEmpty()) {
-                evaluated.addAll(collectEvaluatedIndices(instance, subSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                evaluated.addAll(collectEvaluatedIndices(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
             }
         }
 
@@ -2152,26 +2152,26 @@ class JsonValidator @JvmOverloads constructor(
             val validBranch =
                 schemas.firstOrNull { subSchema ->
                     val tempErrors = mutableListOf<ValidationError>()
-                    validateElement(instance, subSchema, path, "", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                    validateElement(instance, subSchema, path, "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                     tempErrors.isEmpty()
                 }
             validBranch?.let {
-                evaluated.addAll(collectEvaluatedIndices(instance, it, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                evaluated.addAll(collectEvaluatedIndices(instance, it, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
             }
         }
 
         // if/then/else: when if passes collect from if AND then; when fails collect from else
         schemaElement[IF]?.let { ifSchema ->
             val ifErrors = mutableListOf<ValidationError>()
-            validateElement(instance, ifSchema, path, "", ifErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+            validateElement(instance, ifSchema, path, "", ifErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
             if (ifErrors.isEmpty()) {
-                evaluated.addAll(collectEvaluatedIndices(instance, ifSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                evaluated.addAll(collectEvaluatedIndices(instance, ifSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
                 schemaElement[THEN]?.let { thenSchema ->
-                    evaluated.addAll(collectEvaluatedIndices(instance, thenSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                    evaluated.addAll(collectEvaluatedIndices(instance, thenSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
                 }
             } else {
                 schemaElement[ELSE]?.let { elseSchema ->
-                    evaluated.addAll(collectEvaluatedIndices(instance, elseSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                    evaluated.addAll(collectEvaluatedIndices(instance, elseSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
                 }
             }
         }
@@ -2186,7 +2186,7 @@ class JsonValidator @JvmOverloads constructor(
                 else ->
                     yetUnevaluated.forEach { index ->
                         val tempErrors = mutableListOf<ValidationError>()
-                        validateElement(instance[index], unevalItemsSchema, childOf(path, index.toString()), "", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                        validateElement(instance[index], unevalItemsSchema, childOf(path, index.toString()), "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                         if (tempErrors.isEmpty()) evaluated.add(index)
                     }
             }
@@ -2207,7 +2207,7 @@ class JsonValidator @JvmOverloads constructor(
         schemaElement: JsonElement,
         path: String,
         version: SchemaVersion,
-        rootSchema: JsonElement,
+        evaluation: Evaluation,
         depth: Int,
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
@@ -2251,23 +2251,23 @@ class JsonValidator @JvmOverloads constructor(
 
         // $ref, $recursiveRef, $dynamicRef: collect from the target, in the target's resource and dynamic
         // scope, exactly as validateElement evaluates it (resolveReferences is shared with it)
-        resolveReferences(schemaElement, rootSchema, effectiveResourceRoot, effectiveScope, version).forEach { hop ->
+        resolveReferences(schemaElement, evaluation, effectiveResourceRoot, effectiveScope, version).forEach { hop ->
             hop.target?.let { target ->
-                evaluated.addAll(collectEvaluatedProperties(instance, target, path, version, rootSchema, depth + 1, hop.resourceRoot, hop.dynamicScope))
+                evaluated.addAll(collectEvaluatedProperties(instance, target, path, version, evaluation, depth + 1, hop.resourceRoot, hop.dynamicScope))
             }
         }
 
         // allOf: annotations from all branches (they must all be valid for the schema to be valid)
         schemaElement[ALL_OF]?.jsonArray?.forEach { subSchema ->
-            evaluated.addAll(collectEvaluatedProperties(instance, subSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+            evaluated.addAll(collectEvaluatedProperties(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
         }
 
         // anyOf: annotations only from valid branches
         schemaElement[ANY_OF]?.jsonArray?.forEach { subSchema ->
             val tempErrors = mutableListOf<ValidationError>()
-            validateElement(instance, subSchema, path, "", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+            validateElement(instance, subSchema, path, "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
             if (tempErrors.isEmpty()) {
-                evaluated.addAll(collectEvaluatedProperties(instance, subSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                evaluated.addAll(collectEvaluatedProperties(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
             }
         }
 
@@ -2276,27 +2276,27 @@ class JsonValidator @JvmOverloads constructor(
             val validBranch =
                 schemas.firstOrNull { subSchema ->
                     val tempErrors = mutableListOf<ValidationError>()
-                    validateElement(instance, subSchema, path, "", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                    validateElement(instance, subSchema, path, "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                     tempErrors.isEmpty()
                 }
             validBranch?.let {
-                evaluated.addAll(collectEvaluatedProperties(instance, it, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                evaluated.addAll(collectEvaluatedProperties(instance, it, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
             }
         }
 
         // if/then/else: when if passes, collect from the if schema AND then; when if fails, collect from else
         schemaElement[IF]?.let { ifSchema ->
             val ifErrors = mutableListOf<ValidationError>()
-            validateElement(instance, ifSchema, path, "", ifErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+            validateElement(instance, ifSchema, path, "", ifErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
             if (ifErrors.isEmpty()) {
                 // if passed: its own property annotations also contribute
-                evaluated.addAll(collectEvaluatedProperties(instance, ifSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                evaluated.addAll(collectEvaluatedProperties(instance, ifSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
                 schemaElement[THEN]?.let { thenSchema ->
-                    evaluated.addAll(collectEvaluatedProperties(instance, thenSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                    evaluated.addAll(collectEvaluatedProperties(instance, thenSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
                 }
             } else {
                 schemaElement[ELSE]?.let { elseSchema ->
-                    evaluated.addAll(collectEvaluatedProperties(instance, elseSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                    evaluated.addAll(collectEvaluatedProperties(instance, elseSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
                 }
             }
         }
@@ -2305,7 +2305,7 @@ class JsonValidator @JvmOverloads constructor(
         schemaElement[DEPENDENT_SCHEMAS]?.jsonObject?.let { depSchemas ->
             depSchemas.forEach { (propName, depSchema) ->
                 if (propName in instance) {
-                    evaluated.addAll(collectEvaluatedProperties(instance, depSchema, path, version, rootSchema, depth + 1, resourceRoot, dynamicScope))
+                    evaluated.addAll(collectEvaluatedProperties(instance, depSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
                 }
             }
         }
@@ -2321,7 +2321,7 @@ class JsonValidator @JvmOverloads constructor(
                 else ->
                     yetUnevaluated.forEach { propName ->
                         val tempErrors = mutableListOf<ValidationError>()
-                        validateElement(instance[propName]!!, unevalPropsSchema, childOf(path, propName), "", tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+                        validateElement(instance[propName]!!, unevalPropsSchema, childOf(path, propName), "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                         if (tempErrors.isEmpty()) evaluated.add(propName)
                     }
             }
@@ -2340,13 +2340,13 @@ class JsonValidator @JvmOverloads constructor(
         schemaPath: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
-        rootSchema: JsonElement,
+        evaluation: Evaluation,
         depth: Int,
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
     ) {
         val tempErrors = mutableListOf<ValidationError>()
-        validateElement(instance, schema, path, at(schemaPath, NOT), tempErrors, version, rootSchema, depth + 1, resourceRoot, dynamicScope)
+        validateElement(instance, schema, path, at(schemaPath, NOT), tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
 
         // Check if schema hit depth limit - if so, propagate that error
         val depthError = tempErrors.firstOrNull { it.keyword == "depth" }

@@ -132,6 +132,19 @@ class ReferenceResolutionTest :
                     }
                     asked shouldBe listOf("https://a.example/other.json", "https://b.example/other.json")
                 }
+
+                it("resolves a nested relative \$id against each validation's base URI when the schema element is reused (#37)") {
+                    val asked = mutableListOf<String>()
+                    val validator = JsonValidator(schemaLoader = { uri ->
+                        asked += uri
+                        Json.parseToJsonElement("true")
+                    })
+                    val element = Json.parseToJsonElement("""{"properties":{"x":{"${'$'}id":"child","${'$'}ref":"value"}}}""")
+                    listOf("https://a.example/root", "https://b.example/root").forEach { base ->
+                        validator.validate(Json.parseToJsonElement("""{"x":1}"""), JsonSchema(element, version, base))
+                    }
+                    asked shouldBe listOf("https://a.example/value", "https://b.example/value")
+                }
             }
         }
     })

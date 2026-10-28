@@ -36,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per value) instead of embedding them whole, so a huge instance no longer produces a huge message (#48).
 - Concurrent validations needing the same remote schema call `schemaLoader` once and wait for that
   load, and the schema's URI is registered before other threads can see it (#41).
+- **Breaking loader change:** `$id` registrations last for one validation. A schema element validated
+  under different `JsonSchema.baseUri`s resolves its nested relative `$id`s against each base, so
+  `schemaLoader` now receives `https://b.example/value` for the second base instead of the first
+  base's `https://a.example/value` (#37). A live validator also no longer keeps every schema with
+  `$id` it has validated.
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the
   dynamic scope, now resolves its local `#/...` refs in its own document instead of the caller's (#35).
 - URI normalization no longer changes what a URI identifies: opaque URIs such as URNs stay whole
@@ -86,6 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the move to a synchronous API; the published POM now lists only `kotlinx-serialization-json`
   (and the Kotlin standard library). Projects that used coroutines without declaring them must now
   add the dependency themselves.
+- `ReferenceResolver` is now internal. It was public by accident: nothing in the API accepts or
+  returns one, and it now serves a single validation (#37).
 
 ## [3.1.0] - 2026-10-21
 

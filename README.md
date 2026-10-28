@@ -295,17 +295,19 @@ Kotlin objects such as `OutputFormat.Basic` and `ValidationResult.Valid` are rea
 
 ### Memory and validator lifecycle
 
-KtSON keeps no global state: every cache (remote schemas loaded through `schemaLoader`, `$id`
-registrations, compiled patterns, numeric limits) belongs to one `JsonValidator`. That shapes how a
+KtSON keeps no global state: every cache (remote schemas loaded through `schemaLoader`, compiled
+patterns, numeric limits) belongs to one `JsonValidator`, and what a validation learns about a schema
+(the absolute URI of each `$id`) is discarded when that validation ends. That shapes how a
 long-running service should use it:
 
 - **Dropping a validator frees everything it built.** Once a `JsonValidator` is unreachable, its
   caches, the schemas it validated and the remote schemas it loaded can all be garbage-collected
   (`ValidatorLifecycleTest` checks this). A service holding one validator per schema can retire a
   schema by dropping its validator.
-- **A live validator keeps what it has seen.** Its caches grow with the schemas it validates and
-  are not evicted, so reuse the parsed `JsonSchema` (or the validator) rather than parsing the same
-  schema again for every call through one shared validator.
+- **A live validator does not hold on to the schemas it validates.** Once the application drops a
+  `JsonSchema`, it can be collected even while the validator that checked it stays in use. The same
+  parsed schema can be validated under different `baseUri`s; each validation resolves its `$id`s
+  against its own base.
 - **Remote schemas are loaded once per validator.** To pick up a changed remote schema, create a new
   validator.
 - **Pooling is up to the application.** KtSON has no schema pool: how many schemas to keep, how much
@@ -518,7 +520,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Instance locations, legacy access and JSON Pointer resolution: 117 tests
   - Output formats: 40 tests
   - Absolute keyword locations: 45 tests
-  - Reference resolution (percent-encoding, base URIs, `$id` registration): 26 tests
+  - Reference resolution (percent-encoding, base URIs, `$id` registration): 28 tests
   - Keyword-named properties (`$id`, `$anchor`, `$dynamicAnchor`): 7 tests
   - `unevaluated*` across schema resources: 6 tests
   - Validator lifecycle (garbage collection): 2 tests

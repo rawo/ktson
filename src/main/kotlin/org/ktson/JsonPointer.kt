@@ -73,37 +73,55 @@ object JsonPointer {
 }
 
 /**
- * Reference resolver for JSON Schema
- * Handles $ref, $recursiveRef, $dynamicRef
- * Thread-safe implementation with optional external schema loading.
+ * Remote schemas loaded through a validator's schemaLoader, shared by every validation that validator runs.
+ * Each distinct absolute URI is loaded once and kept for the validator's lifetime. Thread-safe.
  */
-class ReferenceResolver(
-    private val schemaLoader: ((String) -> JsonElement?)? = null,
-) {
-    /** Cache of externally-loaded schemas keyed by their absolute URI. */
+internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?) {
     // Nullable value type only so computeIfAbsent's loader may return null; a ConcurrentHashMap never stores null.
     private val schemaCache = java.util.concurrent.ConcurrentHashMap<String, JsonElement?>()
 
-    /**
-     * Maps externally-loaded schema elements → the URI they were loaded from.
-     * Used to resolve relative $refs within loaded schemas that have no $id.
-     */
+    /** Loaded schema elements → the URI they were loaded from, for relative $refs in documents without an $id. */
     private val loadedSchemaUris =
         java.util.Collections.synchronizedMap(java.util.IdentityHashMap<JsonElement, String>())
 
+    /** The schema already loaded from [uri], or null. */
+    fun cached(uri: String): JsonElement? = schemaCache[uri]
+
+    /** The URI [schema] was loaded from, or null if it was not loaded by this store. */
+    fun uriOf(schema: JsonElement): String? = loadedSchemaUris[schema]
+
     /**
-     * Maps inline schema elements → their resolved absolute URI.
-     * Populated by [registerAbsoluteUri] for schemas with relative $id.
+     * The schema at [uri], loaded on first use. Single flight: concurrent validations needing the same URI
+     * wait for one load instead of each calling the loader, and the URI is registered before the schema
+     * becomes visible in the cache. A null result is not cached, so a later validation may try again.
      */
-    private val schemaAbsoluteUris =
-        java.util.Collections.synchronizedMap(java.util.IdentityHashMap<JsonElement, String>())
+    fun load(uri: String): JsonElement? {
+        val loader = schemaLoader ?: return null
+        return schemaCache.computeIfAbsent(uri) { loader(it)?.also { schema -> loadedSchemaUris[schema] = it } }
+    }
+}
+
+/**
+ * Reference resolver for JSON Schema: handles $ref, $recursiveRef and $dynamicRef for one validation.
+ *
+ * The absolute URI of a schema with a relative `$id` depends on the base it is evaluated under, and the
+ * same element may be validated under different bases ([JsonSchema.baseUri], #37). So the registrations
+ * live only as long as one validation; remote schemas come from the validator's shared [store].
+ * Not thread-safe: an instance serves one validation on one thread.
+ */
+internal class ReferenceResolver(private val store: SchemaStore) {
+    /**
+     * Maps schema elements → their resolved absolute URI, for schemas with a relative $id.
+     * Populated by [registerAbsoluteUri].
+     */
+    private val schemaAbsoluteUris = java.util.IdentityHashMap<JsonElement, String>()
 
     /**
      * Register the resolved absolute URI for an inline schema element.
      * Call this whenever validateElement enters a new resource root (schema with $id).
      * This enables correct relative URI resolution for nested schemas with relative $id values.
      */
-    fun registerAbsoluteUri(
+    internal fun registerAbsoluteUri(
         schema: JsonElement,
         absoluteUri: String,
     ) {
@@ -114,19 +132,18 @@ class ReferenceResolver(
         if (!replacesAbsolute || isAbsolute(absoluteUri)) schemaAbsoluteUris[schema] = absoluteUri
     }
 
-    /**
-     * Returns the effective absolute base URI for [schema]:
-     *  1. Checks the [schemaAbsoluteUris] registration map (handles relative $id)
-     *  2. Checks the [loadedSchemaUris] map (handles schemas without $id loaded externally)
-     *  3. Falls back to the raw $id if it is already absolute
-     */
-
     /** Whether [schema] already has an absolute URI registered (see [registerAbsoluteUri]). */
     internal fun hasAbsoluteUri(schema: JsonElement): Boolean = schemaAbsoluteUris[schema]?.let { isAbsolute(it) } == true
 
+    /**
+     * Returns the effective absolute base URI for [schema]:
+     *  1. Its registration (handles relative $id), see [registerAbsoluteUri]
+     *  2. The URI it was loaded from (handles schemas without $id loaded externally)
+     *  3. Its raw $id if that is already absolute
+     */
     internal fun getAbsoluteUri(schema: JsonElement): String {
         schemaAbsoluteUris[schema]?.let { return it }
-        loadedSchemaUris[schema]?.let { return it }
+        store.uriOf(schema)?.let { return it }
         val rawId = (schema as? JsonObject)?.stringKeyword(SchemaKeywords.ID) ?: ""
         return if (rawId.isNotEmpty() && UriResolver.isAbsoluteUri(rawId)) rawId else ""
     }
@@ -152,7 +169,7 @@ class ReferenceResolver(
             } else {
                 uriPart
             }
-        return schemaCache[absoluteUri]
+        return store.cached(absoluteUri)
     }
 
     /**
@@ -169,7 +186,7 @@ class ReferenceResolver(
      *
      * @param resourceRoot the schema resource that owns the ref (used for relative URI resolution)
      */
-    fun resolveRef(
+    internal fun resolveRef(
         ref: String,
         rootSchema: JsonElement,
         currentSchema: JsonElement = rootSchema,
@@ -204,7 +221,7 @@ class ReferenceResolver(
      * Resolves [uriPart] against [baseSchema]'s effective absolute URI, then:
      *  1. Returns cached result if already loaded
      *  2. Tries to find the URI as an embedded $id within [baseSchema] itself
-     *  3. Invokes the [schemaLoader] to load from an external source
+     *  3. Loads it through the validator's [SchemaStore]
      * Returns the loaded schema root on success; the caller applies any fragment.
      */
     private fun resolveExternalRef(
@@ -223,20 +240,14 @@ class ReferenceResolver(
                 uriPart
             }
 
-        schemaCache[absoluteUri]?.let { return it }
+        store.cached(absoluteUri)?.let { return it }
 
         // Check if the target URI is embedded within baseSchema (e.g. a nested $id sub-schema)
         if (absoluteUri != uriPart || baseId.isNotEmpty()) {
             findSchemaByUri(baseSchema, absoluteUri)?.let { return it }
         }
 
-        val loader = schemaLoader ?: return null
-        // Single flight: concurrent validations needing the same URI wait for one load instead of each
-        // calling the loader, and the URI is registered before the schema becomes visible in the cache.
-        // A null result is not cached, so a later validation may try again.
-        return schemaCache.computeIfAbsent(absoluteUri) { uri ->
-            loader(uri)?.also { loadedSchemaUris[it] = uri }
-        }
+        return store.load(absoluteUri)
     }
 
     /** Resolve a reference that has no URI part — only a fragment. */
@@ -303,7 +314,7 @@ class ReferenceResolver(
      * Only matches $dynamicAnchor (not $anchor) — used for $dynamicRef dynamic scope walking.
      * Stops at nested $id boundaries — those are separate resources and are not searched.
      */
-    fun findDynamicAnchorInResource(
+    internal fun findDynamicAnchorInResource(
         schema: JsonElement,
         anchorName: String,
         isRoot: Boolean = true,
