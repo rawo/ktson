@@ -338,6 +338,17 @@ class FormatValidationTest :
         it("a colon in the first segment of a relative path is invalid") { runTest { invalid("1:b", "uri-reference") } }
     }
 
+    describe("uri, uri-reference, iri and iri-reference: fragment and IPvFuture grammar (#59)") {
+        listOf("uri", "uri-reference", "iri", "iri-reference").forEach { format ->
+            listOf("https://example.com/a#b#c", "https://example.com/?q#a#", "https://[v1.]", "https://[v1.a^b]", "https://[v.a]", "https://[v1.a b]").forEach { value ->
+                it("$format rejects '$value'") { runTest { invalid(value, format) } }
+            }
+            listOf("https://example.com/a?b#c/d?e", "https://[v1.a]", "https://[V1F.a:b!${'$'}&'()*+,;=-._~]:80/p").forEach { value ->
+                it("$format accepts '$value'") { runTest { valid(value, format) } }
+            }
+        }
+    }
+
     describe("uri-template format: RFC 6570 grammar") {
         it("an expression with a prefix modifier is valid") { runTest { valid("{term:1}", "uri-template") } }
         it("a four-digit prefix is valid") { runTest { valid("{v:1000}", "uri-template") } }

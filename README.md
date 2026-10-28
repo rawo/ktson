@@ -511,13 +511,13 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 928 tests (100% passing)
+- **Custom Tests**: 964 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
   - Depth limit protection: 14 tests
   - URI resolver (including the RFC 3986 §5.4 examples): 75 tests
-  - Format validation: 294 tests
+  - Format validation: 330 tests
   - Error messages: 32 tests
   - Numeric precision and concurrent numeric validation: 88 tests
   - Instance locations, legacy access and JSON Pointer resolution: 117 tests

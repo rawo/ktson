@@ -1212,6 +1212,8 @@ class JsonValidator @JvmOverloads constructor(
         if (authority != null && !isValidUriAuthority(authority, allowUcs)) return false
         // Square brackets delimit an IP-literal host and are illegal anywhere else
         if (!isValidUriCharacters(afterAuthority, allowUcs)) return false
+        // "#" starts the fragment, and a fragment cannot contain another one (RFC 3986 §3.5)
+        if (afterAuthority.count { it == '#' } > 1) return false
 
         // A relative-path reference whose first segment contains a colon would be
         // read as a scheme, so RFC 3986 forbids it
@@ -1284,10 +1286,14 @@ class JsonValidator @JvmOverloads constructor(
         return port == null || port.all { it in '0'..'9' }
     }
 
-    private fun isValidIpvFuture(host: String): Boolean = host.length >= 3 &&
-            (host[0] == 'v' || host[0] == 'V') &&
-            host.drop(1).substringBefore('.').let { it.isNotEmpty() && it.all { c -> isHexChar(c) } } &&
-            '.' in host.drop(1)
+    /** IPvFuture = "v" 1*HEXDIG "." 1*( unreserved / sub-delims / ":" ) (RFC 3986 §3.2.2). */
+    private fun isValidIpvFuture(host: String): Boolean {
+        if (host.isEmpty() || (host[0] != 'v' && host[0] != 'V')) return false
+        val version = host.drop(1).substringBefore('.', "")
+        val address = host.drop(1).substringAfter('.', "")
+        return version.isNotEmpty() && version.all { isHexChar(it) } &&
+            address.isNotEmpty() && address.all { (it.code < 128 && it.isLetterOrDigit()) || it in IPV_FUTURE_SYMBOLS }
+    }
 
     private fun isHexChar(c: Char) = c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F'
 
@@ -2491,6 +2497,9 @@ private val REGEX_UUID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
             )
 
         private const val MAX_MESSAGE_VALUE_LENGTH = 40
+
+        /** The non-alphanumeric characters an IPvFuture address may use: unreserved, sub-delims and ":". */
+        private const val IPV_FUTURE_SYMBOLS = "-._~!$&'()*+,;=:"
 
         /** Stack for the meta-schema check: about 13 MB is needed for 1,000 schema levels, so this leaves margin. */
         private const val META_SCHEMA_STACK_SIZE = 64L * 1024 * 1024
