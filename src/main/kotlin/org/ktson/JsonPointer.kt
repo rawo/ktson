@@ -148,6 +148,9 @@ internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?
     }
 }
 
+/** Where a reference leads: [target], inside [resource], whose absolute base is [base] (null: keep the current one). */
+internal data class ResolvedReference(val target: JsonElement, val resource: JsonElement, val base: String?)
+
 /**
  * Reference resolver for JSON Schema: handles $ref, $recursiveRef and $dynamicRef for one validation.
  *
@@ -196,30 +199,6 @@ internal class ReferenceResolver(private val store: SchemaStore) {
     }
 
     /**
-     * Returns the cached externally-loaded schema root for [uriPart] resolved
-     * against [baseSchema], or null if it was not loaded externally (e.g. found
-     * in-document). Used by [validateElement] to determine the correct resourceRoot
-     * when following URI-based $refs.
-     */
-    internal fun getLoadedSchemaRoot(
-        baseSchema: JsonElement,
-        uriPart: String,
-    ): JsonElement? {
-        val baseId = getAbsoluteUri(baseSchema)
-        val absoluteUri =
-            if (baseId.isNotEmpty()) {
-                try {
-                    UriResolver.resolveUri(baseId, uriPart)
-                } catch (_: Exception) {
-                    uriPart
-                }
-            } else {
-                uriPart
-            }
-        return store.cached(absoluteUri)
-    }
-
-    /**
      * Resolve a $ref reference.
      *
      * Supports:
@@ -229,72 +208,82 @@ internal class ReferenceResolver(private val store: SchemaStore) {
      *  - URI + anchor:        http://example.com/schema#anchorName
      *  - Relative URI:        other.json  (matched against $id values in the document)
      *
-     * Percent-encoded characters in the fragment are decoded per RFC 3986.
+     * Percent-encoded characters in the fragment are decoded per RFC 3986. The target, the resource that
+     * holds it and that resource's base are found together, so they cannot disagree (#52).
      *
+     * @param rootSchema the document searched for a fragment-only reference, or for the URI part
      * @param resourceRoot the schema resource that owns the ref (used for relative URI resolution)
      */
     internal fun resolveRef(
         ref: String,
         rootSchema: JsonElement,
-        currentSchema: JsonElement = rootSchema,
         resourceRoot: JsonElement = rootSchema,
-    ): JsonElement? {
+    ): ResolvedReference? {
         val hashIndex = ref.indexOf('#')
         val uriPart = if (hashIndex >= 0) ref.substring(0, hashIndex) else ref
         val fragment = percentDecode(if (hashIndex >= 0) ref.substring(hashIndex + 1) else "")
 
-        return if (uriPart.isEmpty()) {
-            resolveLocalRef(rootSchema, fragment)
-        } else {
-            // A relative reference resolves against the base of the resource that contains it (RFC 3986 §5.1),
-            // e.g. $ref "target" inside a resource with $id "b/" means ".../b/target", so try that first; the
-            // document root's base is only a fallback for resources without an absolute base.
-            val baseId = getAbsoluteUri(resourceRoot)
-            val targetSchema =
-                (if (isAbsolute(baseId)) runCatching { UriResolver.resolveUri(baseId, uriPart) }.getOrNull()?.let { findSchemaByUri(rootSchema, it) } else null)
-                    ?: findSchemaByUri(rootSchema, uriPart)
-                    ?: resolveExternalRef(resourceRoot, uriPart)
-                    ?: return null
-            when {
-                fragment.isEmpty() -> targetSchema
-                fragment.startsWith("/") -> JsonPointer.resolve(targetSchema, fragment)
-                else -> findAnchorInResource(targetSchema, fragment)
-            }
-        }
+        if (uriPart.isEmpty()) return resolveLocalRef(rootSchema, fragment)?.let { ResolvedReference(it, resourceRoot, null) }
+        val located = locateResource(uriPart, rootSchema, resourceRoot) ?: return null
+        val target = when {
+            fragment.isEmpty() -> located.resource
+            fragment.startsWith("/") -> JsonPointer.resolve(located.resource, fragment)
+            else -> findAnchorInResource(located.resource, fragment)
+        } ?: return null
+        return located.copy(target = target)
     }
 
     /**
-     * Attempt to load an external schema via the schemaLoader.
-     * Resolves [uriPart] against [baseSchema]'s effective absolute URI, then:
-     *  1. Returns cached result if already loaded
-     *  2. Tries to find the URI as an embedded $id within [baseSchema] itself
-     *  3. Loads it through the validator's [SchemaStore]
-     * Returns the loaded schema root on success; the caller applies any fragment.
+     * The resource [uriPart] identifies, with its absolute base:
+     *  1. A relative reference resolves against the base of the resource that contains it (RFC 3986 §5.1),
+     *     e.g. "target" inside a resource with $id "b/" means ".../b/target", so that is searched first; the
+     *     document root's base is only a fallback for resources without an absolute base
+     *  2. A schema already loaded from that URI, or one embedded in [resourceRoot]
+     *  3. A load through the validator's [SchemaStore]
+     * A loaded document's base is its own $id, resolved against the URI it was retrieved from, else that URI.
      */
-    private fun resolveExternalRef(
-        baseSchema: JsonElement,
+    private fun locateResource(
         uriPart: String,
-    ): JsonElement? {
-        val baseId = getAbsoluteUri(baseSchema)
-        val absoluteUri =
-            if (baseId.isNotEmpty()) {
-                try {
-                    UriResolver.resolveUri(baseId, uriPart)
-                } catch (_: Exception) {
-                    uriPart
-                }
-            } else {
-                uriPart
-            }
+        rootSchema: JsonElement,
+        resourceRoot: JsonElement,
+    ): ResolvedReference? {
+        fun inDocument(resource: JsonElement) = ResolvedReference(resource, resource, getAbsoluteUri(resource).takeIf { isAbsolute(it) })
 
-        store.cached(absoluteUri)?.let { return it }
-
-        // Check if the target URI is embedded within baseSchema (e.g. a nested $id sub-schema)
-        if (absoluteUri != uriPart || baseId.isNotEmpty()) {
-            findSchemaByUri(baseSchema, absoluteUri)?.let { return it }
+        val baseId = getAbsoluteUri(resourceRoot)
+        if (isAbsolute(baseId)) {
+            runCatching { UriResolver.resolveUri(baseId, uriPart) }.getOrNull()?.let { findSchemaByUri(rootSchema, it) }?.let { return inDocument(it) }
         }
+        findSchemaByUri(rootSchema, uriPart)?.let { return inDocument(it) }
 
-        return store.load(absoluteUri)
+        val absoluteUri = if (baseId.isNotEmpty()) runCatching { UriResolver.resolveUri(baseId, uriPart) }.getOrDefault(uriPart) else uriPart
+        store.cached(absoluteUri)?.let { return loaded(it, absoluteUri) }
+        // The target URI may be embedded within resourceRoot (e.g. a nested $id sub-schema)
+        if (absoluteUri != uriPart || baseId.isNotEmpty()) {
+            findSchemaByUri(resourceRoot, absoluteUri)?.let { return inDocument(it) }
+        }
+        return store.load(absoluteUri)?.let { loaded(it, absoluteUri) }
+    }
+
+    /** A document retrieved from [retrievalUri]: its own $id, resolved against that URI, else the URI is its base. */
+    private fun loaded(document: JsonElement, retrievalUri: String): ResolvedReference {
+        val id = (document as? JsonObject)?.stringKeyword(SchemaKeywords.ID)
+        val canonical = id?.let { runCatching { UriResolver.resolveUri(retrievalUri, it) }.getOrNull()?.substringBefore('#') }
+        return ResolvedReference(document, document, canonical?.takeIf { isAbsolute(it) } ?: retrievalUri.takeIf { isAbsolute(it) })
+    }
+
+    /**
+     * Runs [block] with [resource]'s base set to [base], then restores what was registered before. A
+     * reference hop knows the base its resource was reached under (#52); the same element may be reached
+     * under other bases elsewhere (#54), so the registration lasts only as long as the hop.
+     */
+    internal fun <T> withBase(resource: JsonElement, base: String?, block: () -> T): T {
+        if (base == null) return block()
+        val previous = schemaAbsoluteUris.put(resource, base)
+        try {
+            return block()
+        } finally {
+            if (previous == null) schemaAbsoluteUris.remove(resource) else schemaAbsoluteUris[resource] = previous
+        }
     }
 
     /** Resolve a reference that has no URI part — only a fragment. */
@@ -427,17 +416,6 @@ internal class ReferenceResolver(private val store: SchemaStore) {
         }
         return null
     }
-
-    /**
-     * Returns the target schema resource for a URI-based [uriPart] (without applying any fragment).
-     * Searches [rootSchema] first, then tries external loading via [resourceRoot].
-     * Used by [validateElement] to determine the correct [resourceRoot] when following URI-based $refs.
-     */
-    internal fun resolveUriToResource(
-        uriPart: String,
-        rootSchema: JsonElement,
-        resourceRoot: JsonElement,
-    ): JsonElement? = findSchemaByUri(rootSchema, uriPart) ?: resolveExternalRef(resourceRoot, uriPart)
 }
 
 /**

@@ -145,7 +145,7 @@ validate()
 - **ValidateSchemaWorkerTest.kt** - 3 tests: the `validateSchema` worker inherits no thread-locals and never outlives an interrupted call
 - **IndeterminateResultTest.kt** - 17 tests: undecided results (depth limit, unevaluable regex) are never inverted into Valid
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
-- **ReferenceResolutionTest.kt** - 30 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
+- **ReferenceResolutionTest.kt** - 34 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
 - **UnevaluatedAcrossResourcesTest.kt** - 6 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated
 - **AbsoluteKeywordLocationTest.kt** - 45 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
@@ -295,6 +295,10 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - Absolute URI tracking: `IdentityHashMap<JsonElement, String>` in the per-validation `ReferenceResolver`. It must stay
   per validation: one element can be validated under different `JsonSchema.baseUri`s (#37)
 - `resourceRoot` passed through recursive calls so fragment refs resolve in the correct document
+- `resolveRef()` returns a `ResolvedReference` (target, the resource holding it, that resource's base) from one lookup;
+  never re-derive the resource with a second, root-relative search (#52). A hop evaluates (and stamps) inside
+  `withBase(resource, base)`, so a loaded document's `$id`, resolved against its retrieval URI, applies before refs
+  in its fragments are followed
 - When adding new ref types, update `ReferenceResolver` in `JsonPointer.kt` and `resolveReferences()` in `JsonValidator.kt`
 - The root's absolute base (`JsonSchema.absoluteBaseUri()`: absolute `$id`, else `$id` resolved against `baseUri`, else `baseUri`) is registered before validation, so `schemaLoader` receives absolute URIs
 - `$id` registrations only improve: an absolute URI is never replaced by a relative one, and a registered resource is not re-resolved (its relative `$id` would otherwise nest again)

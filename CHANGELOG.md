@@ -68,6 +68,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   regex engine cannot run on the input) is no longer turned into success by `not`, by an `if` condition
   choosing `else`, by `oneOf` counting another branch as the only match, or by `maxContains`. Such an
   instance is now invalid, with an error that names the undecided applicator (or the `depth` error) (#51).
+- **Breaking verdict change:** a reference's target and the resource it is evaluated in are found together.
+  `target#/$defs/use` inside a resource with base `b/` now evaluates `use` in `b/target`, not in another
+  resource with `$id: "target"`; and a loaded document whose `$id` differs from its retrieval URI resolves
+  refs in its fragments against that `$id` (it used to ask `schemaLoader` for the retrieval-relative URI
+  and evaluate that) (#52).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the

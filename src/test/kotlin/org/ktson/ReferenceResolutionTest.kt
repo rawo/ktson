@@ -153,5 +153,33 @@ class ReferenceResolutionTest :
                     asked shouldBe listOf("https://a.example/value", "https://b.example/value")
                 }
             }
+            describe("$version the resource a reference leads into") {
+                it("evaluates a fragment of a relative URI in the resource the URI resolved to (#52)") {
+                    // "target" under b/ is b/target (n: integer), not root/target (n: string)
+                    val schema = """{"${'$'}id":"https://ex.com/root.json",
+                        "${'$'}defs":{"a":{"${'$'}id":"target","${'$'}defs":{"n":{"type":"string"}}},
+                                  "b":{"${'$'}id":"b/","${'$'}defs":{"t":{"${'$'}id":"target","${'$'}defs":{"n":{"type":"integer"},"use":{"${'$'}ref":"#/${'$'}defs/n"}}}},"${'$'}ref":"target#/${'$'}defs/use"}},
+                        "${'$'}ref":"b/"}"""
+                    isValid(schema, "1", version) shouldBe true
+                    isValid(schema, "\"x\"", version) shouldBe false
+                }
+
+                it("applies a loaded document's own \$id before following refs from one of its fragments (#52)") {
+                    val asked = mutableListOf<String>()
+                    val remote = Json.parseToJsonElement("""{"${'$'}id":"https://canonical.example/schemas/root","${'$'}defs":{"x":{"${'$'}ref":"value"}}}""")
+                    val validator = JsonValidator(schemaLoader = { uri ->
+                        asked += uri
+                        when (uri) {
+                            "https://retrieval.example/root" -> remote
+                            "https://canonical.example/schemas/value" -> Json.parseToJsonElement("""{"type":"integer"}""")
+                            else -> Json.parseToJsonElement("false")
+                        }
+                    })
+                    val schema = JsonSchema.fromString("""{"${'$'}ref":"https://retrieval.example/root#/${'$'}defs/x"}""", version)
+                    validator.validate(Json.parseToJsonElement("1"), schema).isValid shouldBe true
+                    validator.validate(Json.parseToJsonElement("\"x\""), schema).isValid shouldBe false
+                    asked shouldBe listOf("https://retrieval.example/root", "https://canonical.example/schemas/value")
+                }
+            }
         }
     })

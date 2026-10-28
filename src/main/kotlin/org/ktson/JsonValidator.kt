@@ -332,10 +332,13 @@ class JsonValidator @JvmOverloads constructor(
                     val hopPath = at(schemaPath, hop.keyword)
                     val target = hop.target
                     if (target != null) {
-                        val before = errors.size
-                        validateElement(instance, target, path, hopPath, errors, version, evaluation, depth + 1, hop.resourceRoot, hop.dynamicScope)
-                        val candidates = listOf(hop.resourceRoot, effectiveResourceRoot) + hop.dynamicScope.asReversed() + evaluation.rootSchema
-                        evaluation.absoluteLocations.stamp(errors, before, hopPath, target, candidates, evaluation.rootSchema)
+                        // The resource keeps the base it was reached under while the hop is evaluated and stamped
+                        evaluation.references.withBase(hop.resourceRoot, hop.resourceBase) {
+                            val before = errors.size
+                            validateElement(instance, target, path, hopPath, errors, version, evaluation, depth + 1, hop.resourceRoot, hop.dynamicScope)
+                            val candidates = listOf(hop.resourceRoot, effectiveResourceRoot) + hop.dynamicScope.asReversed() + evaluation.rootSchema
+                            evaluation.absoluteLocations.stamp(errors, before, hopPath, target, candidates, evaluation.rootSchema)
+                        }
                     } else {
                         errors.add(ValidationError(path, "Could not resolve ${hop.description}: ${hop.reference}", hop.keyword, hopPath))
                     }
@@ -365,6 +368,8 @@ class JsonValidator @JvmOverloads constructor(
         val target: JsonElement?,
         val resourceRoot: JsonElement,
         val dynamicScope: List<JsonElement>,
+        /** The absolute base [resourceRoot] was reached under, or null to keep the one it already has. */
+        val resourceBase: String? = null,
     )
 
     /**
@@ -381,11 +386,8 @@ class JsonValidator @JvmOverloads constructor(
     ): List<ReferenceHop> {
         val hops = ArrayList<ReferenceHop>(1)
 
-        /** The resource a URI part leads into, so local refs inside the target resolve in that document. */
-        fun resourceOf(uriPart: String, target: JsonElement?): JsonElement = if (target != null && uriPart.isNotEmpty()) evaluation.references.resolveUriToResource(uriPart, evaluation.rootSchema, resourceRoot) ?: resourceRoot else resourceRoot
-
         /** A hop entering [targetResource]: a new resource with $id joins the dynamic scope for $dynamicRef. */
-        fun hop(keyword: String, reference: String, description: String, target: JsonElement?, targetResource: JsonElement): ReferenceHop {
+        fun hop(keyword: String, reference: String, description: String, target: JsonElement?, targetResource: JsonElement, targetBase: String? = null): ReferenceHop {
             val scope =
                 if (targetResource !== resourceRoot && targetResource is JsonObject &&
                     targetResource.containsKey(SchemaKeywords.ID) && !dynamicScope.contains(targetResource)
@@ -394,21 +396,21 @@ class JsonValidator @JvmOverloads constructor(
                 } else {
                     dynamicScope
                 }
-            return ReferenceHop(keyword, reference, description, target, targetResource, scope)
+            return ReferenceHop(keyword, reference, description, target, targetResource, scope, targetBase)
         }
 
         schemaElement[REF]?.jsonPrimitive?.contentOrNull?.let { ref ->
             val refUriPart = ref.substringBefore('#')
             // Local refs resolve within the current $id boundary; URI-based refs search the whole document
-            val target = evaluation.references.resolveRef(ref, if (refUriPart.isEmpty()) resourceRoot else evaluation.rootSchema, schemaElement, resourceRoot)
-            hops += hop(REF, ref, "reference", target, resourceOf(refUriPart, target))
+            val resolved = evaluation.references.resolveRef(ref, if (refUriPart.isEmpty()) resourceRoot else evaluation.rootSchema, resourceRoot)
+            hops += hop(REF, ref, "reference", resolved?.target, resolved?.resource ?: resourceRoot, resolved?.base)
         }
 
         // $recursiveRef (2019-09): a target with $recursiveAnchor: true yields to the outermost such schema in
         // scope, which is itself a resource root, so the target is evaluated in its own resource
         // $recursiveRef exists only in 2019-09; in 2020-12 it is an unknown keyword and is ignored.
         schemaElement[RECURSIVE_REF]?.takeIf { version == SchemaVersion.DRAFT_2019_09 }?.jsonPrimitive?.contentOrNull?.let { recursiveRef ->
-            val resolved = evaluation.references.resolveRef(recursiveRef, resourceRoot, schemaElement, resourceRoot)
+            val resolved = evaluation.references.resolveRef(recursiveRef, resourceRoot, resourceRoot)?.target
             val override =
                 if (resolved is JsonObject && resolved[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true) {
                     dynamicScope.firstOrNull { it is JsonObject && it[SchemaKeywords.RECURSIVE_ANCHOR]?.jsonPrimitive?.booleanOrNull == true }
@@ -426,7 +428,8 @@ class JsonValidator @JvmOverloads constructor(
             val uriPart = dynamicRef.substringBefore('#')
             // Decoded as resolveRef decodes it, so every spelling of an anchor gets the same dynamic behavior (#60)
             val fragment = if ('#' in dynamicRef) percentDecode(dynamicRef.substringAfter('#')) else ""
-            val initialTarget = evaluation.references.resolveRef(dynamicRef, if (uriPart.isEmpty()) resourceRoot else evaluation.rootSchema, schemaElement, resourceRoot)
+            val initial = evaluation.references.resolveRef(dynamicRef, if (uriPart.isEmpty()) resourceRoot else evaluation.rootSchema, resourceRoot)
+            val initialTarget = initial?.target
             val isPlainAnchorFragment = fragment.isNotEmpty() && !fragment.startsWith("/")
             val override =
                 if (isPlainAnchorFragment && initialTarget is JsonObject && initialTarget.stringKeyword(DYNAMIC_ANCHOR) == fragment) {
@@ -437,7 +440,7 @@ class JsonValidator @JvmOverloads constructor(
             val hopResult = if (override != null) {
                 hop(DYNAMIC_REF, dynamicRef, "dynamic reference", override.first, override.second)
             } else {
-                hop(DYNAMIC_REF, dynamicRef, "dynamic reference", initialTarget, resourceOf(uriPart, initialTarget))
+                hop(DYNAMIC_REF, dynamicRef, "dynamic reference", initialTarget, initial?.resource ?: resourceRoot, initial?.base)
             }
             hops += hopResult
         }
@@ -2175,7 +2178,9 @@ class JsonValidator @JvmOverloads constructor(
         // scope, exactly as validateElement evaluates it (resolveReferences is shared with it)
         resolveReferences(schemaElement, evaluation, effectiveResourceRoot, effectiveScope, version).forEach { hop ->
             hop.target?.let { target ->
-                evaluated.addAll(collectEvaluatedIndices(instance, target, path, version, evaluation, depth + 1, hop.resourceRoot, hop.dynamicScope))
+                evaluation.references.withBase(hop.resourceRoot, hop.resourceBase) {
+                    evaluated.addAll(collectEvaluatedIndices(instance, target, path, version, evaluation, depth + 1, hop.resourceRoot, hop.dynamicScope))
+                }
             }
         }
 
@@ -2299,7 +2304,9 @@ class JsonValidator @JvmOverloads constructor(
         // scope, exactly as validateElement evaluates it (resolveReferences is shared with it)
         resolveReferences(schemaElement, evaluation, effectiveResourceRoot, effectiveScope, version).forEach { hop ->
             hop.target?.let { target ->
-                evaluated.addAll(collectEvaluatedProperties(instance, target, path, version, evaluation, depth + 1, hop.resourceRoot, hop.dynamicScope))
+                evaluation.references.withBase(hop.resourceRoot, hop.resourceBase) {
+                    evaluated.addAll(collectEvaluatedProperties(instance, target, path, version, evaluation, depth + 1, hop.resourceRoot, hop.dynamicScope))
+                }
             }
         }
 
