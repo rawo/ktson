@@ -1038,21 +1038,21 @@ class JsonValidator @JvmOverloads constructor(
     private fun validateFormat(value: String, format: String, path: String, schemaPath: String, errors: MutableList<ValidationError>) {
         val valid = when (format) {
             FORMAT_EMAIL -> isValidEmail(value)
-            FORMAT_URI -> isValidUriLike(value, requireScheme = true, allowUcs = false)
+            FORMAT_URI -> UriSyntax.isValidUriLike(value, requireScheme = true, allowUcs = false)
             FORMAT_DATE -> isValidDate(value)
             FORMAT_TIME -> isValidTime(value)
             FORMAT_DATE_TIME -> isValidDateTime(value)
-            FORMAT_IPV4 -> isValidIPv4(value)
-            FORMAT_IPV6 -> isValidIPv6(value)
+            FORMAT_IPV4 -> UriSyntax.isValidIPv4(value)
+            FORMAT_IPV6 -> UriSyntax.isValidIPv6(value)
             FORMAT_UUID -> value.matches(REGEX_UUID)
             FORMAT_HOSTNAME -> isValidHostname(value)
             FORMAT_IDN_EMAIL -> isValidIdnEmail(value)
-            FORMAT_IRI -> isValidUriLike(value, requireScheme = true, allowUcs = true)
-            FORMAT_IRI_REFERENCE -> isValidUriLike(value, requireScheme = false, allowUcs = true)
+            FORMAT_IRI -> UriSyntax.isValidUriLike(value, requireScheme = true, allowUcs = true)
+            FORMAT_IRI_REFERENCE -> UriSyntax.isValidUriLike(value, requireScheme = false, allowUcs = true)
             FORMAT_IDN_HOSTNAME -> isValidIdnHostname(value)
             FORMAT_JSON_POINTER -> value.isEmpty() || (value.startsWith("/") && !value.contains(REGEX_JSON_POINTER_INVALID_TILDE))
             FORMAT_RELATIVE_JSON_POINTER -> isValidRelativeJsonPointer(value)
-            FORMAT_URI_REFERENCE -> isValidUriLike(value, requireScheme = false, allowUcs = false)
+            FORMAT_URI_REFERENCE -> UriSyntax.isValidUriLike(value, requireScheme = false, allowUcs = false)
             FORMAT_URI_TEMPLATE -> isValidUriTemplate(value)
             FORMAT_DURATION -> isValidDuration(value)
             FORMAT_REGEX -> isValidEcmaRegex(value)
@@ -1123,53 +1123,6 @@ class JsonValidator @JvmOverloads constructor(
         return isValidDate(value.substring(0, tIdx)) && isValidTime(value.substring(tIdx + 1))
     }
 
-    /**
-     * RFC 2673 dotted-quad. Leading zeros are rejected: they read as octal in
-     * most resolvers, so "192.168.0.01" is not the same address as written.
-     */
-    private fun isValidIPv4(value: String): Boolean {
-        val parts = value.split('.')
-        if (parts.size != 4) return false
-        return parts.all { part ->
-            part.isNotEmpty() &&
-                part.length <= 3 &&
-                part.all { it in '0'..'9' } &&
-                (part.length == 1 || part[0] != '0') &&
-                part.toInt() <= 255
-        }
-    }
-
-    private fun isValidIPv6(value: String): Boolean {
-        if (value.isEmpty()) return false
-        val hasMixed = '.' in value
-        if (hasMixed) {
-            val lastColon = value.lastIndexOf(':')
-            if (lastColon < 0) return false
-            val ipv4Part = value.substring(lastColon + 1)
-            if (!isValidIPv4(ipv4Part)) return false
-            // Replace IPv4 tail with two placeholder hex groups and validate as pure IPv6
-            return isValidPureIPv6Part(value.substring(0, lastColon) + ":0:0")
-        }
-        return isValidPureIPv6Part(value)
-    }
-
-    private fun isValidPureIPv6Part(s: String): Boolean {
-        if (":::" in s) return false
-        val hasCompress = "::" in s
-        if (hasCompress && s.windowed(2).count { it == "::" } > 1) return false
-        return if (hasCompress) {
-            val sides = s.split("::")
-            val left = if (sides[0].isEmpty()) emptyList() else sides[0].split(":")
-            val right = if (sides[1].isEmpty()) emptyList() else sides[1].split(":")
-            left.size + right.size < 8 && (left + right).all { isValidIPv6Group(it) }
-        } else {
-            val groups = s.split(":")
-            groups.size == 8 && groups.all { isValidIPv6Group(it) }
-        }
-    }
-
-    private fun isValidIPv6Group(s: String): Boolean = s.length in 1..4 && s.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
-
     private fun isValidEmail(value: String): Boolean {
         if (value.isEmpty()) return false
         return if (value.startsWith('"')) {
@@ -1230,122 +1183,10 @@ class JsonValidator @JvmOverloads constructor(
     private fun isValidEmailDomain(domain: String): Boolean {
         if (domain.startsWith('[') && domain.endsWith(']')) {
             val inner = domain.substring(1, domain.length - 1)
-            return if (inner.startsWith("IPv6:", ignoreCase = true)) isValidIPv6(inner.substring(5)) else isValidIPv4(inner)
+            return if (inner.startsWith("IPv6:", ignoreCase = true)) UriSyntax.isValidIPv6(inner.substring(5)) else UriSyntax.isValidIPv4(inner)
         }
         return isValidHostname(domain)
     }
-
-    /**
-     * Shared RFC 3986 / RFC 3987 validation behind the uri, uri-reference, iri and
-     * iri-reference formats.
-     *
-     * @param requireScheme true for the absolute forms (uri, iri)
-     * @param allowUcs true for the IRI forms, which additionally allow non-ASCII characters
-     */
-    private fun isValidUriLike(value: String, requireScheme: Boolean, allowUcs: Boolean): Boolean {
-        val schemeEnd = schemeLength(value)
-        if (schemeEnd == null && requireScheme) return false
-        val rest = if (schemeEnd != null) value.substring(schemeEnd + 1) else value
-
-        val authority: String?
-        val afterAuthority: String
-        if (rest.startsWith("//")) {
-            val body = rest.substring(2)
-            val end = body.indexOfFirst { it == '/' || it == '?' || it == '#' }.takeIf { it >= 0 } ?: body.length
-            authority = body.substring(0, end)
-            afterAuthority = body.substring(end)
-        } else {
-            authority = null
-            afterAuthority = rest
-        }
-
-        if (authority != null && !isValidUriAuthority(authority, allowUcs)) return false
-        // Square brackets delimit an IP-literal host and are illegal anywhere else
-        if (!isValidUriCharacters(afterAuthority, allowUcs)) return false
-        // "#" starts the fragment, and a fragment cannot contain another one (RFC 3986 §3.5)
-        if (afterAuthority.count { it == '#' } > 1) return false
-
-        // A relative-path reference whose first segment contains a colon would be
-        // read as a scheme, so RFC 3986 forbids it
-        if (schemeEnd == null && authority == null && !value.startsWith("/")) {
-            val path = value.substringBefore('#').substringBefore('?')
-            if (':' in path.substringBefore('/')) return false
-        }
-        return true
-    }
-
-    /** Length of the leading `scheme:` if the value starts with a valid scheme, else null. */
-    private fun schemeLength(value: String): Int? {
-        val colon = value.indexOf(':')
-        if (colon <= 0) return null
-        val scheme = value.substring(0, colon)
-        if (scheme[0] !in 'a'..'z' && scheme[0] !in 'A'..'Z') return null
-        if (scheme.any { it !in 'a'..'z' && it !in 'A'..'Z' && it !in '0'..'9' && it != '+' && it != '-' && it != '.' }) return null
-        return colon
-    }
-
-    /** Characters legal outside an authority, with percent-encoding required to be complete triplets. */
-    private fun isValidUriCharacters(value: String, allowUcs: Boolean): Boolean {
-        var i = 0
-        while (i < value.length) {
-            val c = value[i]
-            when {
-                c == '%' -> {
-                    if (i + 2 >= value.length || !isHexChar(value[i + 1]) || !isHexChar(value[i + 2])) return false
-                    i += 3
-                }
-                c.code > 127 -> {
-                    if (!allowUcs) return false
-                    i++
-                }
-                c in URI_FORBIDDEN_CHARS || c.code <= 0x20 || c.code == 0x7F -> return false
-                else -> i++
-            }
-        }
-        return true
-    }
-
-    private fun isValidUriAuthority(authority: String, allowUcs: Boolean): Boolean {
-        // userinfo may not contain an unencoded at-sign, so at most one may appear
-        if (authority.count { it == '@' } > 1) return false
-        val userinfo = authority.substringBeforeLast('@', "")
-        if ('[' in userinfo || ']' in userinfo) return false
-        if (!isValidUriCharacters(userinfo, allowUcs)) return false
-
-        val hostAndPort = authority.substringAfterLast('@')
-        val port: String?
-        if (hostAndPort.startsWith('[')) {
-            val close = hostAndPort.indexOf(']')
-            if (close < 0) return false
-            val host = hostAndPort.substring(1, close)
-            if (!isValidIPv6(host) && !isValidIpvFuture(host)) return false
-            val after = hostAndPort.substring(close + 1)
-            port = when {
-                after.isEmpty() -> null
-                after.startsWith(':') -> after.substring(1)
-                else -> return false
-            }
-        } else {
-            val colon = hostAndPort.lastIndexOf(':')
-            val host = if (colon >= 0) hostAndPort.substring(0, colon) else hostAndPort
-            port = if (colon >= 0) hostAndPort.substring(colon + 1) else null
-            // a reg-name cannot contain a colon; an IPv6 host must be bracketed
-            if ('[' in host || ']' in host || ':' in host) return false
-            if (!isValidUriCharacters(host, allowUcs)) return false
-        }
-        return port == null || port.all { it in '0'..'9' }
-    }
-
-    /** IPvFuture = "v" 1*HEXDIG "." 1*( unreserved / sub-delims / ":" ) (RFC 3986 §3.2.2). */
-    private fun isValidIpvFuture(host: String): Boolean {
-        if (host.isEmpty() || (host[0] != 'v' && host[0] != 'V')) return false
-        val version = host.drop(1).substringBefore('.', "")
-        val address = host.drop(1).substringAfter('.', "")
-        return version.isNotEmpty() && version.all { isHexChar(it) } &&
-            address.isNotEmpty() && address.all { (it.code < 128 && it.isLetterOrDigit()) || it in IPV_FUTURE_SYMBOLS }
-    }
-
-    private fun isHexChar(c: Char) = c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F'
 
     private fun isValidHostname(value: String): Boolean {
         if (value.isEmpty() || value.length > MAX_HOSTNAME_LENGTH) return false
@@ -1764,7 +1605,7 @@ class JsonValidator @JvmOverloads constructor(
                 }
                 c == '}' -> return false
                 c == '%' -> {
-                    if (i + 2 >= value.length || !isHexChar(value[i + 1]) || !isHexChar(value[i + 2])) return false
+                    if (i + 2 >= value.length || !UriSyntax.isHexChar(value[i + 1]) || !UriSyntax.isHexChar(value[i + 2])) return false
                     i += 3
                 }
                 c.code <= 0x20 || c.code == 0x7F || c in URI_TEMPLATE_FORBIDDEN_LITERALS -> return false
@@ -1811,7 +1652,7 @@ class JsonValidator @JvmOverloads constructor(
             val c = name[i]
             when {
                 c == '%' -> {
-                    if (i + 2 >= name.length || !isHexChar(name[i + 1]) || !isHexChar(name[i + 2])) return false
+                    if (i + 2 >= name.length || !UriSyntax.isHexChar(name[i + 1]) || !UriSyntax.isHexChar(name[i + 2])) return false
                     i += 3
                 }
                 c == '.' || c == '_' || c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' -> i++
@@ -2541,9 +2382,6 @@ private val REGEX_UUID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
         private val REGEX_DURATION_DATE = Regex("^(\\d+Y(\\d+M(\\d+D)?)?|\\d+M(\\d+D)?|\\d+D)$")
         private val REGEX_DURATION_TIME = Regex("^(\\d+H(\\d+M(\\d+S)?)?|\\d+M(\\d+S)?|\\d+S)$")
 
-        // Illegal outside an authority component; brackets only delimit an IP-literal host
-        private val URI_FORBIDDEN_CHARS = setOf(' ', '"', '<', '>', '{', '}', '^', '`', '|', '\\', '[', ']')
-
         private val URI_TEMPLATE_FORBIDDEN_LITERALS = setOf(' ', '"', '<', '>', '^', '`', '|', '\\')
         private val URI_TEMPLATE_OPERATORS = setOf('+', '#', '.', '/', ';', '?', '&')
         private val URI_TEMPLATE_RESERVED_OPERATORS = setOf('=', ',', '!', '@', '|')
@@ -2607,9 +2445,6 @@ private val REGEX_UUID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
             )
 
         private const val MAX_MESSAGE_VALUE_LENGTH = 40
-
-        /** The non-alphanumeric characters an IPvFuture address may use: unreserved, sub-delims and ":". */
-        private const val IPV_FUTURE_SYMBOLS = "-._~!$&'()*+,;=:"
 
         /** Stack for the meta-schema check: about 13 MB is needed for 1,000 schema levels, so this leaves margin. */
         private const val META_SCHEMA_STACK_SIZE = 64L * 1024 * 1024
