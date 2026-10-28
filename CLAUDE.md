@@ -152,6 +152,7 @@ validate()
 - **IndeterminateResultTest.kt** - 17 tests: undecided results (depth limit, unevaluable regex) are never inverted into Valid
 - **EcmaPatternTest.kt** - 44 tests: ECMA 262 semantics of `\s`, `\S`, `\c`, `$`, `.` and `\p` aliases in `pattern`
 - **IdnEmailTest.kt** - 38 tests: `email`/`idn-email` local parts; quoted strings follow RFC 5321 qtext/quoted-pair (no tab), non-ASCII only for idn-email
+- **MultipleOfTest.kt** - 4 tests: `multipleOf` stays exact and bounded for compact numbers such as `1e2147483647`
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 38 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
@@ -216,7 +217,9 @@ anchor/`$id` searches and error-location walks are iterative and need no limit; 
 
 ### 3. Numeric Precision
 Bounds, integer classification, `multipleOf` and numeric equality use exact `Long`/`BigDecimal`
-arithmetic. Integer tokens within `Long` range take a fast path; parsed decimal schema limits are
+arithmetic. `multipleOf` uses `BigDecimal.isMultipleOf()` (`Divisibility.kt`): exact, and never expands powers of ten,
+so `1e2147483647` neither allocates gigabytes nor throws (#70); do not use `BigDecimal.remainder`. Integer tokens
+within `Long` range take a fast path; parsed decimal schema limits are
 cached in a `ConcurrentHashMap` (instance numbers are never cached). `optional/bignum.json` runs
 for both drafts. Decimal validation costs more than approximate `Double` arithmetic; see
 `docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md` for benchmarks and `BigDecimal` range limitations.

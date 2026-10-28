@@ -110,6 +110,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer makes `validate()` throw `URISyntaxException`: `UriResolver` now parses URIs with the RFC 3986 grammar
   of the `uri` and `iri` formats instead of `java.net.URI`, for resolution, `isAbsoluteUri`, normalization and
   `parseUri` alike (#71).
+- `multipleOf` is decided exactly without expanding powers of ten: `1e2147483647` no longer makes `validate()` throw
+  `ArithmeticException`, and `1e100000` against `multipleOf: 3` no longer allocates about 26 MB (#70).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the

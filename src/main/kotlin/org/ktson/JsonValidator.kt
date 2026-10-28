@@ -1793,7 +1793,7 @@ class JsonValidator @JvmOverloads constructor(
                     instanceLong % multLong == 0L
                 } else {
                     val multDec = decimalLimit(multPrim)
-                    multDec == null || multDec.signum() <= 0 || getInstanceDec().remainder(multDec).signum() == 0
+                    multDec == null || multDec.signum() <= 0 || getInstanceDec().isMultipleOf(multDec)
                 }
                 if (!isMultiple) {
                     errors.add(ValidationError(path, "Number $shown is not a multiple of ${schema.numberText(MULTIPLE_OF)}", MULTIPLE_OF, at(schemaPath, MULTIPLE_OF)))

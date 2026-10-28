@@ -61,7 +61,8 @@ Then:
   distinguishes `1.0` from `1`; every comparison must use `compareTo`, never `==`.
 - **`type: integer`** — `value.stripTrailingZeros().scale() <= 0`, which is exact for any magnitude
   and needs no infinity special case.
-- **`multipleOf`** — `value.remainder(multipleOf).compareTo(BigDecimal.ZERO) == 0`. This also fixes
+- **`multipleOf`** — originally `value.remainder(multipleOf).compareTo(BigDecimal.ZERO) == 0`; since #70 an exact
+  coefficient/exponent divisibility check (`BigDecimal.isMultipleOf()`), which never expands powers of ten. This also fixes
   the classic `0.0075 / 0.0001` style rounding, which currently happens to land correctly by luck.
 - **Equality for `const`/`enum`/`uniqueItems`** — compare numerics with `compareTo`, so `1.0` and
   `1` are the same number, as JSON Schema requires, while `9007199254740992` and
