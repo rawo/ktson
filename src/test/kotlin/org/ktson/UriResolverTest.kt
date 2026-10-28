@@ -206,6 +206,18 @@ class UriResolverTest :
 			}
 		}
 
+		listOf(
+			Triple("https://ex.com/a//b/", "c", "https://ex.com/a//b/c"),
+			Triple("https://ex.com/a//b/", "../c", "https://ex.com/a//c"),
+			Triple("https://ex.com/a//b/", "./c//d", "https://ex.com/a//b/c//d"),
+			Triple("https://ex.com//", "x", "https://ex.com//x"),
+			Triple("https://ex.com/a//", "?q", "https://ex.com/a//?q"),
+		).forEach { (base, reference, expected) ->
+			it("keeps empty path segments: '$reference' against $base is $expected (#68)") {
+				UriResolver.resolveUri(base, reference).shouldBe(expected)
+			}
+		}
+
 		it("keeps the base path for a query-only reference (#58)") {
 			UriResolver.resolveUri("https://ex.com/a/b?old", "?new").shouldBe("https://ex.com/a/b?new")
 			UriResolver.resolveUri("https://ex.com/a/b#frag", "?new").shouldBe("https://ex.com/a/b?new")

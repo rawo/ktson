@@ -30,18 +30,43 @@ object UriResolver {
             return normalizeUri(refUri)
         }
 
-        // Parse and resolve; allow syntax/resolution exceptions to propagate
+        // Parse both first, so syntax errors propagate as URISyntaxException
+        URI(baseUri)
         if (isAbsoluteUri(refUri)) return normalizeUri(refUri)
-        // A fragment-only reference keeps the whole base and replaces its fragment (RFC 3986 §5.2.2), for any
-        // base: java.net.URI.resolve returns it unchanged for an opaque base such as a URN.
-        if (refUri.startsWith("#")) return normalizeUri(baseUri, removeFragment = true) + refUri
-        // A query-only reference keeps the base path and replaces its query (§5.2.2); java.net.URI.resolve
-        // follows RFC 2396 here and drops the last path segment ("a/b?old" + "?new" gave "a/?new", #58).
-        if (refUri.startsWith("?")) return normalizeUri(baseUri.substringBefore('#').substringBefore('?') + refUri)
-        val base = URI(baseUri)
-        // An opaque base has no "/" in its path, so a relative path replaces it entirely (RFC 3986 §5.2.3).
-        if (base.isOpaque) return normalizeUri("${base.scheme}:$refUri")
-        return normalizeUri(base.resolve(refUri).toString())
+        return normalizeUri(resolveComponents(UriParts.of(baseUri), UriParts.of(refUri)).toString())
+    }
+
+    /**
+     * RFC 3986 §5.2.2 transform of a relative [ref] against [base], on raw components. java.net.URI.resolve
+     * follows RFC 2396 and differs: it drops the last segment for a query-only reference (#58), collapses
+     * empty segments ("a//b/" + "c" gave "a/b/c", #68) and leaves an opaque base unchanged.
+     */
+    private fun resolveComponents(base: UriParts, ref: UriParts): UriParts = when {
+        ref.authority != null -> UriParts(base.scheme, ref.authority, removeDotSegments(ref.path), ref.query, ref.fragment)
+        ref.path.isEmpty() -> UriParts(base.scheme, base.authority, base.path, ref.query ?: base.query, ref.fragment)
+        ref.path.startsWith("/") -> UriParts(base.scheme, base.authority, removeDotSegments(ref.path), ref.query, ref.fragment)
+        else -> UriParts(base.scheme, base.authority, removeDotSegments(mergePaths(base, ref.path)), ref.query, ref.fragment)
+    }
+
+    /** RFC 3986 §5.2.3: the reference path appended to the base path up to and including its last "/". */
+    private fun mergePaths(base: UriParts, refPath: String): String = when {
+        base.authority != null && base.path.isEmpty() -> "/$refPath"
+        '/' in base.path -> base.path.substring(0, base.path.lastIndexOf('/') + 1) + refPath
+        else -> refPath
+    }
+
+    /** The five raw components of a URI reference, split as RFC 3986 Appendix B does; nothing is decoded. */
+    private data class UriParts(val scheme: String?, val authority: String?, val path: String, val query: String?, val fragment: String?) {
+        override fun toString(): String = buildUri(scheme, authority, path, query, fragment)
+
+        companion object {
+            private val PARTS = Regex("^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\\?([^#]*))?(#(.*))?")
+
+            fun of(uri: String): UriParts {
+                val groups = PARTS.find(uri)!!.groups
+                return UriParts(groups[2]?.value, groups[4]?.value, groups[5]?.value ?: "", groups[7]?.value, groups[9]?.value)
+            }
+        }
     }
 
     /**
