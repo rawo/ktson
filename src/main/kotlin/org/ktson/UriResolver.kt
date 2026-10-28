@@ -35,6 +35,9 @@ object UriResolver {
         // A fragment-only reference keeps the whole base and replaces its fragment (RFC 3986 §5.2.2), for any
         // base: java.net.URI.resolve returns it unchanged for an opaque base such as a URN.
         if (refUri.startsWith("#")) return normalizeUri(baseUri, removeFragment = true) + refUri
+        // A query-only reference keeps the base path and replaces its query (§5.2.2); java.net.URI.resolve
+        // follows RFC 2396 here and drops the last path segment ("a/b?old" + "?new" gave "a/?new", #58).
+        if (refUri.startsWith("?")) return normalizeUri(baseUri.substringBefore('#').substringBefore('?') + refUri)
         val base = URI(baseUri)
         // An opaque base has no "/" in its path, so a relative path replaces it entirely (RFC 3986 §5.2.3).
         if (base.isOpaque) return normalizeUri("${base.scheme}:$refUri")

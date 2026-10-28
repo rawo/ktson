@@ -183,4 +183,32 @@ class UriResolverTest :
 			UriResolver.resolveUri("https://example.com/a/b", "c%2Fd").shouldBe("https://example.com/a/c%2Fd")
 		}
 	}
+	describe("RFC 3986 §5.4 reference resolution examples") {
+		val base = "http://a/b/c/d;p?q"
+		listOf(
+			"g:h" to "g:h", "g" to "http://a/b/c/g", "./g" to "http://a/b/c/g", "g/" to "http://a/b/c/g/",
+			"/g" to "http://a/g", "//g" to "http://g", "?y" to "http://a/b/c/d;p?y", "g?y" to "http://a/b/c/g?y",
+			"#s" to "http://a/b/c/d;p?q#s", "g#s" to "http://a/b/c/g#s", "g?y#s" to "http://a/b/c/g?y#s",
+			";x" to "http://a/b/c/;x", "g;x" to "http://a/b/c/g;x", "g;x?y#s" to "http://a/b/c/g;x?y#s",
+			"" to "http://a/b/c/d;p?q", "." to "http://a/b/c/", "./" to "http://a/b/c/", ".." to "http://a/b/",
+			"../" to "http://a/b/", "../g" to "http://a/b/g", "../.." to "http://a/", "../../" to "http://a/",
+			"../../g" to "http://a/g",
+			// Abnormal examples (§5.4.2) that stay within the path grammar
+			"../../../g" to "http://a/g", "../../../../g" to "http://a/g", "/./g" to "http://a/g", "/../g" to "http://a/g",
+			"g." to "http://a/b/c/g.", ".g" to "http://a/b/c/.g", "g.." to "http://a/b/c/g..", "..g" to "http://a/b/c/..g",
+			"./../g" to "http://a/b/g", "./g/." to "http://a/b/c/g/", "g/./h" to "http://a/b/c/g/h", "g/../h" to "http://a/b/c/h",
+			"g;x=1/./y" to "http://a/b/c/g;x=1/y", "g;x=1/../y" to "http://a/b/c/y",
+			"g?y/./x" to "http://a/b/c/g?y/./x", "g?y/../x" to "http://a/b/c/g?y/../x",
+			"g#s/./x" to "http://a/b/c/g#s/./x", "g#s/../x" to "http://a/b/c/g#s/../x",
+		).forEach { (reference, expected) ->
+			it("resolves '$reference' to $expected") {
+				UriResolver.resolveUri(base, reference).shouldBe(expected)
+			}
+		}
+
+		it("keeps the base path for a query-only reference (#58)") {
+			UriResolver.resolveUri("https://ex.com/a/b?old", "?new").shouldBe("https://ex.com/a/b?new")
+			UriResolver.resolveUri("https://ex.com/a/b#frag", "?new").shouldBe("https://ex.com/a/b?new")
+		}
+	}
 })

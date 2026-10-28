@@ -43,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `$id` it has validated.
 - **Breaking verdict change:** `formatAssertion = false` now turns off `format` assertion for Draft 2019-09
   too; it was ignored there, so invalid formats were still rejected (#61).
+- A query-only reference keeps the base path: `?new` against `https://ex.com/a/b?old` resolves to
+  `https://ex.com/a/b?new`, not `https://ex.com/a/?new`, so `$ref: "?v=2"` loads the right document (#58).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the
