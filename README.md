@@ -308,8 +308,11 @@ long-running service should use it:
   `JsonSchema`, it can be collected even while the validator that checked it stays in use. The same
   parsed schema can be validated under different `baseUri`s; each validation resolves its `$id`s
   against its own base.
-- **Remote schemas are loaded once per validator.** To pick up a changed remote schema, create a new
-  validator.
+- **Derived caches are bounded.** Compiled `pattern`s and parsed numeric limits are cached per
+  validator, up to 1,024 of each; beyond that, entries are evicted and recomputed when needed.
+- **Remote schemas are loaded once per validator.** The validator keeps one document per distinct
+  URI its `schemaLoader` returned, for its whole life. To pick up a changed remote schema, or to
+  release remote schemas that are no longer referenced, create a new validator.
 - **Pooling is up to the application.** KtSON has no schema pool: how many schemas to keep, how much
   memory they may use and when to refresh them are application decisions, made by choosing which
   validators to keep.
@@ -508,7 +511,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 852 tests (100% passing)
+- **Custom Tests**: 859 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -523,7 +526,8 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Reference resolution (percent-encoding, base URIs, `$id` registration): 28 tests
   - Keyword-named properties (`$id`, `$anchor`, `$dynamicAnchor`): 7 tests
   - `unevaluated*` across schema resources: 6 tests
-  - Validator lifecycle (garbage collection): 2 tests
+  - Validator lifecycle (garbage collection, bounded caches): 3 tests
+  - Bounded cache: 4 tests
   - Output-tests runner file discovery: 4 tests
   - Java interop for output formats: 2 tests
   - Java interop for the core API: 10 tests

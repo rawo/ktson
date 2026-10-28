@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `schemaLoader` now receives `https://b.example/value` for the second base instead of the first
   base's `https://a.example/value` (#37). A live validator also no longer keeps every schema with
   `$id` it has validated.
+- A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
+  instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the
   dynamic scope, now resolves its local `#/...` refs in its own document instead of the caller's (#35).
 - URI normalization no longer changes what a URI identifies: opaque URIs such as URNs stay whole

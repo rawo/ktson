@@ -87,10 +87,10 @@ class JsonValidator @JvmOverloads constructor(
     private val schemaLoader: ((String) -> JsonElement?)? = null,
 ) {
     private val schemaStore = SchemaStore(schemaLoader)
-    private val patternCache = ConcurrentHashMap<String, Regex>()
-    private val numericLimitCache = ConcurrentHashMap<String, BigDecimal>()
+    private val patternCache = BoundedCache<String, Regex>(MAX_CACHED_PATTERNS)
+    private val numericLimitCache = BoundedCache<String, BigDecimal>(MAX_CACHED_NUMERIC_LIMITS)
 
-    private fun compiledPattern(pattern: String): Regex = patternCache.computeIfAbsent(pattern) { Regex(translatePatternToJava(it)) }
+    private fun compiledPattern(pattern: String): Regex = patternCache.getOrPut(pattern) { Regex(translatePatternToJava(it)) }
 
     /**
      * Whether [pattern] matches somewhere in [input], or null when the regex engine could not decide:
@@ -1810,7 +1810,7 @@ class JsonValidator @JvmOverloads constructor(
     /** Cache schema limits only; instance values must not accumulate in a shared cache. */
     private fun decimalLimit(primitive: JsonPrimitive): BigDecimal? {
         val literal = primitive.content
-        return numericLimitCache[literal] ?: literal.toBigDecimalOrNull()?.also { numericLimitCache.putIfAbsent(literal, it) }
+        return numericLimitCache.getOrPutIfNotNull(literal) { it.toBigDecimalOrNull() }
     }
 
     /**
@@ -2498,6 +2498,10 @@ private val REGEX_UUID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
 
         /** Levels of meta-schema evaluation one schema level can take (measured: 5-8). */
         private const val META_SCHEMA_DEPTH_PER_LEVEL = 16
+
+        /** Compiled patterns and parsed numeric limits one validator keeps; far more than any one schema uses (#40). */
+        private const val MAX_CACHED_PATTERNS = 1024
+        private const val MAX_CACHED_NUMERIC_LIMITS = 1024
 
         private const val ACE_PREFIX = "xn--"
         private const val MAX_LABEL_LENGTH = 63

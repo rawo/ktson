@@ -1,6 +1,7 @@
 package org.ktson
 
 import io.kotest.core.spec.style.DescribeSpec
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -31,6 +32,16 @@ class ValidatorLifecycleTest :
                 val schemaRef = validateAndDropSchema(validator)
                 awaitCollected(listOf(schemaRef)) shouldBe true
                 Reference.reachabilityFence(validator)
+            }
+
+            it("bounds its pattern and numeric-limit caches however many distinct schemas it validates (#40)") {
+                val validator = JsonValidator()
+                repeat(5_000) { i ->
+                    validator.validate(Json.parseToJsonElement("\"a\""), JsonSchema.fromString("""{"pattern":"^a{0,$i}${'$'}"}"""))
+                    validator.validate(Json.parseToJsonElement("1"), JsonSchema.fromString("""{"maximum":$i.5}"""))
+                }
+                cacheSize(validator, "patternCache") shouldBeLessThanOrEqual 1_024
+                cacheSize(validator, "numericLimitCache") shouldBeLessThanOrEqual 1_024
             }
         }
     })
@@ -77,6 +88,12 @@ private fun validateAndDropSchema(validator: JsonValidator): WeakReference<JsonE
     val schema = JsonSchema.fromString("""{"${'$'}id":"https://example.com/kept","type":"string"}""")
     validator.validate(Json.parseToJsonElement("1"), schema).isInvalid shouldBe true
     return WeakReference(schema.schema)
+}
+
+/** The number of entries in the validator's private cache [field]. */
+private fun cacheSize(validator: JsonValidator, field: String): Int {
+    val cache = JsonValidator::class.java.getDeclaredField(field).apply { isAccessible = true }.get(validator)
+    return (cache as BoundedCache<*, *>).size
 }
 
 /** Requests garbage collection, with allocation pressure, until every reference is cleared or time runs out. */
