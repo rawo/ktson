@@ -143,6 +143,7 @@ validate()
 - **DynamicRefResourceTest.kt** - 5 tests: `$dynamicRef` targets evaluated in their own resource; percent-encoded anchors keep the dynamic override
 - **ConcurrentLoadingTest.kt** - 5 tests: one `schemaLoader` call per URI under concurrency; loaders may validate through the same validator (#55)
 - **ValidateSchemaWorkerTest.kt** - 3 tests: the `validateSchema` worker inherits no thread-locals and never outlives an interrupted call
+- **IndeterminateResultTest.kt** - 17 tests: undecided results (depth limit, unevaluable regex) are never inverted into Valid
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 30 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
@@ -266,14 +267,18 @@ Release notes are generated from the commit log, so commits must follow Conventi
    `at()` appends a keyword, `at(schemaPath, keyword, token)` appends a keyword and an escaped token
    (`properties/name`, `anyOf/0`). Recursive calls pass the sub-schema's location, so `$ref` hops are
    visible in the result (`/properties/n/$ref/minimum`)
-5. Maintain thread safety (avoid mutable shared state)
+5. A result that could not be decided (depth limit, regex engine overflow) calls `evaluation.markUndecided()`.
+   An applicator that turns failure into success (`not`, the `if` condition, `oneOf`, `maxContains`) wraps the
+   subschema in `evaluation.leftUndecided { }` and reports `undecidedError(...)` instead of inverting an
+   undecided failure (#51). A new such applicator, or a new source of undecided results, must do the same
+6. Maintain thread safety (avoid mutable shared state)
    - Never add mutable state to a companion object, singleton or top-level value: caches must be
      instance fields so a dropped validator is collectible. `ValidatorLifecycleTest` fails otherwise
-6. Instance paths are RFC 6901 pointers. Use `childOf(path, token)` for properties and array
+7. Instance paths are RFC 6901 pointers. Use `childOf(path, token)` for properties and array
    indices; the root is `""`. `propertyNames` errors stay at the owning object's location.
    Construct errors with `instanceLocation`, and migrate `copy(path = ...)` to
    `copy(instanceLocation = ...)`. `toString()` prints canonical pointers.
-7. Reference keywords (`$ref`, `$recursiveRef`, `$dynamicRef`) are resolved only in `resolveReferences()`,
+8. Reference keywords (`$ref`, `$recursiveRef`, `$dynamicRef`) are resolved only in `resolveReferences()`,
    which returns each hop's target, resource root and dynamic scope. `validateElement()` and both
    `collectEvaluated*()` functions use it, so validation and `unevaluated*` always agree on where a
    reference leads, and `validateElement()` stamps `absoluteKeywordLocation` for every hop. A new

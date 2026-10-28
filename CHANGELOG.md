@@ -64,6 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   check to finish, returns the result and leaves the interrupt status set (it used to throw
   `InterruptedException`, even before starting, while the worker kept running). The worker no longer
   inherits the caller's `InheritableThreadLocal` values (#56).
+- **Breaking verdict change:** a subschema that could not be evaluated (the depth limit, or a `pattern` the
+  regex engine cannot run on the input) is no longer turned into success by `not`, by an `if` condition
+  choosing `else`, by `oneOf` counting another branch as the only match, or by `maxContains`. Such an
+  instance is now invalid, with an error that names the undecided applicator (or the `depth` error) (#51).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the

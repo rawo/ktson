@@ -96,11 +96,13 @@ class JsonValidator @JvmOverloads constructor(
      * Whether [pattern] matches somewhere in [input], or null when the regex engine could not decide:
      * Java's engine recurses once per repetition of a group such as `(a|b)*`, so a long input can exhaust
      * the stack even when it matches (#32). The overflow is confined to this call, so it is caught here
-     * and callers fail closed instead of letting validate() throw.
+     * and callers fail closed instead of letting validate() throw. The undecided result is recorded in
+     * [evaluation], so applicators that invert failures do not invert this one (#51).
      */
-    private fun patternMatches(pattern: String, input: String): Boolean? = try {
+    private fun patternMatches(pattern: String, input: String, evaluation: Evaluation): Boolean? = try {
         compiledPattern(pattern).containsMatchIn(input)
     } catch (_: StackOverflowError) {
+        evaluation.markUndecided()
         null
     }
 
@@ -283,6 +285,7 @@ class JsonValidator @JvmOverloads constructor(
     ) {
         // Check depth limit to prevent stack overflow
         if (depth > maxValidationDepth) {
+            evaluation.markUndecided()
             errors.add(
                 ValidationError(
                     path,
@@ -479,7 +482,7 @@ class JsonValidator @JvmOverloads constructor(
         when (instance) {
             is JsonObject -> validateObject(instance, schema, path, schemaPath, errors, version, evaluation, depth, resourceRoot, dynamicScope)
             is JsonArray -> validateArray(instance, schema, path, schemaPath, errors, version, evaluation, depth, resourceRoot, dynamicScope)
-            is JsonPrimitive -> validatePrimitive(instance, schema, path, schemaPath, errors, version)
+            is JsonPrimitive -> validatePrimitive(instance, schema, path, schemaPath, errors, version, evaluation)
         }
 
         // Combined schemas
@@ -491,9 +494,14 @@ class JsonValidator @JvmOverloads constructor(
         // Conditional schemas (2019-09 and later)
         schema[IF]?.let { ifSchema ->
             val ifErrors = mutableListOf<ValidationError>()
-            validateElement(instance, ifSchema, path, at(schemaPath, IF), ifErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+            val conditionUndecided = evaluation.leftUndecided {
+                validateElement(instance, ifSchema, path, at(schemaPath, IF), ifErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+            }
 
-            if (ifErrors.isEmpty()) {
+            if (ifErrors.isNotEmpty() && conditionUndecided) {
+                // Neither branch can be chosen when the condition's failure may not be real
+                if (schema.containsKey(THEN) || schema.containsKey(ELSE)) errors.add(undecidedError(path, IF, schemaPath, ifErrors))
+            } else if (ifErrors.isEmpty()) {
                 // If validation passed, validate against "then"
                 schema[THEN]?.let { thenSchema ->
                     validateElement(instance, thenSchema, path, at(schemaPath, THEN), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
@@ -692,7 +700,7 @@ class JsonValidator @JvmOverloads constructor(
             val patternProps = schema[PATTERN_PROPERTIES]?.jsonObject?.keys ?: emptySet()
 
             instance.keys.forEach { propName ->
-                if (propName !in definedProps && !matchesAnyPattern(propName, patternProps)) {
+                if (propName !in definedProps && !matchesAnyPattern(propName, patternProps, evaluation)) {
                     val propPath = childOf(path, propName)
                     when (additionalPropsSchema) {
                         is JsonPrimitive -> {
@@ -712,7 +720,7 @@ class JsonValidator @JvmOverloads constructor(
         schema[PATTERN_PROPERTIES]?.jsonObject?.let { patternProps ->
             patternProps.forEach { (pattern, propSchema) ->
                 instance.keys.forEach { propName ->
-                    when (patternMatches(pattern, propName)) {
+                    when (patternMatches(pattern, propName, evaluation)) {
                         true -> {
                             val propPath = childOf(path, propName)
                             validateElement(instance[propName]!!, propSchema, propPath, at(schemaPath, PATTERN_PROPERTIES, pattern), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
@@ -857,11 +865,29 @@ class JsonValidator @JvmOverloads constructor(
         // Contains
         schema[CONTAINS]?.let { containsSchema ->
             val matchingIndices = mutableListOf<Int>()
+            // Items that failed contains in a way that could not be decided: they might match after all
+            val undecidedItemErrors = mutableListOf<ValidationError>()
+            var undecidedItems = 0
             instance.forEachIndexed { index, item ->
                 val itemErrors = mutableListOf<ValidationError>()
-                validateElement(item, containsSchema, childOf(path, index.toString()), at(schemaPath, CONTAINS), itemErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+                val undecided = evaluation.leftUndecided {
+                    validateElement(item, containsSchema, childOf(path, index.toString()), at(schemaPath, CONTAINS), itemErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+                }
                 if (itemErrors.isEmpty()) {
                     matchingIndices.add(index)
+                } else if (undecided) {
+                    undecidedItems++
+                    undecidedItemErrors.addAll(itemErrors)
+                }
+            }
+
+            // maxContains counts matches, so an undecided item that might match can push the count past it
+            fun checkMaxContains(max: Int) {
+                when {
+                    matchingIndices.size > max -> errors.add(
+                        ValidationError(path, "Array contains ${matchingIndices.size} matching items, maximum is $max", MAX_CONTAINS, at(schemaPath, MAX_CONTAINS)),
+                    )
+                    matchingIndices.size + undecidedItems > max -> errors.add(undecidedError(path, MAX_CONTAINS, schemaPath, undecidedItemErrors))
                 }
             }
 
@@ -877,13 +903,7 @@ class JsonValidator @JvmOverloads constructor(
             // Special case: if minContains is 0, contains is always valid
             if (minContains == 0) {
                 // Check maxContains only
-                maxContains?.let { max ->
-                    if (matchingIndices.size > max) {
-                        errors.add(
-                            ValidationError(path, "Array contains ${matchingIndices.size} matching items, maximum is $max", MAX_CONTAINS, at(schemaPath, MAX_CONTAINS)),
-                        )
-                    }
-                }
+                maxContains?.let { checkMaxContains(it) }
             } else {
                 // Normal case: minContains >= 1
                 if (matchingIndices.size < minContains) {
@@ -897,13 +917,7 @@ class JsonValidator @JvmOverloads constructor(
                     )
                 }
 
-                maxContains?.let { max ->
-                    if (matchingIndices.size > max) {
-                        errors.add(
-                            ValidationError(path, "Array contains ${matchingIndices.size} matching items, maximum is $max", MAX_CONTAINS, at(schemaPath, MAX_CONTAINS)),
-                        )
-                    }
-                }
+                maxContains?.let { checkMaxContains(it) }
             }
         }
 
@@ -955,9 +969,10 @@ class JsonValidator @JvmOverloads constructor(
         schemaPath: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
+        evaluation: Evaluation,
     ) {
         when {
-            instance.isString -> validateString(instance.content, schema, path, schemaPath, errors, version)
+            instance.isString -> validateString(instance.content, schema, path, schemaPath, errors, version, evaluation)
             else -> validateNumber(instance, schema, path, schemaPath, errors)
         }
     }
@@ -972,6 +987,7 @@ class JsonValidator @JvmOverloads constructor(
         schemaPath: String,
         errors: MutableList<ValidationError>,
         version: SchemaVersion,
+        evaluation: Evaluation,
     ) {
         // Min/Max length (support decimal values per spec)
         // Note: JSON Schema counts Unicode codepoints, not UTF-16 code units
@@ -993,7 +1009,7 @@ class JsonValidator @JvmOverloads constructor(
 
         // Pattern
         schema[PATTERN]?.jsonPrimitive?.contentOrNull?.let { pattern ->
-            when (patternMatches(pattern, value)) {
+            when (patternMatches(pattern, value, evaluation)) {
                 true -> Unit
                 false -> errors.add(ValidationError(path, "String ${quoted(value)} does not match pattern: $pattern", PATTERN, at(schemaPath, PATTERN)))
                 null -> errors.add(ValidationError(path, "String ${quoted(value)} could not be checked against pattern: $pattern", PATTERN, at(schemaPath, PATTERN)))
@@ -2030,13 +2046,16 @@ class JsonValidator @JvmOverloads constructor(
         dynamicScope: List<JsonElement>,
     ) {
         val branchErrors = mutableListOf<ValidationError>()
+        val undecidedBranchErrors = mutableListOf<ValidationError>()
         val matchingBranches = schemas.mapIndexedNotNull { index, schema ->
             val tempErrors = mutableListOf<ValidationError>()
-            validateElement(instance, schema, path, at(schemaPath, ONE_OF, index.toString()), tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+            val undecided = evaluation.leftUndecided {
+                validateElement(instance, schema, path, at(schemaPath, ONE_OF, index.toString()), tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+            }
             if (tempErrors.isNotEmpty()) {
-                branchErrors.add(
-                    ValidationError(path, "Branch $index failed", ONE_OF, at(schemaPath, ONE_OF, index.toString()), causes = tempErrors),
-                )
+                val branchError = ValidationError(path, "Branch $index failed", ONE_OF, at(schemaPath, ONE_OF, index.toString()), causes = tempErrors)
+                branchErrors.add(branchError)
+                if (undecided) undecidedBranchErrors.add(branchError)
             }
             if (tempErrors.isEmpty()) index else null
         }
@@ -2058,7 +2077,8 @@ class JsonValidator @JvmOverloads constructor(
                     )
                 }
             }
-            1 -> {} // Valid
+            // Valid only if no other branch might match as well
+            1 -> if (undecidedBranchErrors.isNotEmpty()) errors.add(undecidedError(path, ONE_OF, schemaPath, undecidedBranchErrors))
             else -> errors.add(
                 ValidationError(
                     path,
@@ -2261,7 +2281,7 @@ class JsonValidator @JvmOverloads constructor(
         // patternProperties: all instance properties matching any pattern
         schemaElement[PATTERN_PROPERTIES]?.jsonObject?.let { patternProps ->
             patternProps.keys.forEach { pattern ->
-                evaluated.addAll(instance.keys.filter { patternMatches(pattern, it) == true })
+                evaluated.addAll(instance.keys.filter { patternMatches(pattern, it, evaluation) == true })
             }
         }
 
@@ -2271,7 +2291,7 @@ class JsonValidator @JvmOverloads constructor(
             if (!isFalse) {
                 val definedProps = schemaElement[PROPERTIES]?.jsonObject?.keys ?: emptySet()
                 val patternPropPatterns = schemaElement[PATTERN_PROPERTIES]?.jsonObject?.keys ?: emptySet()
-                evaluated.addAll(instance.keys.filter { it !in definedProps && !matchesAnyPattern(it, patternPropPatterns) })
+                evaluated.addAll(instance.keys.filter { it !in definedProps && !matchesAnyPattern(it, patternPropPatterns, evaluation) })
             }
         }
 
@@ -2372,15 +2392,29 @@ class JsonValidator @JvmOverloads constructor(
         dynamicScope: List<JsonElement>,
     ) {
         val tempErrors = mutableListOf<ValidationError>()
-        validateElement(instance, schema, path, at(schemaPath, NOT), tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
-
-        // Check if schema hit depth limit - if so, propagate that error
-        val depthError = tempErrors.firstOrNull { it.keyword == "depth" }
-        if (depthError != null) {
-            errors.add(depthError)
-        } else if (tempErrors.isEmpty()) {
-            errors.add(ValidationError(path, "Instance matches the not schema but should not", NOT, at(schemaPath, NOT)))
+        val undecided = evaluation.leftUndecided {
+            validateElement(instance, schema, path, at(schemaPath, NOT), tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
         }
+        when {
+            tempErrors.isEmpty() -> errors.add(ValidationError(path, "Instance matches the not schema but should not", NOT, at(schemaPath, NOT)))
+            // A failure that may not be real must not be inverted into success
+            undecided -> errors.add(undecidedError(path, NOT, schemaPath, tempErrors))
+        }
+    }
+
+    /**
+     * The error for an applicator that cannot decide because its subschema's result could not be decided
+     * (#51): the depth error itself when there is one, as the combinators report it, else an error for
+     * [keyword] with the undecided evaluation among its [causes].
+     */
+    private fun undecidedError(path: String, keyword: String, schemaPath: String, causes: List<ValidationError>): ValidationError {
+        val pending = ArrayDeque(causes)
+        while (pending.isNotEmpty()) {
+            val error = pending.removeFirst()
+            if (error.keyword == "depth") return error
+            pending.addAll(error.causes)
+        }
+        return ValidationError(path, "Could not decide $keyword: a subschema could not be fully evaluated", keyword, at(schemaPath, keyword), causes)
     }
 
     /**
@@ -2388,7 +2422,7 @@ class JsonValidator @JvmOverloads constructor(
      */
 
     /** A pattern that could not be evaluated counts as not matching, so additional/unevaluated checks fail closed. */
-    private fun matchesAnyPattern(propName: String, patterns: Set<String>): Boolean = patterns.any { patternMatches(it, propName) == true }
+    private fun matchesAnyPattern(propName: String, patterns: Set<String>, evaluation: Evaluation): Boolean = patterns.any { patternMatches(it, propName, evaluation) == true }
 
     /**
      * Validates the structure of a schema itself
