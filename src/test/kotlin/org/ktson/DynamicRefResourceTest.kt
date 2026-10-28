@@ -38,6 +38,30 @@ class DynamicRefResourceTest :
                 isValid(schema, "[1]") shouldBe false
             }
 
+            it("puts a root without \$id in the dynamic scope (#64)") {
+                val remote = Json.parseToJsonElement(
+                    """{"${'$'}id":"https://example.com/remote","${'$'}dynamicAnchor":"node","properties":{"child":{"${'$'}dynamicRef":"#node"}}}""",
+                )
+                val outer = """{"${'$'}dynamicAnchor":"node","${'$'}ref":"https://example.com/remote","required":["must"]}"""
+                listOf("https://example.com/root", "").forEach { base ->
+                    val validator = JsonValidator(schemaLoader = { remote })
+                    validator.validate(Json.parseToJsonElement("""{"must":1,"child":{}}"""), JsonSchema.fromString(outer, SchemaVersion.DRAFT_2020_12, base)).isValid shouldBe false
+                    validator.validate(Json.parseToJsonElement("""{"must":1,"child":{"must":2}}"""), JsonSchema.fromString(outer, SchemaVersion.DRAFT_2020_12, base)).isValid shouldBe true
+                }
+            }
+
+            it("puts a loaded document without \$id in the dynamic scope (#64)") {
+                // root -> middle (no $id, declares the anchor) -> leaf: the middle resource is the outermost "node"
+                val documents = mapOf(
+                    "https://example.com/middle" to """{"${'$'}dynamicAnchor":"node","${'$'}ref":"leaf","required":["m"]}""",
+                    "https://example.com/leaf" to """{"${'$'}id":"https://example.com/leaf","${'$'}dynamicAnchor":"node","properties":{"child":{"${'$'}dynamicRef":"#node"}}}""",
+                )
+                val loader: (String) -> JsonElement? = { uri -> documents[uri]?.let { Json.parseToJsonElement(it) } }
+                val schema = """{"${'$'}id":"https://example.com/root","${'$'}ref":"middle"}"""
+                isValid(schema, """{"m":1,"child":{}}""", loader) shouldBe false
+                isValid(schema, """{"m":1,"child":{"m":2}}""", loader) shouldBe true
+            }
+
             listOf("#node", "#%6Eode", "#%6E%6F%64%65").forEach { fragment ->
                 it("lets the outer dynamic anchor override a \$dynamicRef to '$fragment' (#60)") {
                     // %6E is an unreserved "n": every spelling names anchor "node", so the root's override applies.

@@ -142,7 +142,7 @@ validate()
 - **ValidatorLifecycleTest.kt** - 3 tests: a dropped validator frees its schema, remote schemas and caches; a live one does not keep schemas with `$id` it validated, and its pattern and numeric-limit caches stay bounded
 - **FormatAssertionOptionTest.kt** - 4 tests: `formatAssertion` true asserts and false does not, in both drafts
 - **SchemaMetadataTest.kt** - 10 tests: non-string `$id`/`$schema` construct, are reported by `validateSchema` and never make `validate()` throw
-- **DynamicRefResourceTest.kt** - 5 tests: `$dynamicRef` targets evaluated in their own resource; percent-encoded anchors keep the dynamic override
+- **DynamicRefResourceTest.kt** - 7 tests: `$dynamicRef` targets evaluated in their own resource; percent-encoded anchors keep the dynamic override; id-less roots and loaded documents are in the dynamic scope
 - **ConcurrentLoadingTest.kt** - 5 tests: one `schemaLoader` call per URI under concurrency; loaders may validate through the same validator (#55)
 - **ValidateSchemaWorkerTest.kt** - 3 tests: the `validateSchema` worker inherits no thread-locals and never outlives an interrupted call
 - **IndeterminateResultTest.kt** - 17 tests: undecided results (depth limit, unevaluable regex) are never inverted into Valid
@@ -298,6 +298,8 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - Absolute URI tracking: `IdentityHashMap<JsonElement, String>` in the per-validation `ReferenceResolver`. It must stay
   per validation: one element can be validated under different `JsonSchema.baseUri`s (#37)
 - `resourceRoot` passed through recursive calls so fragment refs resolve in the correct document
+- The dynamic scope starts with the root schema and grows with every resource entered (a schema with `$id`, or a
+  hop into another resource), whether or not it has `$id`; use `entering()`, which compares by identity (#64)
 - `resolveRef()` returns a `ResolvedReference` (target, the resource holding it, that resource's base) from one lookup;
   never re-derive the resource with a second, root-relative search (#52). A hop evaluates (and stamps) inside
   `withBase(resource, base)`, so a loaded document's `$id`, resolved against its retrieval URI, applies before refs

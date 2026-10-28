@@ -233,7 +233,7 @@ class JsonValidator @JvmOverloads constructor(
         // Relative references resolve against the root's absolute base, which may come from JsonSchema.baseUri.
         schema.absoluteBaseUri()?.let { evaluation.references.registerAbsoluteUri(schema.schema, it) }
         try {
-            validateElement(instance, schema.schema, path, "", errors, schema.effectiveVersion, evaluation, depth = 0, resourceRoot = schema.schema, dynamicScope = emptyList())
+            validateElement(instance, schema.schema, path, "", errors, schema.effectiveVersion, evaluation, depth = 0, resourceRoot = schema.schema, dynamicScope = listOf(schema.schema))
         } catch (_: StackOverflowError) {
             // Whether maxValidationDepth fits depends on the thread's stack size: on a small stack a recursive
             // schema can exhaust it first (#50). Fail closed with a depth error instead of throwing. The shared
@@ -268,6 +268,12 @@ class JsonValidator @JvmOverloads constructor(
     /** Keyword location of a sub-schema reached through [keyword] and [token], e.g. properties/name. */
     private fun at(schemaPath: String, keyword: String, token: String): String = "$schemaPath/$keyword/${JsonPointer.encodeToken(token)}"
 
+    /**
+     * The dynamic scope after entering [resource]; unchanged if it is already in scope. Compared by identity:
+     * two equal schemas in different places are different resources, and equality would compare them deeply.
+     */
+    private fun List<JsonElement>.entering(resource: JsonElement): List<JsonElement> = if (any { it === resource }) this else this + resource
+
     /** Child instance location for an object member or array index (RFC 6901). */
     private fun childOf(path: String, token: String): String = "$path/${JsonPointer.encodeToken(token)}"
 
@@ -299,7 +305,7 @@ class JsonValidator @JvmOverloads constructor(
 
         // Update resource root and dynamic scope when entering a new schema resource (one with $id)
         val effectiveResourceRoot = if (schemaElement is JsonObject && schemaElement.containsKey(SchemaKeywords.ID)) schemaElement else resourceRoot
-        val effectiveScope = if (schemaElement is JsonObject && schemaElement.containsKey(SchemaKeywords.ID)) dynamicScope + schemaElement else dynamicScope
+        val effectiveScope = if (schemaElement is JsonObject && schemaElement.containsKey(SchemaKeywords.ID)) dynamicScope.entering(schemaElement) else dynamicScope
 
         // Register the absolute URI for new resource roots so relative $id and missing-$id schemas
         // resolve subsequent relative $refs correctly (e.g. base URI change, nested remote refs).
@@ -386,16 +392,12 @@ class JsonValidator @JvmOverloads constructor(
     ): List<ReferenceHop> {
         val hops = ArrayList<ReferenceHop>(1)
 
-        /** A hop entering [targetResource]: a new resource with $id joins the dynamic scope for $dynamicRef. */
+        /**
+         * A hop entering [targetResource]: a new resource joins the dynamic scope for $dynamicRef, whether its URI
+         * comes from $id or from where it was retrieved (#64).
+         */
         fun hop(keyword: String, reference: String, description: String, target: JsonElement?, targetResource: JsonElement, targetBase: String? = null): ReferenceHop {
-            val scope =
-                if (targetResource !== resourceRoot && targetResource is JsonObject &&
-                    targetResource.containsKey(SchemaKeywords.ID) && !dynamicScope.contains(targetResource)
-                ) {
-                    dynamicScope + targetResource
-                } else {
-                    dynamicScope
-                }
+            val scope = if (targetResource !== resourceRoot && targetResource is JsonObject) dynamicScope.entering(targetResource) else dynamicScope
             return ReferenceHop(keyword, reference, description, target, targetResource, scope, targetBase)
         }
 
@@ -2116,7 +2118,7 @@ class JsonValidator @JvmOverloads constructor(
         if (schemaElement !is JsonObject) return emptySet()
 
         val effectiveResourceRoot = if (schemaElement.containsKey(SchemaKeywords.ID)) schemaElement else resourceRoot
-        val effectiveScope = if (schemaElement.containsKey(SchemaKeywords.ID)) dynamicScope + schemaElement else dynamicScope
+        val effectiveScope = if (schemaElement.containsKey(SchemaKeywords.ID)) dynamicScope.entering(schemaElement) else dynamicScope
 
         val evaluated = mutableSetOf<Int>()
 
@@ -2274,7 +2276,7 @@ class JsonValidator @JvmOverloads constructor(
         val effectiveResourceRoot =
             if (schemaElement.containsKey(SchemaKeywords.ID)) schemaElement else resourceRoot
         val effectiveScope =
-            if (schemaElement.containsKey(SchemaKeywords.ID)) dynamicScope + schemaElement else dynamicScope
+            if (schemaElement.containsKey(SchemaKeywords.ID)) dynamicScope.entering(schemaElement) else dynamicScope
 
         val evaluated = mutableSetOf<String>()
 
