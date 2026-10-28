@@ -32,7 +32,7 @@ class OfficialTestSuiteRunner :
                     validator = validator201909,
                 )
                 runFormatTests(draft201909Dir, SchemaVersion.DRAFT_2019_09, schemaLoader)
-                runBignumTests(draft201909Dir, SchemaVersion.DRAFT_2019_09, validator201909)
+                runOptionalTests(draft201909Dir, SchemaVersion.DRAFT_2019_09, validator201909)
             } else {
                 it("directory not found") {
                     throw IllegalStateException("Draft 2019-09 directory not found")
@@ -53,7 +53,7 @@ class OfficialTestSuiteRunner :
                     validator = validator202012,
                 )
                 runFormatTests(draft202012Dir, SchemaVersion.DRAFT_2020_12, schemaLoader)
-                runBignumTests(draft202012Dir, SchemaVersion.DRAFT_2020_12, validator202012)
+                runOptionalTests(draft202012Dir, SchemaVersion.DRAFT_2020_12, validator202012)
             } else {
                 it("directory not found") {
                     throw IllegalStateException("Draft 2020-12 directory not found")
@@ -120,25 +120,31 @@ private suspend fun DescribeSpecContainerScope.runFormatTests(
 }
 
 /**
- * Run arbitrary-precision number tests from optional/bignum.json
+ * Run the optional test files KtSON supports: arbitrary-precision numbers (bignum.json) and the
+ * ECMA 262 regex dialect of `pattern` and `patternProperties` (ecmascript-regex.json, #69).
  */
-private suspend fun DescribeSpecContainerScope.runBignumTests(
+private suspend fun DescribeSpecContainerScope.runOptionalTests(
     draftDirectory: File,
     version: SchemaVersion,
     validator: JsonValidator,
 ) {
-    val bignumFile = File(draftDirectory, "optional/bignum.json")
-    if (!bignumFile.exists()) return
-    describe("optional/bignum") {
-        runTestsFromFile(bignumFile, version, validator)
+    OPTIONAL_FILES.forEach { name ->
+        val file = File(draftDirectory, "optional/$name")
+        if (file.exists()) {
+            describe("optional/${file.nameWithoutExtension}") {
+                runTestsFromFile(file, version, validator)
+            }
+        }
     }
 }
+
+private val OPTIONAL_FILES = listOf("bignum.json", "ecmascript-regex.json")
 
 /**
  * Recursively run tests from a directory
  */
 private suspend fun DescribeSpecContainerScope.runTestsFromDirectory(directory: File, version: SchemaVersion, validator: JsonValidator) {
-    // optional/format and optional/bignum.json run separately; other optional tests remain excluded
+    // optional/format, bignum.json and ecmascript-regex.json run separately; other optional tests remain excluded
     val filesToSkip = setOf(
         "optional",
         "vocabulary.json",

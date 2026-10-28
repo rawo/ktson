@@ -1672,7 +1672,7 @@ class JsonValidator @JvmOverloads constructor(
     /**
      * The regex format is defined in terms of ECMA 262, which differs from Java both ways:
      * Java accepts constructs ECMA does not (inline flags, `\a`, `\A`) and rejects two it does
-     * (the empty character classes, handled by [translateEmptyCharacterClasses]).
+     * (the empty character classes, handled by [translateEcmaSyntax]).
      */
     private fun isValidEcmaRegex(value: String): Boolean {
         if (!hasOnlyEcmaRegexSyntax(value)) return false
@@ -2438,25 +2438,55 @@ class JsonValidator @JvmOverloads constructor(
     private fun translatePatternToJava(pattern: String): String {
         val withJavaCategories = pattern.replace(REGEX_UNICODE_CATEGORY) { match ->
             val flag = match.groupValues[1]
-            val name = match.groupValues[2]
+            // General_Category=Nd and gc=Nd name the category itself; Java knows neither prefix
+            val name = match.groupValues[2].removePrefix("General_Category=").removePrefix("gc=")
             val javaName = UNICODE_CATEGORY_NAMES[name] ?: name
             "\\$flag{$javaName}"
         }
-        return translateEmptyCharacterClasses(withJavaCategories)
+        return translateEcmaSyntax(withJavaCategories)
     }
 
-    /** `[]` (matches nothing) and `[^]` (matches anything) are valid ECMA 262 but errors in Java. */
-    private fun translateEmptyCharacterClasses(pattern: String): String {
+    /**
+     * Rewrites ECMA 262 syntax whose meaning differs in Java's engine (#69):
+     * - `[]` (matches nothing) and `[^]` (matches anything) are errors in Java
+     * - `\s` / `\S` are ECMA 262 WhiteSpace and LineTerminator (NBSP, BOM, U+2028 ...), not Java's ASCII set
+     * - `\c` with a letter of either case is that letter's code modulo 32; Java computes it differently
+     * - `$` is the end of input, while Java's also matches before a final line terminator
+     * - `.` excludes only the four ECMA 262 line terminators; Java's also excludes U+0085
+     */
+    private fun translateEcmaSyntax(pattern: String): String {
         val result = StringBuilder(pattern.length)
         var i = 0
         var inClass = false
         while (i < pattern.length) {
             val c = pattern[i]
+            val next = pattern.getOrNull(i + 1)
             when {
+                c == '\\' && next == 's' -> {
+                    result.append(if (inClass) ECMA_WHITESPACE else "[$ECMA_WHITESPACE]")
+                    i += 2
+                }
+                // Inside a class too: Java unions a nested class, and [^\S] negates the whole union
+                c == '\\' && next == 'S' -> {
+                    result.append("[^$ECMA_WHITESPACE]")
+                    i += 2
+                }
+                c == '\\' && next == 'c' && pattern.getOrNull(i + 2)?.let { it in 'a'..'z' || it in 'A'..'Z' } == true -> {
+                    result.append("\\x%02X".format(pattern[i + 2].code % 32))
+                    i += 3
+                }
                 c == '\\' -> {
                     result.append(c)
-                    pattern.getOrNull(i + 1)?.let { result.append(it) }
+                    next?.let { result.append(it) }
                     i += 2
+                }
+                c == '$' && !inClass -> {
+                    result.append("\\z")
+                    i++
+                }
+                c == '.' && !inClass -> {
+                    result.append("[^\\n\\r\\u2028\\u2029]")
+                    i++
                 }
                 c == '[' && !inClass && pattern.startsWith("[^]", i) -> {
                     result.append("[\\s\\S]")
@@ -2516,9 +2546,17 @@ private val REGEX_UUID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
                 '^', '$', '\\', '.', '*', '+', '?', '(', ')', '[', ']', '{', '}', '|', '/', '-',
             )
 
-        // Maps ECMAScript Unicode category long names to Java short names for \p{} in patterns
+        /** ECMA 262 WhiteSpace and LineTerminator code points (what \s matches), in Java class syntax. */
+        private const val ECMA_WHITESPACE = """\t\n\x0B\f\r \u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF"""
+
+        // Maps ECMAScript Unicode category long names and aliases to Java short names for \p{} in patterns
         private val UNICODE_CATEGORY_NAMES =
             mapOf(
+                "Cased_Letter" to "LC",
+                "Combining_Mark" to "M",
+                "digit" to "Nd",
+                "punct" to "P",
+                "cntrl" to "Cc",
                 "Letter" to "L",
                 "Lowercase_Letter" to "Ll",
                 "Uppercase_Letter" to "Lu",

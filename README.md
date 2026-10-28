@@ -416,7 +416,7 @@ tested in CI yet; reports of problems are welcome.
 | Unevaluated Keywords | ✅ Complete | 100% |
 | Remote Schema Loading | ✅ Complete | Pluggable schemaLoader callback |
 | Format Validation | ✅ Complete | All 19 formats, assertion mode only: email, idn-email, uri, uri-reference, uri-template, iri, iri-reference, date, time, date-time, duration, ipv4, ipv6, uuid, hostname, idn-hostname, json-pointer, relative-json-pointer, regex |
-| **Official Test Suite** | ✅ **100%** | **4,314/4,314 passing** (includes `optional/format` and `optional/bignum`) |
+| **Official Test Suite** | ✅ **100%** | **4,462/4,462 passing** (includes `optional/format`, `optional/bignum` and `optional/ecmascript-regex`) |
 
 See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed feature breakdown.
 
@@ -431,6 +431,10 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
    - See [docs/STACK_OVERFLOW_RISK_ANALYSIS.md](docs/STACK_OVERFLOW_RISK_ANALYSIS.md) for historical analysis
 
 2. **Format Validation**
+   - `pattern` and `patternProperties` run on Java's regex engine after translating the ECMA 262 constructs
+     whose meaning differs (`\s`/`\S`, `\c` escapes, `$`, `.`, `[]`/`[^]`, `\p{...}` category aliases), and
+     pass the official `optional/ecmascript-regex.json`. Matching is still backtracking Java regex: other
+     ECMA 262 differences (for example case-insensitive or Unicode-mode details) are not translated
    - Asserted by default; `formatAssertion = false` makes `format` an annotation in both drafts
    - IDNA validation (`hostname`, `idn-hostname`, `idn-email`) passes the official suite, but decides
      code point validity from Unicode categories plus the RFC 5892 §2.6 exception list rather than the
@@ -513,7 +517,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 1004 tests (100% passing)
+- **Custom Tests**: 1048 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -530,6 +534,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - `unevaluated*` across schema resources: 6 tests
   - Validator lifecycle (garbage collection, bounded caches): 3 tests
   - Undecided results under `not`, `if`, `oneOf` and `maxContains`: 17 tests
+  - ECMA 262 `pattern` dialect (whitespace, `\c`, `$`, `.`, `\p` aliases): 44 tests
   - Bounded cache: 4 tests
   - `validateSchema` worker thread (thread-locals, interrupts): 3 tests
   - Remote loading (single flight, reentrant loaders): 5 tests
@@ -540,10 +545,10 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Java interop for output formats: 2 tests
   - Java interop for the core API: 10 tests
 
-- **Official JSON Schema Test Suite**: 4,314 tests
-  - ✅ Passing: 4,314 (100%)
+- **Official JSON Schema Test Suite**: 4,462 tests
+  - ✅ Passing: 4,462 (100%)
   - ❌ Failing: 0
-  - Includes the `optional/format` files and `optional/bignum.json` for both drafts; `vocabulary.json`,
+  - Includes the `optional/format` files, `optional/bignum.json` and `optional/ecmascript-regex.json` for both drafts; `vocabulary.json`,
     `infinite-loop-detection.json` and the rest of `optional/` are not run yet
 
 - **Official output-tests**: 6 (Basic format, both drafts; `readOnly.json` needs annotations and is not run),
@@ -567,7 +572,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 - ✅ **One RFC 3986/3987 parser** behind `uri`, `uri-reference`, `iri` and `iri-reference`
 - ✅ **RFC 6570 grammar** for `uri-template`; **ECMA 262 syntax rules** for `regex` and `pattern`
 - ✅ **Remote schema loading implemented** (pluggable `schemaLoader` callback)
-- ✅ **100% official test suite pass rate** (4,314/4,314 tests)
+- ✅ **100% official test suite pass rate** (4,462/4,462 tests)
 - ✅ **Exact numeric comparisons** for bounds, integer classification, `multipleOf` and numeric equality
 - ✅ `unevaluatedProperties` and `unevaluatedItems` implemented
 - ✅ `$dynamicRef` / `$dynamicAnchor` full dynamic scope resolution

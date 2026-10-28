@@ -146,6 +146,7 @@ validate()
 - **ConcurrentLoadingTest.kt** - 5 tests: one `schemaLoader` call per URI under concurrency; loaders may validate through the same validator (#55)
 - **ValidateSchemaWorkerTest.kt** - 3 tests: the `validateSchema` worker inherits no thread-locals and never outlives an interrupted call
 - **IndeterminateResultTest.kt** - 17 tests: undecided results (depth limit, unevaluable regex) are never inverted into Valid
+- **EcmaPatternTest.kt** - 44 tests: ECMA 262 semantics of `\s`, `\S`, `\c`, `$`, `.` and `\p` aliases in `pattern`
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 36 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
@@ -155,7 +156,7 @@ validate()
 - **JavaApiUsageTest.kt** - 10 tests running `src/test/java/org/ktson/JavaApiUsage.java`, a Java caller of `JsonSchema`, `JsonValidator` and `JsonPointer`
 - **OfficialOutputTestRunner.kt** - Runs the suite's `output-tests` content files against Basic output (skips `readOnly.json`, which needs annotations); fails if a draft has no runnable files; also checks KtSON's Basic output for a `$ref` schema against the output schema's `basic` definition
 - **OutputTestFilesTest.kt** - 4 tests for the runner's file discovery (missing, empty or fully skipped `content/` must fail)
-- **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (draft2019-09 + draft2020-12), including `optional/format`
+- **OfficialTestSuiteRunner.kt** - Runs official JSON Schema Test Suite (draft2019-09 + draft2020-12), including `optional/format`, `optional/bignum.json` and `optional/ecmascript-regex.json`
 - **PerformanceTest.kt** - 9 performance tests, including three numeric benchmarks (excluded from default test run)
 
 The official suite is **not vendored** - it must be cloned as a sibling of this project:
@@ -168,7 +169,7 @@ Without it, `OfficialTestSuiteRunner` prints a warning and passes locally, but *
 
 CI fetches the suite pinned to a SHA - `TEST_SUITE_REF` in `.github/workflows/build.yml` - so upstream additions cannot turn a build red on their own. Bump that SHA periodically; keep the local clone near it (`git -C ../JSON-Schema-Test-Suite fetch && git checkout <ref>`) or local and CI results will diverge.
 
-Skipped in the official suite: `vocabulary.json`, `infinite-loop-detection.json`, and `optional/` apart from `optional/format` and `optional/bignum.json`. Format tests run separately against a validator with `formatAssertion = true` (format is annotation-only by default in 2020-12, so the shared validator cannot run them). At the pinned SHA that leaves 316 of 4,630 assertions excluded in the two draft directories; the 4,314 that run pass 100%.
+Skipped in the official suite: `vocabulary.json`, `infinite-loop-detection.json`, and `optional/` apart from `optional/format`, `optional/bignum.json` and `optional/ecmascript-regex.json`. Format tests run separately against a validator with `formatAssertion = true` (format is annotation-only by default in 2020-12, so the shared validator cannot run them). At the pinned SHA that leaves 168 of 4,630 assertions excluded in the two draft directories; the 4,462 that run pass 100%.
 
 Test memory configuration: min 512MB, max 2GB heap
 
@@ -317,8 +318,9 @@ Release notes are generated from the commit log, so commits must follow Conventi
   - `isValidHostname()` / `isValidIdnHostname()` share `isValidULabel()`, `punycodeDecode()`,
     `punycodeEncode()` and `idnaMap()` (UTS 46 mapping: drop ignorables, NFKC, case-fold)
   - `isValidEcmaRegex()` rejects Java-only regex syntax (inline flags, `\a`, `(?#...)`), while
-    `translateEmptyCharacterClasses()` accepts the ECMA-only `[]` and `[^]` for both `format` and
-    `pattern`
+    `translateEcmaSyntax()` rewrites ECMA 262 constructs Java reads differently for both `format` and
+    `pattern`: `[]`/`[^]`, `\s`/`\S` (ECMA whitespace), `\cx`, `$` (end of input), `.`; `translatePatternToJava()`
+    also maps `\p{...}` General_Category aliases (#69)
 
 ## Important Files
 

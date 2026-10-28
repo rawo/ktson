@@ -83,6 +83,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `path` of `https://ex.com/a%2Fb` is `/a%2Fb` (was `/a/b`), and a URN's body is its `path`
   (`example:schema`; it was lost). `UriComponents.withoutFragment` therefore rebuilds the URI faithfully;
   it used to turn `%23` into a fragment delimiter and reduce `urn:example:schema` to `urn:` (#67).
+- **Breaking verdict change:** `pattern` and `patternProperties` follow ECMA 262 where Java's engine differs:
+  `\s`/`\S` cover ECMA whitespace (NBSP, BOM, U+2028, EM SPACE ...), `\cc` is U+0003 like `\cC`, `$` no
+  longer matches before a trailing newline, `.` matches U+0085, and `\p{digit}`, `\p{gc=Nd}` and other
+  General_Category aliases work (they made `validate()` throw `PatternSyntaxException`). The official
+  `optional/ecmascript-regex.json` now runs and passes for both drafts (#69).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the
