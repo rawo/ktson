@@ -180,6 +180,37 @@ class ReferenceResolutionTest :
                     validator.validate(Json.parseToJsonElement("\"x\""), schema).isValid shouldBe false
                     asked shouldBe listOf("https://retrieval.example/root", "https://canonical.example/schemas/value")
                 }
+
+                it("resolves a document served for two URIs against the URI each validation retrieved it from (#54)") {
+                    val shared = Json.parseToJsonElement("""{"${'$'}ref":"value"}""")
+                    val validator = JsonValidator(schemaLoader = { uri ->
+                        when (uri) {
+                            "https://a.example/root", "https://b.example/root" -> shared
+                            "https://a.example/value" -> Json.parseToJsonElement("true")
+                            "https://b.example/value" -> Json.parseToJsonElement("false")
+                            else -> null
+                        }
+                    })
+                    val a = JsonSchema.fromString("""{"${'$'}ref":"https://a.example/root"}""", version)
+                    val b = JsonSchema.fromString("""{"${'$'}ref":"https://b.example/root"}""", version)
+                    listOf(a, b, a).map { validator.validate(Json.parseToJsonElement("1"), it).isValid } shouldBe listOf(true, false, true)
+                }
+
+                it("resolves a document served for two URIs against each URI within one validation (#54)") {
+                    val shared = Json.parseToJsonElement("""{"${'$'}ref":"value"}""")
+                    val validator = JsonValidator(schemaLoader = { uri ->
+                        when (uri) {
+                            "https://a.example/root", "https://b.example/root" -> shared
+                            "https://a.example/value" -> Json.parseToJsonElement("""{"type":"integer"}""")
+                            "https://b.example/value" -> Json.parseToJsonElement("""{"minimum":10}""")
+                            else -> null
+                        }
+                    })
+                    val schema = JsonSchema.fromString("""{"properties":{"a":{"${'$'}ref":"https://a.example/root"},"b":{"${'$'}ref":"https://b.example/root"}}}""", version)
+                    validator.validate(Json.parseToJsonElement("""{"a":1,"b":20}"""), schema).isValid shouldBe true
+                    validator.validate(Json.parseToJsonElement("""{"a":1,"b":5}"""), schema).isValid shouldBe false
+                    validator.validate(Json.parseToJsonElement("""{"a":1.5,"b":20}"""), schema).isValid shouldBe false
+                }
             }
         }
     })

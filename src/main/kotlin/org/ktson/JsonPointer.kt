@@ -82,10 +82,6 @@ internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?
     /** Loads in progress, so concurrent callers needing the same URI wait for one load instead of each calling the loader. */
     private val inFlight = java.util.concurrent.ConcurrentHashMap<String, Load>()
 
-    /** Loaded schema elements → the URI they were loaded from, for relative $refs in documents without an $id. */
-    private val loadedSchemaUris =
-        java.util.Collections.synchronizedMap(java.util.IdentityHashMap<JsonElement, String>())
-
     /** One load of one URI, run by [owner]; others wait on [done] and then read [result]. */
     private class Load(val owner: Thread) {
         val done = java.util.concurrent.CountDownLatch(1)
@@ -96,13 +92,11 @@ internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?
     /** The schema already loaded from [uri], or null. */
     fun cached(uri: String): JsonElement? = schemaCache[uri]
 
-    /** The URI [schema] was loaded from, or null if it was not loaded by this store. */
-    fun uriOf(schema: JsonElement): String? = loadedSchemaUris[schema]
-
     /**
      * The schema at [uri], loaded on first use. Single flight: concurrent validations needing the same URI
-     * wait for one load instead of each calling the loader, and the URI is registered before the schema
-     * becomes visible in the cache. A null result (or a loader that throws) is not cached, so a later
+     * wait for one load instead of each calling the loader. The store keeps no URI per schema element: a
+     * loader may return one parsed object for several URIs, so the base a document is evaluated under
+     * travels with each reference instead (ResolvedReference, #54). A null result (or a loader that throws) is not cached, so a later
      * validation may try again.
      *
      * The loader runs outside any map operation, so it may itself validate through the same validator and
@@ -121,10 +115,7 @@ internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?
         }
         try {
             // A load that finished between the cache miss above and claiming the URI has already cached it.
-            val loaded = schemaCache[uri] ?: loader(uri)?.let { schema ->
-                loadedSchemaUris[schema] = uri
-                schemaCache.putIfAbsent(uri, schema) ?: schema
-            }
+            val loaded = schemaCache[uri] ?: loader(uri)?.let { schema -> schemaCache.putIfAbsent(uri, schema) ?: schema }
             load.result = loaded
             return loaded
         } finally {
@@ -187,13 +178,12 @@ internal class ReferenceResolver(private val store: SchemaStore) {
 
     /**
      * Returns the effective absolute base URI for [schema]:
-     *  1. Its registration (handles relative $id), see [registerAbsoluteUri]
-     *  2. The URI it was loaded from (handles schemas without $id loaded externally)
-     *  3. Its raw $id if that is already absolute
+     *  1. Its registration: a relative $id resolved in place (see [registerAbsoluteUri]), or the base a
+     *     reference hop reached it under (see [withBase]), which covers loaded documents
+     *  2. Its raw $id if that is already absolute
      */
     internal fun getAbsoluteUri(schema: JsonElement): String {
         schemaAbsoluteUris[schema]?.let { return it }
-        store.uriOf(schema)?.let { return it }
         val rawId = (schema as? JsonObject)?.stringKeyword(SchemaKeywords.ID) ?: ""
         return if (rawId.isNotEmpty() && UriResolver.isAbsoluteUri(rawId)) rawId else ""
     }

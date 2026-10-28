@@ -73,6 +73,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resource with `$id: "target"`; and a loaded document whose `$id` differs from its retrieval URI resolves
   refs in its fragments against that `$id` (it used to ask `schemaLoader` for the retrieval-relative URI
   and evaluate that) (#52).
+- **Breaking verdict change:** a `schemaLoader` that returns one parsed schema object for several URIs no longer
+  makes refs inside it resolve against whichever URI was loaded last: each reference evaluates the document
+  under the URI it was retrieved from. The validator-wide map from loaded elements to URIs is gone (#54).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the
