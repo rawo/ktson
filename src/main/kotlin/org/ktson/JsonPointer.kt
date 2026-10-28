@@ -77,12 +77,21 @@ object JsonPointer {
  * Each distinct absolute URI is loaded once and kept for the validator's lifetime. Thread-safe.
  */
 internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?) {
-    // Nullable value type only so computeIfAbsent's loader may return null; a ConcurrentHashMap never stores null.
-    private val schemaCache = java.util.concurrent.ConcurrentHashMap<String, JsonElement?>()
+    private val schemaCache = java.util.concurrent.ConcurrentHashMap<String, JsonElement>()
+
+    /** Loads in progress, so concurrent callers needing the same URI wait for one load instead of each calling the loader. */
+    private val inFlight = java.util.concurrent.ConcurrentHashMap<String, Load>()
 
     /** Loaded schema elements → the URI they were loaded from, for relative $refs in documents without an $id. */
     private val loadedSchemaUris =
         java.util.Collections.synchronizedMap(java.util.IdentityHashMap<JsonElement, String>())
+
+    /** One load of one URI, run by [owner]; others wait on [done] and then read [result]. */
+    private class Load(val owner: Thread) {
+        val done = java.util.concurrent.CountDownLatch(1)
+
+        @Volatile var result: JsonElement? = null
+    }
 
     /** The schema already loaded from [uri], or null. */
     fun cached(uri: String): JsonElement? = schemaCache[uri]
@@ -93,11 +102,49 @@ internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?
     /**
      * The schema at [uri], loaded on first use. Single flight: concurrent validations needing the same URI
      * wait for one load instead of each calling the loader, and the URI is registered before the schema
-     * becomes visible in the cache. A null result is not cached, so a later validation may try again.
+     * becomes visible in the cache. A null result (or a loader that throws) is not cached, so a later
+     * validation may try again.
+     *
+     * The loader runs outside any map operation, so it may itself validate through the same validator and
+     * load other URIs (#55). If it needs the URI it is loading, that URI is unresolvable for the nested
+     * validation: waiting for itself would never end.
      */
     fun load(uri: String): JsonElement? {
+        schemaCache[uri]?.let { return it }
         val loader = schemaLoader ?: return null
-        return schemaCache.computeIfAbsent(uri) { loader(it)?.also { schema -> loadedSchemaUris[schema] = it } }
+        val load = Load(Thread.currentThread())
+        val running = inFlight.putIfAbsent(uri, load)
+        if (running != null) {
+            if (running.owner === Thread.currentThread()) return null
+            awaitUninterruptibly(running.done)
+            return running.result
+        }
+        try {
+            // A load that finished between the cache miss above and claiming the URI has already cached it.
+            val loaded = schemaCache[uri] ?: loader(uri)?.let { schema ->
+                loadedSchemaUris[schema] = uri
+                schemaCache.putIfAbsent(uri, schema) ?: schema
+            }
+            load.result = loaded
+            return loaded
+        } finally {
+            inFlight.remove(uri, load)
+            load.done.countDown()
+        }
+    }
+
+    /** Waits for [latch] without abandoning the wait on interrupt; the interrupt status is restored afterwards. */
+    private fun awaitUninterruptibly(latch: java.util.concurrent.CountDownLatch) {
+        var interrupted = false
+        while (true) {
+            try {
+                latch.await()
+                break
+            } catch (_: InterruptedException) {
+                interrupted = true
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt()
     }
 }
 

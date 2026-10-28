@@ -140,6 +140,7 @@ validate()
 - **FormatAssertionOptionTest.kt** - 4 tests: `formatAssertion` true asserts and false does not, in both drafts
 - **SchemaMetadataTest.kt** - 10 tests: non-string `$id`/`$schema` construct, are reported by `validateSchema` and never make `validate()` throw
 - **DynamicRefResourceTest.kt** - 5 tests: `$dynamicRef` targets evaluated in their own resource; percent-encoded anchors keep the dynamic override
+- **ConcurrentLoadingTest.kt** - 5 tests: one `schemaLoader` call per URI under concurrency; loaders may validate through the same validator (#55)
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 30 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
@@ -281,7 +282,9 @@ Release notes are generated from the commit log, so commits must follow Conventi
   `Evaluation` (root schema, `ReferenceResolver`, `AbsoluteLocations`) and threads it through every recursive call
 - Fragment references (`#/...`, `#/$defs/...`) and external URIs supported
 - External schemas resolved via `schemaLoader: ((String) -> JsonElement?)?` on `JsonValidator`
-- Schema cache: `SchemaStore` (per validator, shared by its validations): `ConcurrentHashMap<String, JsonElement>` keyed by absolute URI
+- Schema cache: `SchemaStore` (per validator, shared by its validations): `ConcurrentHashMap<String, JsonElement>` keyed by absolute URI.
+  Loads are single-flight through per-URI in-flight records; never call `schemaLoader` inside a map callback
+  (`computeIfAbsent`): a loader may validate through the same validator (#55)
 - Absolute URI tracking: `IdentityHashMap<JsonElement, String>` in the per-validation `ReferenceResolver`. It must stay
   per validation: one element can be validated under different `JsonSchema.baseUri`s (#37)
 - `resourceRoot` passed through recursive calls so fragment refs resolve in the correct document

@@ -57,4 +57,42 @@ class ConcurrentLoadingTest :
                 loads.get() shouldBe 2
             }
         }
+
+        describe("a schemaLoader that validates through the same validator (#55)") {
+            it("can load another URI, even one whose String hash collides with the URI being loaded") {
+                val first = "https://ex.com/Aa"
+                val second = "https://ex.com/BB"
+                first.hashCode() shouldBe second.hashCode()
+                lateinit var validator: JsonValidator
+                validator = JsonValidator(schemaLoader = { uri ->
+                    if (uri == first) validator.validate(JsonPrimitive(1), JsonSchema.fromString("""{"${'$'}ref":"$second"}""")).isValid shouldBe true
+                    Json.parseToJsonElement("""{"type":"integer"}""")
+                })
+                validator.validate(JsonPrimitive(1), JsonSchema.fromString("""{"${'$'}ref":"$first"}""")).isValid shouldBe true
+                validator.validate(JsonPrimitive("x"), JsonSchema.fromString("""{"${'$'}ref":"$second"}""")).isValid shouldBe false
+            }
+
+            it("treats a load of the URI it is already loading as unresolvable instead of waiting forever") {
+                val uri = "https://ex.com/cycle"
+                val nested = mutableListOf<Boolean>()
+                lateinit var validator: JsonValidator
+                validator = JsonValidator(schemaLoader = { requested ->
+                    nested += validator.validate(JsonPrimitive(1), JsonSchema.fromString("""{"${'$'}ref":"$requested"}""")).isValid
+                    Json.parseToJsonElement("""{"type":"integer"}""")
+                })
+                validator.validate(JsonPrimitive(1), JsonSchema.fromString("""{"${'$'}ref":"$uri"}""")).isValid shouldBe true
+                nested shouldBe listOf(false)
+            }
+
+            it("lets a later validation load a URI whose loader threw") {
+                val loads = AtomicInteger()
+                val validator = JsonValidator(schemaLoader = {
+                    if (loads.incrementAndGet() == 1) error("network down")
+                    Json.parseToJsonElement("""{"type":"integer"}""")
+                })
+                val schema = JsonSchema.fromString("""{"${'$'}ref":"https://example.com/flaky"}""")
+                runCatching { validator.validate(JsonPrimitive(1), schema) }.isFailure shouldBe true
+                validator.validate(JsonPrimitive(1), schema).isValid shouldBe true
+            }
+        }
     })

@@ -215,8 +215,9 @@ class JsonValidator @JvmOverloads constructor(
         } catch (_: StackOverflowError) {
             // Whether maxValidationDepth fits depends on the thread's stack size: on a small stack a recursive
             // schema can exhaust it first (#50). Fail closed with a depth error instead of throwing. The shared
-            // caches touched on the way are updated atomically (computeIfAbsent, synchronized maps), so none is
-            // left half-written by the unwinding; the evaluation's own state is discarded with it.
+            // caches touched on the way are updated atomically (putIfAbsent, synchronized maps) and an in-flight
+            // load is released in a finally block, so none is left half-written by the unwinding; the
+            // evaluation's own state is discarded with it.
             errors.add(
                 ValidationError(path, "Validation ran out of stack before reaching maxValidationDepth ($maxValidationDepth); use a lower limit or a larger thread stack", "depth", ""),
             )

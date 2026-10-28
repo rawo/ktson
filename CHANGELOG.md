@@ -56,6 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking verdict change:** an absolute `$ref` to the root's own `JsonSchema.baseUri` (`https://ex.com/root#/$defs/n` with that
   `baseUri` and no `$id`) resolves to the schema being validated instead of failing or calling
   `schemaLoader` (#53).
+- A `schemaLoader` may validate through the same validator: loading another URI from inside the loader no
+  longer throws `IllegalStateException: Recursive update` when the two URIs' hashes collide, and the loader
+  no longer runs while a cache bin is locked. A nested validation that needs the URI still being loaded
+  sees it as unresolvable instead of deadlocking (#55).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the
