@@ -82,6 +82,9 @@ internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?
     /** Loads in progress, so concurrent callers needing the same URI wait for one load instead of each calling the loader. */
     private val inFlight = java.util.concurrent.ConcurrentHashMap<String, Load>()
 
+    /** Thread -> the load it is waiting for: the wait-for graph used to refuse a wait that would close a cycle (#63). Guarded by itself. */
+    private val waitingFor = java.util.IdentityHashMap<Thread, Load>()
+
     /**
      * One load of one URI, run by [owner]; others wait on [done] and then see the same outcome: [result],
      * or [failure] if the loader threw (#65). Both are written before [done] is released.
@@ -106,8 +109,9 @@ internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?
      * validation may try again.
      *
      * The loader runs outside any map operation, so it may itself validate through the same validator and
-     * load other URIs (#55). If it needs the URI it is loading, that URI is unresolvable for the nested
-     * validation: waiting for itself would never end.
+     * load other URIs (#55). If it needs a URI whose load is waiting, directly or through other threads' loads,
+     * for the load it is running, that URI is unresolvable for the nested validation: the wait would never end
+     * (#55 for one thread, #63 across threads).
      */
     fun load(uri: String): JsonElement? {
         schemaCache[uri]?.let { return it }
@@ -115,8 +119,17 @@ internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?
         val load = Load(Thread.currentThread())
         val running = inFlight.putIfAbsent(uri, load)
         if (running != null) {
-            if (running.owner === Thread.currentThread()) return null
-            awaitUninterruptibly(running.done)
+            val current = Thread.currentThread()
+            synchronized(waitingFor) {
+                // Waiting would never end if the load's owner is (transitively) waiting for this thread
+                if (leadsBackTo(running, current)) return null
+                waitingFor[current] = running
+            }
+            try {
+                awaitUninterruptibly(running.done)
+            } finally {
+                synchronized(waitingFor) { waitingFor.remove(current) }
+            }
             // The waiters of one load share its outcome: a loader exception is not turned into "not found"
             running.failure?.let { throw it }
             return running.result
@@ -133,6 +146,21 @@ internal class SchemaStore(private val schemaLoader: ((String) -> JsonElement?)?
             inFlight.remove(uri, load)
             load.done.countDown()
         }
+    }
+
+    /**
+     * Whether waiting for [load] would wait for [thread] itself: its owner is [thread], or is waiting for a load
+     * that leads back to it. Finished loads are not followed, since waiting for them ends at once. The caller
+     * holds the [waitingFor] lock, so two threads cannot both decide to wait for each other.
+     */
+    private fun leadsBackTo(load: Load, thread: Thread): Boolean {
+        val visited = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Load, Boolean>())
+        var next: Load? = load
+        while (next != null && next.done.count > 0 && visited.add(next)) {
+            if (next.owner === thread) return true
+            next = waitingFor[next.owner]
+        }
+        return false
     }
 
     /** Waits for [latch] without abandoning the wait on interrupt; the interrupt status is restored afterwards. */

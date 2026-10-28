@@ -143,7 +143,7 @@ validate()
 - **FormatAssertionOptionTest.kt** - 4 tests: `formatAssertion` true asserts and false does not, in both drafts
 - **SchemaMetadataTest.kt** - 10 tests: non-string `$id`/`$schema` construct, are reported by `validateSchema` and never make `validate()` throw
 - **DynamicRefResourceTest.kt** - 7 tests: `$dynamicRef` targets evaluated in their own resource; percent-encoded anchors keep the dynamic override; id-less roots and loaded documents are in the dynamic scope
-- **ConcurrentLoadingTest.kt** - 6 tests: one `schemaLoader` call per URI under concurrency; loaders may validate through the same validator (#55); waiters rethrow the loader's exception (#65)
+- **ConcurrentLoadingTest.kt** - 7 tests: one `schemaLoader` call per URI under concurrency; loaders may validate through the same validator (#55); waiters rethrow the loader's exception (#65); load cycles across threads are broken (#63)
 - **ValidateSchemaWorkerTest.kt** - 3 tests: the `validateSchema` worker inherits no thread-locals and never outlives an interrupted call
 - **IndeterminateResultTest.kt** - 17 tests: undecided results (depth limit, unevaluable regex) are never inverted into Valid
 - **EcmaPatternTest.kt** - 44 tests: ECMA 262 semantics of `\s`, `\S`, `\c`, `$`, `.` and `\p` aliases in `pattern`
@@ -294,7 +294,9 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - External schemas resolved via `schemaLoader: ((String) -> JsonElement?)?` on `JsonValidator`
 - Schema cache: `SchemaStore` (per validator, shared by its validations): `ConcurrentHashMap<String, JsonElement>` keyed by absolute URI.
   Loads are single-flight through per-URI in-flight records; never call `schemaLoader` inside a map callback
-  (`computeIfAbsent`): a loader may validate through the same validator (#55)
+  (`computeIfAbsent`): a loader may validate through the same validator (#55). Before waiting for a load, a thread
+  checks the wait-for graph (`waitingFor`, `leadsBackTo()`) under its lock; a wait that would close a cycle makes the
+  URI unresolvable instead (#63)
 - Absolute URI tracking: `IdentityHashMap<JsonElement, String>` in the per-validation `ReferenceResolver`. It must stay
   per validation: one element can be validated under different `JsonSchema.baseUri`s (#37)
 - `resourceRoot` passed through recursive calls so fragment refs resolve in the correct document

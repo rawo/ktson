@@ -111,6 +111,31 @@ class ConcurrentLoadingTest :
                 nested shouldBe listOf(false)
             }
 
+            it("breaks a load cycle between two threads instead of waiting forever (#63)") {
+                // The loader for A validates a ref to B and vice versa, on two threads at once: each owns one load
+                // and needs the other's. One of them must see its URI as unresolvable, so both finish.
+                val bothEntered = CountDownLatch(2)
+                val nested = java.util.Collections.synchronizedList(mutableListOf<Boolean>())
+                lateinit var validator: JsonValidator
+                validator = JsonValidator(schemaLoader = { uri ->
+                    bothEntered.countDown()
+                    bothEntered.await(10, TimeUnit.SECONDS)
+                    val other = if (uri.endsWith("/a")) "https://ex.com/b" else "https://ex.com/a"
+                    nested += validator.validate(JsonPrimitive(1), JsonSchema.fromString("""{"${'$'}ref":"$other"}""")).isValid
+                    Json.parseToJsonElement("true")
+                })
+                val outer = java.util.Collections.synchronizedList(mutableListOf<Boolean>())
+                val threads = listOf("https://ex.com/a", "https://ex.com/b").map { uri ->
+                    Thread { outer += validator.validate(JsonPrimitive(1), JsonSchema.fromString("""{"${'$'}ref":"$uri"}""")).isValid }
+                        .apply { isDaemon = true } // a deadlock must not keep the test JVM alive
+                }
+                threads.forEach { it.start() }
+                threads.forEach { it.join(10_000) }
+                threads.map { it.isAlive } shouldBe listOf(false, false)
+                outer.toList() shouldBe listOf(true, true)
+                nested.toList().sorted() shouldBe listOf(false, true)
+            }
+
             it("lets a later validation load a URI whose loader threw") {
                 val loads = AtomicInteger()
                 val validator = JsonValidator(schemaLoader = {

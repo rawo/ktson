@@ -94,6 +94,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Validations waiting for a remote schema that another validation is loading now rethrow the `schemaLoader`'s
   exception, as the loading validation does; they used to report the reference as unresolvable, turning an
   I/O or authentication failure into a validation verdict (#65).
+- Two validations whose `schemaLoader`s need each other's URI on different threads no longer deadlock: a wait
+  that would close a cycle of loads makes that URI unresolvable for the nested validation, as a loader needing
+  its own URI already did (#63).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the
