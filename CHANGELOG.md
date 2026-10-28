@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `schemaLoader` now receives `https://b.example/value` for the second base instead of the first
   base's `https://a.example/value` (#37). A live validator also no longer keeps every schema with
   `$id` it has validated.
+- **Breaking verdict change:** `formatAssertion = false` now turns off `format` assertion for Draft 2019-09
+  too; it was ignored there, so invalid formats were still rejected (#61).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the

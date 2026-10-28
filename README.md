@@ -429,7 +429,7 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
    - See [docs/STACK_OVERFLOW_RISK_ANALYSIS.md](docs/STACK_OVERFLOW_RISK_ANALYSIS.md) for historical analysis
 
 2. **Format Validation**
-   - Assertion mode only (no annotation-only mode yet)
+   - Asserted by default; `formatAssertion = false` makes `format` an annotation in both drafts
    - IDNA validation (`hostname`, `idn-hostname`, `idn-email`) passes the official suite, but decides
      code point validity from Unicode categories plus the RFC 5892 §2.6 exception list rather than the
      IDNA derived-property table, which the JDK does not expose. `Joining_Type` is approximated by
@@ -511,7 +511,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 859 tests (100% passing)
+- **Custom Tests**: 863 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -528,6 +528,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - `unevaluated*` across schema resources: 6 tests
   - Validator lifecycle (garbage collection, bounded caches): 3 tests
   - Bounded cache: 4 tests
+  - `formatAssertion` option in both drafts: 4 tests
   - Output-tests runner file discovery: 4 tests
   - Java interop for output formats: 2 tests
   - Java interop for the core API: 10 tests

@@ -978,12 +978,10 @@ class JsonValidator @JvmOverloads constructor(
             }
         }
 
-        // Format (basic validation)
-        // In 2020-12, format is an annotation by default unless formatAssertion is enabled
-        schema[FORMAT]?.jsonPrimitive?.contentOrNull?.let { format ->
-            if (formatAssertion || version == SchemaVersion.DRAFT_2019_09) {
-                validateFormat(value, format, path, schemaPath, errors)
-            }
+        // Format asserts only when formatAssertion is on, in every draft: both drafts make it an annotation
+        // by default, and a caller who turns assertion off has opted out (#61).
+        if (formatAssertion) {
+            schema[FORMAT]?.jsonPrimitive?.contentOrNull?.let { format -> validateFormat(value, format, path, schemaPath, errors) }
         }
     }
 

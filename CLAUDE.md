@@ -137,6 +137,7 @@ validate()
 - **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
 - **OutputFormatTest.kt** - 40 tests for the Flag, Basic and Detailed output formats
 - **ValidatorLifecycleTest.kt** - 3 tests: a dropped validator frees its schema, remote schemas and caches; a live one does not keep schemas with `$id` it validated, and its pattern and numeric-limit caches stay bounded
+- **FormatAssertionOptionTest.kt** - 4 tests: `formatAssertion` true asserts and false does not, in both drafts
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 28 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
@@ -208,7 +209,7 @@ for both drafts. Decimal validation costs more than approximate `Double` arithme
 
 ### 4. Other Notes
 - API is synchronous (migrated from async coroutines)
-- Format validation in assertion mode only
+- `format` asserts only when `formatAssertion` is true (the default), in both drafts (#61)
 - Thread-safe (immutable validator configuration; `SchemaStore` holds the concurrent per-validator remote-schema cache, and each validation gets its own `Evaluation`)
 - No global state: every cache is an instance field, so a dropped validator is fully collectible (`ValidatorLifecycleTest`)
 - Caches keyed by schema content (`patternCache`, `numericLimitCache`) are `BoundedCache`s (1,024 entries each); the
@@ -288,7 +289,7 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - `$id`, `$anchor` and `$dynamicAnchor` count only when their value is a string (`stringKeyword()`): a property may be named `$id`
 
 ### Format Validation
-- Format validation controlled by `formatAssertion` constructor parameter (default: true)
+- Format validation controlled by `formatAssertion` constructor parameter (default: true); `false` makes it an annotation in both drafts
 - Currently supported (19): email, uri, uri-reference, uri-template, date, time, date-time, duration, ipv4, ipv6, uuid, hostname, idn-hostname, idn-email, iri, iri-reference, json-pointer, relative-json-pointer, regex
 - Formats are validated in `validateFormat()` method
 - Add new formats by extending the when expression in `validateFormat()`
