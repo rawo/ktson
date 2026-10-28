@@ -45,6 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   too; it was ignored there, so invalid formats were still rejected (#61).
 - A query-only reference keeps the base path: `?new` against `https://ex.com/a/b?old` resolves to
   `https://ex.com/a/b?new`, not `https://ex.com/a/?new`, so `$ref: "?v=2"` loads the right document (#58).
+- A non-string `$id` or `$schema` (`{"$id":{}}`, `{"$schema":[]}`) no longer makes `JsonSchema` or
+  `validate()` throw: `validateSchema` reports it at `/$id` or `/$schema`, and validation ignores it.
+  `JsonSchema.id`, `schemaUri` and `extractId` return null for a non-string value, including a number (#57).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the

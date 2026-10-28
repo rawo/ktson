@@ -11,14 +11,15 @@ data class JsonSchema @JvmOverloads constructor(
     val baseUri: String = "",
 ) {
     /**
-     * Gets the $schema property if present
+     * The $schema property, or null when it is absent or not a string. A malformed value does not stop
+     * the schema from being constructed: [JsonValidator.validateSchema] reports it.
      */
-    val schemaUri: String? = (schema as? JsonObject)?.get(SchemaKeywords.SCHEMA)?.jsonPrimitive?.contentOrNull
+    val schemaUri: String? = (schema as? JsonObject)?.stringKeyword(SchemaKeywords.SCHEMA)
 
     /**
-     * Gets the $id property if present (canonical URI for this schema)
+     * The $id property (canonical URI for this schema), or null when it is absent or not a string.
      */
-    val id: String? = (schema as? JsonObject)?.get(SchemaKeywords.ID)?.jsonPrimitive?.contentOrNull
+    val id: String? = extractId(schema)
 
     /**
      * Detects the schema version from the $schema property
@@ -75,9 +76,9 @@ data class JsonSchema @JvmOverloads constructor(
         ): JsonSchema = JsonSchema(element, defaultVersion, baseUri)
 
 		/**
-		 * Extracts the $id value from a schema element if present.
+		 * Extracts the $id value from a schema element, or null when it is absent or not a string.
 		 */
 		@JvmStatic
-		fun extractId(element: JsonElement): String? = (element as? JsonObject)?.get(SchemaKeywords.ID)?.jsonPrimitive?.contentOrNull
+		fun extractId(element: JsonElement): String? = (element as? JsonObject)?.stringKeyword(SchemaKeywords.ID)
     }
 }

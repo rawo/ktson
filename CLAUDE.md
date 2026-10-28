@@ -138,6 +138,7 @@ validate()
 - **OutputFormatTest.kt** - 40 tests for the Flag, Basic and Detailed output formats
 - **ValidatorLifecycleTest.kt** - 3 tests: a dropped validator frees its schema, remote schemas and caches; a live one does not keep schemas with `$id` it validated, and its pattern and numeric-limit caches stay bounded
 - **FormatAssertionOptionTest.kt** - 4 tests: `formatAssertion` true asserts and false does not, in both drafts
+- **SchemaMetadataTest.kt** - 10 tests: non-string `$id`/`$schema` construct, are reported by `validateSchema` and never make `validate()` throw
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 28 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
@@ -286,7 +287,7 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - When adding new ref types, update `ReferenceResolver` in `JsonPointer.kt` and `resolveReferences()` in `JsonValidator.kt`
 - The root's absolute base (`JsonSchema.absoluteBaseUri()`: absolute `$id`, else `$id` resolved against `baseUri`, else `baseUri`) is registered before validation, so `schemaLoader` receives absolute URIs
 - `$id` registrations only improve: an absolute URI is never replaced by a relative one, and a registered resource is not re-resolved (its relative `$id` would otherwise nest again)
-- `$id`, `$anchor` and `$dynamicAnchor` count only when their value is a string (`stringKeyword()`): a property may be named `$id`
+- `$id`, `$anchor`, `$dynamicAnchor` and `$schema` count only when their value is a string (`stringKeyword()`): a property may be named `$id`, and a malformed value is left to `validateSchema` (#57)
 
 ### Format Validation
 - Format validation controlled by `formatAssertion` constructor parameter (default: true); `false` makes it an annotation in both drafts

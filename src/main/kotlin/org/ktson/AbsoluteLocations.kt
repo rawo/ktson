@@ -175,7 +175,7 @@ internal class AbsoluteLocations(private val referenceResolver: ReferenceResolve
     /** The frame for [child] at [pointer]; a child with its own `$id` starts a new resource at pointer "". */
     private fun childFrame(parent: Frame, child: JsonElement, pointer: String): Frame {
         // A `$id` key holding an object is a property named "$id" (e.g. under `properties`), not an identifier.
-        val childId = ((child as? JsonObject)?.get(SchemaKeywords.ID) as? JsonPrimitive)?.contentOrNull ?: return Frame(child, parent.uri, parent.resource, pointer)
+        val childId = (child as? JsonObject)?.stringKeyword(SchemaKeywords.ID) ?: return Frame(child, parent.uri, parent.resource, pointer)
         val uri = resourceUri(child) ?: parent.uri?.let { runCatching { UriResolver.resolveUri(it, childId) }.getOrNull() }
         return Frame(child, uri?.substringBefore('#')?.takeIf { isAbsolute(it) }, child, "")
     }

@@ -280,7 +280,7 @@ class JsonValidator @JvmOverloads constructor(
         // Register the absolute URI for new resource roots so relative $id and missing-$id schemas
         // resolve subsequent relative $refs correctly (e.g. base URI change, nested remote refs).
         if (schemaElement is JsonObject && schemaElement.containsKey(SchemaKeywords.ID)) {
-            val rawId = schemaElement[SchemaKeywords.ID]?.jsonPrimitive?.contentOrNull ?: ""
+            val rawId = schemaElement.stringKeyword(SchemaKeywords.ID) ?: ""
             // A resource's absolute URI is fixed by where it sits in its document. Once registered, keep
             // it: re-resolving its relative $id against itself (it can be its own resourceRoot) would
             // nest it again, e.g. "nested/n.json" -> ".../nested/nested/n.json".
