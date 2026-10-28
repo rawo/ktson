@@ -373,6 +373,9 @@ internal class ReferenceResolver(private val store: SchemaStore) {
             // Compare resolved URIs. A raw $id match is accepted only when there is no absolute URI to compare:
             // two resources may share a relative $id under different bases (a/target and b/target).
             if (id != null && (currentUri == resolvedTarget || (id == originalTarget && !isAbsolute(currentUri)))) return node.element
+            // A root without $id is still identified by the base it was registered with, such as
+            // JsonSchema.baseUri, so an absolute reference to that URI finds it (#53).
+            if (id == null && node.isRoot && isAbsolute(currentUri) && currentUri == resolvedTarget) return node.element
             node.element.pushSubschemas(node.isSchema, pending, currentUri)
         }
         return null

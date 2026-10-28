@@ -7,7 +7,7 @@ import kotlinx.serialization.json.Json
 /** How $ref values are turned into targets: percent-decoding of pointer fragments and base URIs. */
 class ReferenceResolutionTest :
     DescribeSpec({
-        fun isValid(schemaJson: String, instanceJson: String, version: SchemaVersion): Boolean = JsonValidator().validate(Json.parseToJsonElement(instanceJson), JsonSchema.fromString(schemaJson, version)).isValid
+        fun isValid(schemaJson: String, instanceJson: String, version: SchemaVersion, baseUri: String = ""): Boolean = JsonValidator().validate(Json.parseToJsonElement(instanceJson), JsonSchema.fromString(schemaJson, version, baseUri)).isValid
 
         SchemaVersion.entries.forEach { version ->
             describe("$version percent-encoded pointer fragments") {
@@ -88,6 +88,13 @@ class ReferenceResolutionTest :
                 it("lets an absolute root \$id take precedence over baseUri") {
                     requested("""{"${'$'}id":"https://other.org/s/root.json","${'$'}ref":"x.json"}""", "https://ex.com/schemas/", "\"x\"") shouldBe
                         listOf("https://other.org/s/x.json")
+                }
+
+                it("finds the root by its baseUri in an absolute self-reference when it has no \$id (#53)") {
+                    val schema = """{"${'$'}defs":{"n":{"type":"integer"}},"${'$'}ref":"https://ex.com/root#/${'$'}defs/n"}"""
+                    isValid(schema, "1", version, "https://ex.com/root") shouldBe true
+                    isValid(schema, "\"x\"", version, "https://ex.com/root") shouldBe false
+                    requested(schema, "https://ex.com/root", "1", "\"x\"") shouldBe emptyList()
                 }
 
                 it("still passes the reference unchanged when there is neither \$id nor baseUri") {

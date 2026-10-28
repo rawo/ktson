@@ -53,6 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instances the outer schema rejects (#60).
 - **Breaking verdict change:** `uri`, `uri-reference`, `iri` and `iri-reference` reject a second `#`
   (`https://example.com/a#b#c`) and IPvFuture hosts that break RFC 3986 §3.2.2 (`[v1.]`, `[v1.a^b]`) (#59).
+- **Breaking verdict change:** an absolute `$ref` to the root's own `JsonSchema.baseUri` (`https://ex.com/root#/$defs/n` with that
+  `baseUri` and no `$id`) resolves to the schema being validated instead of failing or calling
+  `schemaLoader` (#53).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the
