@@ -25,4 +25,20 @@ class IdnEmailTest :
                 }
             }
         }
+
+        describe("quoted local part in email and idn-email (#72)") {
+            fun isValid(value: String, format: String): Boolean = JsonValidator().validate(JsonPrimitive(value), JsonSchema.fromString("""{"format":"$format"}""")).isValid
+
+            listOf("email", "idn-email").forEach { format ->
+                listOf("\"a\tb\"@example.com", "\"a\\\tb\"@example.com", "\"a\u007Fb\"@example.com", "\"a\\\u007Fb\"@example.com", "\"a\\\u00E9\"@example.com").forEach { value ->
+                    it("$format rejects ${JsonPrimitive(value)}") { isValid(value, format) shouldBe false }
+                }
+                listOf("\"a b\"@example.com", "\"a\\\"b\"@example.com", "\"a\\ b\"@example.com", "\"a@b\"@example.com", "\"\"@example.com").forEach { value ->
+                    it("$format accepts ${JsonPrimitive(value)}") { isValid(value, format) shouldBe true }
+                }
+            }
+
+            it("email rejects a non-ASCII character in a quoted local part") { isValid("\"\u00E9\"@example.com", "email") shouldBe false }
+            it("idn-email accepts a non-ASCII character in a quoted local part") { isValid("\"\u00E9\"@example.com", "idn-email") shouldBe true }
+        }
     })

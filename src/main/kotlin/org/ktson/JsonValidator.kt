@@ -1176,7 +1176,7 @@ class JsonValidator @JvmOverloads constructor(
             val closeQuote = findClosingQuote(value) ?: return false
             if (closeQuote + 1 >= value.length || value[closeQuote + 1] != '@') return false
             val domain = value.substring(closeQuote + 2)
-            isValidEmailLocalQuoted(value.substring(1, closeQuote)) && domain.isNotEmpty() && isValidEmailDomain(domain)
+            isValidEmailLocalQuoted(value.substring(1, closeQuote), allowNonAscii = false) && domain.isNotEmpty() && isValidEmailDomain(domain)
         } else {
             val atIdx = value.lastIndexOf('@')
             if (atIdx <= 0) return false
@@ -1199,17 +1199,21 @@ class JsonValidator @JvmOverloads constructor(
         return null
     }
 
-    private fun isValidEmailLocalQuoted(local: String): Boolean {
+    /**
+     * The content of an RFC 5321 Quoted-string: qtextSMTP (ASCII graphic characters and space, except `"` and
+     * backslash) and quoted-pairSMTP (a backslash and an ASCII graphic character or space). Neither admits a tab. With
+     * [allowNonAscii], RFC 6531's extension for idn-email also admits non-ASCII qtext, but not escaped (#72).
+     */
+    private fun isValidEmailLocalQuoted(local: String, allowNonAscii: Boolean): Boolean {
         var i = 0
         while (i < local.length) {
             val c = local[i]
             if (c == '\\') {
-                // quoted-pair may only escape an ASCII VCHAR or WSP
                 val escaped = local.getOrNull(i + 1) ?: return false
-                if (escaped.code > 127 || (escaped.code < 0x20 && escaped != '\t')) return false
+                if (escaped.code !in 0x20..0x7E) return false
                 i += 2
             } else {
-                if (c == '"' || c.code == 0x7F || (c.code < 0x20 && c != '\t')) return false
+                if (c == '"' || !(c.code in 0x20..0x7E || (allowNonAscii && c.code > 0x7F))) return false
                 i++
             }
         }
@@ -1665,7 +1669,7 @@ class JsonValidator @JvmOverloads constructor(
         val (localIsValid, domain) = if (value.startsWith('"')) {
             val closeQuote = findClosingQuote(value) ?: return false
             if (closeQuote + 1 >= value.length || value[closeQuote + 1] != '@') return false
-            isValidEmailLocalQuoted(value.substring(1, closeQuote)) to value.substring(closeQuote + 2)
+            isValidEmailLocalQuoted(value.substring(1, closeQuote), allowNonAscii = true) to value.substring(closeQuote + 2)
         } else {
             val atIdx = value.lastIndexOf('@')
             if (atIdx <= 0) return false

@@ -517,7 +517,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 1056 tests (100% passing)
+- **Custom Tests**: 1094 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -535,6 +535,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Validator lifecycle (garbage collection, bounded caches): 3 tests
   - Undecided results under `not`, `if`, `oneOf` and `maxContains`: 17 tests
   - ECMA 262 `pattern` dialect (whitespace, `\c`, `$`, `.`, `\p` aliases): 44 tests
+  - `email` / `idn-email` local parts (dot-atom, quoted string): 38 tests
   - Bounded cache: 4 tests
   - `validateSchema` worker thread (thread-locals, interrupts): 3 tests
   - Remote loading (single flight, reentrant and failing loaders, load cycles): 7 tests

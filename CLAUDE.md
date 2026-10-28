@@ -148,6 +148,7 @@ validate()
 - **ValidateSchemaWorkerTest.kt** - 3 tests: the `validateSchema` worker inherits no thread-locals and never outlives an interrupted call
 - **IndeterminateResultTest.kt** - 17 tests: undecided results (depth limit, unevaluable regex) are never inverted into Valid
 - **EcmaPatternTest.kt** - 44 tests: ECMA 262 semantics of `\s`, `\S`, `\c`, `$`, `.` and `\p` aliases in `pattern`
+- **IdnEmailTest.kt** - 38 tests: `email`/`idn-email` local parts; quoted strings follow RFC 5321 qtext/quoted-pair (no tab), non-ASCII only for idn-email
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 36 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
