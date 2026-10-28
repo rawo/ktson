@@ -90,6 +90,19 @@ class ReferenceResolutionTest :
                         listOf("https://other.org/s/x.json")
                 }
 
+                it("resolves refs under an \$id with an IPvFuture host (#71)") {
+                    val asked = mutableListOf<String>()
+                    val validator = JsonValidator(schemaLoader = { uri ->
+                        asked += uri
+                        Json.parseToJsonElement("""{"type":"integer"}""")
+                    })
+                    val schema = JsonSchema.fromString("""{"${'$'}id":"https://[v1.example]/root","${'$'}ref":"child"}""", version)
+                    validator.validateSchema(schema).isValid shouldBe true
+                    validator.validate(Json.parseToJsonElement("1"), schema).isValid shouldBe true
+                    validator.validate(Json.parseToJsonElement("\"x\""), schema).isValid shouldBe false
+                    asked shouldBe listOf("https://[v1.example]/child")
+                }
+
                 it("finds the root by its baseUri in an absolute self-reference when it has no \$id (#53)") {
                     val schema = """{"${'$'}defs":{"n":{"type":"integer"}},"${'$'}ref":"https://ex.com/root#/${'$'}defs/n"}"""
                     isValid(schema, "1", version, "https://ex.com/root") shouldBe true

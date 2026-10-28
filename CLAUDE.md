@@ -87,6 +87,9 @@ The validator architecture is straightforward with minimal abstractions:
    - Resolves reference URIs against base URIs, used when following `$id`/`$ref` chains
    - `resolveUri()` implements RFC 3986 §5.2 on raw components itself; never delegate to `java.net.URI.resolve`
      (RFC 2396: drops the last segment for `?q`, collapses `//`, ignores opaque bases)
+   - Parsing uses `UriSyntax` (`UriSyntax.kt`), the same grammar as the `uri`/`iri` formats; `src/main` does not use
+     `java.net.URI` at all, whose host grammar rejects valid IPvFuture hosts (#71). Invalid input throws
+     `URISyntaxException`
 
 7. **SchemaVersion** (`SchemaVersion.kt`) - Enum of supported drafts (`DRAFT_2019_09`, `DRAFT_2020_12`)
 
@@ -134,7 +137,7 @@ validate()
 - **Draft202012ValidationTest.kt** - 54 tests for Draft 2020-12 features
 - **EdgeCaseAndThreadSafetyTest.kt** - 39 edge case and concurrency tests
 - **FormatValidationTest.kt** - 330 tests covering all supported format validators
-- **UriResolverTest.kt** - 84 tests for RFC 3986 URI resolution, including every §5.4 example and empty path segments
+- **UriResolverTest.kt** - 88 tests for RFC 3986 URI resolution, including every §5.4 example and empty path segments
 - **DepthLimitTest.kt** - 16 tests for `maxValidationDepth` protection
 - **ErrorMessageTest.kt** - 32 tests for error content (instance path, keyword, keyword location, wording)
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
@@ -150,7 +153,7 @@ validate()
 - **EcmaPatternTest.kt** - 44 tests: ECMA 262 semantics of `\s`, `\S`, `\c`, `$`, `.` and `\p` aliases in `pattern`
 - **IdnEmailTest.kt** - 38 tests: `email`/`idn-email` local parts; quoted strings follow RFC 5321 qtext/quoted-pair (no tab), non-ASCII only for idn-email
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
-- **ReferenceResolutionTest.kt** - 36 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
+- **ReferenceResolutionTest.kt** - 38 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
 - **UnevaluatedAcrossResourcesTest.kt** - 6 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated
 - **AbsoluteKeywordLocationTest.kt** - 45 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs

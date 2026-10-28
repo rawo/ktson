@@ -1,11 +1,12 @@
 package org.ktson
 
-import java.net.URI
 import java.net.URISyntaxException
 
 /**
  * URI resolution utilities for JSON Schema references
- * Implements RFC 3986 URI resolution
+ * Implements RFC 3986 URI resolution. URIs are parsed with [UriSyntax], the grammar the uri and iri formats
+ * check, not java.net.URI: its host grammar is narrower (it rejects IPvFuture hosts such as "[v1.example]"),
+ * so a schema could pass validateSchema and then fail resolution (#71).
  */
 object UriResolver {
 
@@ -31,10 +32,10 @@ object UriResolver {
             return normalizeUri(refUri)
         }
 
-        // Parse both first, so syntax errors propagate as URISyntaxException
-        URI(baseUri)
-        if (isAbsoluteUri(refUri)) return normalizeUri(refUri)
-        return normalizeUri(resolveComponents(UriParts.of(baseUri), UriParts.of(refUri)).toString())
+        val base = parse(baseUri)
+        val ref = parse(refUri)
+        if (ref.scheme != null) return normalizeUri(refUri)
+        return normalizeUri(resolveComponents(base, ref).toString())
     }
 
     /**
@@ -54,6 +55,15 @@ object UriResolver {
         base.authority != null && base.path.isEmpty() -> "/$refPath"
         '/' in base.path -> base.path.substring(0, base.path.lastIndexOf('/') + 1) + refPath
         else -> refPath
+    }
+
+    /**
+     * [uri] split into its components, or a URISyntaxException if it is not an RFC 3986 URI reference
+     * (non-ASCII characters are allowed, as in IRIs).
+     */
+    private fun parse(uri: String): UriParts {
+        if (!UriSyntax.isValidUriLike(uri, requireScheme = false, allowUcs = true)) throw URISyntaxException(uri, "Not an RFC 3986 URI reference")
+        return UriParts.of(uri)
     }
 
     /** The five raw components of a URI reference, split as RFC 3986 Appendix B does; nothing is decoded. */
@@ -78,8 +88,7 @@ object UriResolver {
      */
     fun isAbsoluteUri(uri: String): Boolean {
         if (uri.isEmpty()) return false
-        val parsed = URI(uri)
-        return parsed.isAbsolute
+        return parse(uri).scheme != null
     }
 
     /**
@@ -97,32 +106,25 @@ object UriResolver {
     fun normalizeUri(uri: String, removeFragment: Boolean = false): String {
         if (uri.isEmpty()) return uri
 
-        val parsed = URI(uri)
-        val fragment = if (removeFragment) null else parsed.rawFragment
+        val parts = parse(uri)
+        val scheme = parts.scheme?.lowercase()
+        val fragment = if (removeFragment) null else parts.fragment
+        // An opaque URI (a scheme and no "//" authority or "/" path, such as a URN) is kept whole
+        if (scheme != null && parts.authority == null && !parts.path.startsWith("/")) return buildUri(scheme, null, parts.path, parts.query, fragment)
 
-        if (parsed.isOpaque) {
-            return buildString {
-                append(parsed.scheme.lowercase()).append(':').append(parsed.rawSchemeSpecificPart)
-                fragment?.let { append('#').append(it) }
-            }
-        }
-
-        val scheme = parsed.scheme?.lowercase()
-        val authority = parsed.rawAuthority?.let { normalizeAuthority(parsed, it) }
-        val rawPath = parsed.rawPath ?: ""
+        val authority = parts.authority?.let { normalizeAuthority(it) }
         // Dot segments are removed from absolute paths; a relative reference keeps its leading ".." for resolution.
-        val path = if (scheme != null || authority != null || rawPath.startsWith("/")) removeDotSegments(rawPath) else rawPath
-        return buildUri(scheme, authority, path, parsed.rawQuery, fragment)
+        val path = if (scheme != null || authority != null || parts.path.startsWith("/")) removeDotSegments(parts.path) else parts.path
+        return buildUri(scheme, authority, path, parts.query, fragment)
     }
 
-    /** Lowercases the host only; user info and port are kept as written. A registry-based authority is left alone. */
-    private fun normalizeAuthority(parsed: URI, rawAuthority: String): String {
-        val host = parsed.host ?: return rawAuthority
-        return buildString {
-            parsed.rawUserInfo?.let { append(it).append('@') }
-            append(host.lowercase())
-            if (parsed.port != -1) append(':').append(parsed.port)
-        }
+    /** Lowercases the host only (an IP literal included); user info and port are kept as written. */
+    private fun normalizeAuthority(authority: String): String {
+        val at = authority.lastIndexOf('@')
+        val userInfo = if (at >= 0) authority.substring(0, at + 1) else ""
+        val hostAndPort = authority.substring(at + 1)
+        val hostEnd = if (hostAndPort.startsWith('[')) hostAndPort.indexOf(']') + 1 else hostAndPort.lastIndexOf(':').takeIf { it >= 0 } ?: hostAndPort.length
+        return userInfo + hostAndPort.substring(0, hostEnd).lowercase() + hostAndPort.substring(hostEnd)
     }
 
     /** RFC 3986 §5.2.4 remove_dot_segments: "." and ".." are removed, other segments (empty ones too) are kept. */
@@ -198,11 +200,11 @@ object UriResolver {
      * Extracts the fragment from a URI
      *
      * @param uri The URI to extract from
-     * @return The fragment (without #), or null if no fragment
+     * @return The fragment (without #, percent-decoded), or null if no fragment
      */
     fun extractFragment(uri: String): String? {
         if (uri.isEmpty()) return null
-        return URI(uri).fragment
+        return parse(uri).fragment?.let { percentDecode(it) }
     }
 
     /**
@@ -224,8 +226,7 @@ object UriResolver {
      */
     fun parseUri(uri: String): UriComponents {
         require(uri.isNotEmpty()) { "URI must not be empty" }
-        URI(uri) // validates the syntax
-        val parts = UriParts.of(uri)
+        val parts = parse(uri)
         return UriComponents(scheme = parts.scheme, authority = parts.authority, path = parts.path, query = parts.query, fragment = parts.fragment)
     }
 

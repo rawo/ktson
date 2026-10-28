@@ -249,4 +249,28 @@ class UriResolverTest :
 			UriResolver.resolveUri("https://ex.com/a/b#frag", "?new").shouldBe("https://ex.com/a/b?new")
 		}
 	}
+
+	describe("hosts that java.net.URI cannot parse (#71)") {
+		it("resolves a reference against a base with an IPvFuture host") {
+			UriResolver.resolveUri("https://[v1.example]/root", "child").shouldBe("https://[v1.example]/child")
+			UriResolver.resolveUri("https://[v1.example]/a/b", "../c#f").shouldBe("https://[v1.example]/c#f")
+		}
+
+		it("recognises, normalizes and parses an IPvFuture URI") {
+			UriResolver.isAbsoluteUri("https://[v1.example]/root").shouldBeTrue()
+			UriResolver.normalizeUri("HTTPS://[V1.Example]:8080/a/./b/../c").shouldBe("https://[v1.example]:8080/a/c")
+			UriResolver.parseUri("https://[v1.example]/root#f").authority.shouldBe("[v1.example]")
+		}
+
+		it("still lowercases only the host of an authority with user info and port") {
+			UriResolver.normalizeUri("http://User@EXAMPLE.com:80/P").shouldBe("http://User@example.com:80/P")
+			UriResolver.normalizeUri("http://[2001:DB8::1]/").shouldBe("http://[2001:db8::1]/")
+		}
+
+		it("still rejects what RFC 3986 does not allow") {
+			shouldThrow<URISyntaxException> { UriResolver.resolveUri("https://[v1.]/root", "child") }
+			shouldThrow<URISyntaxException> { UriResolver.normalizeUri("https://ex.com/a b") }
+			shouldThrow<URISyntaxException> { UriResolver.isAbsoluteUri("http://[::1") }
+		}
+	}
 })
