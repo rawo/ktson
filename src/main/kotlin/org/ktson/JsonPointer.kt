@@ -262,32 +262,6 @@ internal class ReferenceResolver(private val store: SchemaStore) {
         }
 
     /**
-     * Decode percent-encoded characters in a URI fragment per RFC 3986.
-     * JSON Pointer tokens inside URI fragments must be percent-decoded before
-     * applying the ~0/~1 escape rules (RFC 6901 §6).
-     */
-    private fun percentDecode(s: String): String {
-        if (!s.contains('%')) return s
-        // %XX escapes are UTF-8 bytes (RFC 3986 §2.5): collect them and decode together, so that
-        // "%C3%A9" becomes "é" rather than two Latin-1 characters.
-        val bytes = java.io.ByteArrayOutputStream(s.length)
-        var i = 0
-        while (i < s.length) {
-            val isEscape = s[i] == '%' && i + 2 < s.length && s[i + 1].isHexDigit() && s[i + 2].isHexDigit()
-            val code = if (isEscape) s.substring(i + 1, i + 3).toInt(16) else null
-            if (code != null) {
-                bytes.write(code)
-                i += 3
-            } else {
-                val codePointLength = Character.charCount(s.codePointAt(i))
-                bytes.write(s.substring(i, i + codePointLength).toByteArray(Charsets.UTF_8))
-                i += codePointLength
-            }
-        }
-        return bytes.toString(Charsets.UTF_8)
-    }
-
-    /**
      * Search for a schema with a matching $anchor or $dynamicAnchor within a single schema resource.
      * Stops at nested $id boundaries — those are separate resources and are not searched.
      */
@@ -422,6 +396,33 @@ internal class ReferenceResolver(private val store: SchemaStore) {
  * schema: such a value is not an identifier and must neither throw nor count as one.
  */
 internal fun JsonObject.stringKeyword(keyword: String): String? = (this[keyword] as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+/**
+ * Decode percent-encoded characters in a URI fragment per RFC 3986.
+ * JSON Pointer tokens inside URI fragments must be percent-decoded before
+ * applying the ~0/~1 escape rules (RFC 6901 §6). An anchor name is compared decoded too, so
+ * "#%6Eode" names anchor "node" (#60).
+ */
+internal fun percentDecode(s: String): String {
+    if (!s.contains('%')) return s
+    // %XX escapes are UTF-8 bytes (RFC 3986 §2.5): collect them and decode together, so that
+    // "%C3%A9" becomes "é" rather than two Latin-1 characters.
+    val bytes = java.io.ByteArrayOutputStream(s.length)
+    var i = 0
+    while (i < s.length) {
+        val isEscape = s[i] == '%' && i + 2 < s.length && s[i + 1].isHexDigit() && s[i + 2].isHexDigit()
+        val code = if (isEscape) s.substring(i + 1, i + 3).toInt(16) else null
+        if (code != null) {
+            bytes.write(code)
+            i += 3
+        } else {
+            val codePointLength = Character.charCount(s.codePointAt(i))
+            bytes.write(s.substring(i, i + codePointLength).toByteArray(Charsets.UTF_8))
+            i += codePointLength
+        }
+    }
+    return bytes.toString(Charsets.UTF_8)
+}
 
 private fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
 

@@ -400,11 +400,12 @@ class JsonValidator @JvmOverloads constructor(
         // $dynamicRef exists only in 2020-12; in 2019-09 it is an unknown keyword and is ignored.
         schemaElement[DYNAMIC_REF]?.takeIf { version == SchemaVersion.DRAFT_2020_12 }?.jsonPrimitive?.contentOrNull?.let { dynamicRef ->
             val uriPart = dynamicRef.substringBefore('#')
-            val fragment = if ('#' in dynamicRef) dynamicRef.substringAfter('#') else ""
+            // Decoded as resolveRef decodes it, so every spelling of an anchor gets the same dynamic behavior (#60)
+            val fragment = if ('#' in dynamicRef) percentDecode(dynamicRef.substringAfter('#')) else ""
             val initialTarget = evaluation.references.resolveRef(dynamicRef, if (uriPart.isEmpty()) resourceRoot else evaluation.rootSchema, schemaElement, resourceRoot)
             val isPlainAnchorFragment = fragment.isNotEmpty() && !fragment.startsWith("/")
             val override =
-                if (isPlainAnchorFragment && initialTarget is JsonObject && initialTarget[DYNAMIC_ANCHOR]?.jsonPrimitive?.contentOrNull == fragment) {
+                if (isPlainAnchorFragment && initialTarget is JsonObject && initialTarget.stringKeyword(DYNAMIC_ANCHOR) == fragment) {
                     dynamicScope.firstNotNullOfOrNull { scopeResource -> evaluation.references.findDynamicAnchorInResource(scopeResource, fragment)?.let { it to scopeResource } }
                 } else {
                     null

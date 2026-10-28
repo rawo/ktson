@@ -48,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A non-string `$id` or `$schema` (`{"$id":{}}`, `{"$schema":[]}`) no longer makes `JsonSchema` or
   `validate()` throw: `validateSchema` reports it at `/$id` or `/$schema`, and validation ignores it.
   `JsonSchema.id`, `schemaUri` and `extractId` return null for a non-string value, including a number (#57).
+- **Breaking verdict change:** a `$dynamicRef` whose anchor is percent-encoded (`#%6Eode` for `#node`) now
+  gets the same dynamic-scope override as the plain spelling; it used to skip the override and accept
+  instances the outer schema rejects (#60).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the

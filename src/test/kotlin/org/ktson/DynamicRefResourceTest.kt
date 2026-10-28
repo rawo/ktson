@@ -37,5 +37,17 @@ class DynamicRefResourceTest :
                 isValid(schema, """["x"]""") shouldBe true
                 isValid(schema, "[1]") shouldBe false
             }
+
+            listOf("#node", "#%6Eode", "#%6E%6F%64%65").forEach { fragment ->
+                it("lets the outer dynamic anchor override a \$dynamicRef to '$fragment' (#60)") {
+                    // %6E is an unreserved "n": every spelling names anchor "node", so the root's override applies.
+                    val remote = Json.parseToJsonElement(
+                        """{"${'$'}id":"https://example.com/remote","${'$'}dynamicAnchor":"node","properties":{"child":{"${'$'}dynamicRef":"$fragment"}}}""",
+                    )
+                    val schema = """{"${'$'}id":"https://example.com/root","${'$'}dynamicAnchor":"node","${'$'}ref":"remote","required":["required"]}"""
+                    isValid(schema, """{"required":true,"child":{}}""") { remote } shouldBe false
+                    isValid(schema, """{"required":true,"child":{"required":1}}""") { remote } shouldBe true
+                }
+            }
         }
     })
