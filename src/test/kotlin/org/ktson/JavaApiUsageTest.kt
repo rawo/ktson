@@ -29,6 +29,11 @@ class JavaApiUsageTest :
             it("extractId matches Kotlin") {
                 JavaApiUsage.extractId(schemaJson) shouldBe "https://example.com/s"
             }
+
+            it("SchemaVersion.fromUri is callable as a static method") {
+                JavaApiUsage.versionFromUri("https://json-schema.org/draft/2019-09/schema") shouldBe SchemaVersion.DRAFT_2019_09
+                JavaApiUsage.versionFromUri("https://json-schema.org/draft/2019-09/schema-custom") shouldBe null
+            }
         }
 
         describe("JsonPointer from Java") {

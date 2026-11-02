@@ -40,6 +40,11 @@ public final class JavaApiUsage {
         return JsonSchema.extractId(parse(schemaJson));
     }
 
+    /** SchemaVersion.fromUri without going through Companion. */
+    public static SchemaVersion versionFromUri(String uri) {
+        return SchemaVersion.fromUri(uri);
+    }
+
     /** A validator with format assertion switched off, the trailing arguments left at their defaults. */
     public static boolean isValidWithoutFormatAssertion(String instanceJson, String schemaJson) {
         return new JsonValidator(true, false).validate(instanceJson, schemaJson).isValid();

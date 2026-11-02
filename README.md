@@ -517,7 +517,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 1189 tests (100% passing)
+- **Custom Tests**: 1201 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -547,7 +547,8 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - `$dynamicRef` resources, encoded anchors and dynamic scope: 7 tests
   - Output-tests runner file discovery: 4 tests
   - Java interop for output formats: 2 tests
-  - Java interop for the core API: 10 tests
+  - Java interop for the core API: 11 tests
+  - `$schema` dialect detection: 11 tests
 
 - **Official JSON Schema Test Suite**: 4,462 tests
   - ✅ Passing: 4,462 (100%)

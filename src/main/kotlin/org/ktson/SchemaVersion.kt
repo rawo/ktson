@@ -15,11 +15,15 @@ enum class SchemaVersion(val uri: String, val metaSchemaUri: String) {
     ;
 
     companion object {
+        /**
+         * The draft whose meta-schema [uri] names, or null. Only the exact identifier matches, with or without an
+         * empty fragment ("...#"): another path, query or fragment is a different schema, even when it starts with
+         * a draft's identifier (#81).
+         */
+        @JvmStatic
         fun fromUri(uri: String?): SchemaVersion? {
-            if (uri == null) return null
-            return entries.firstOrNull {
-                uri.startsWith(it.uri) || uri == it.metaSchemaUri
-            }
+            val identifier = uri?.removeSuffix("#") ?: return null
+            return entries.firstOrNull { identifier == it.uri || identifier == it.metaSchemaUri }
         }
     }
 }
