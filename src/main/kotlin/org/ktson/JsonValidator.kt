@@ -278,6 +278,12 @@ class JsonValidator @JvmOverloads constructor(
      */
     private fun List<JsonElement>.entering(resource: JsonElement): List<JsonElement> = if (any { it === resource }) this else this + resource
 
+    /** Whether this is a JSON integer token: an optional minus and digits, with no fraction or exponent. */
+    private fun String.isIntegerToken(): Boolean {
+        val start = if (startsWith('-')) 1 else 0
+        return length > start && (start until length).all { this[it] in '0'..'9' }
+    }
+
     /** Child instance location for an object member or array index (RFC 6901). */
     private fun childOf(path: String, token: String): String = "$path/${JsonPointer.encodeToken(token)}"
 
@@ -613,7 +619,8 @@ class JsonValidator @JvmOverloads constructor(
         is JsonPrimitive if element.isString -> TYPE_STRING
         is JsonPrimitive if element.booleanOrNull != null -> TYPE_BOOLEAN
         is JsonPrimitive -> {
-            if (element.content.toLongOrNull() != null) {
+            // A token of digits alone is an integer, however long: no conversion needed (#84)
+            if (element.content.isIntegerToken() || element.content.toLongOrNull() != null) {
                 TYPE_INTEGER
             } else {
                 val dec = element.content.toBigDecimalOrNull()
@@ -1733,6 +1740,8 @@ class JsonValidator @JvmOverloads constructor(
      */
     private fun validateNumber(instance: JsonPrimitive, schema: JsonObject, path: String, schemaPath: String, errors: MutableList<ValidationError>) {
         if (instance is JsonNull || instance.isString || instance.booleanOrNull != null) return
+        // Converting a long number costs time quadratic in its digits; skip it when no keyword compares values (#84)
+        if (SchemaKeywords.NUMERIC_KEYWORDS.none { it in schema }) return
         val instanceLong = instance.content.toLongOrNull()
         val instanceDec = if (instanceLong == null) instance.content.toBigDecimalOrNull() ?: return else null
         var cachedInstanceDec: BigDecimal? = instanceDec

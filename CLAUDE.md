@@ -159,6 +159,7 @@ validate()
 - **RegexFormatScanTest.kt** - 2 tests: the `regex` format scan recognises ECMA group forms and stays linear (#80)
 - **IdnLabelLengthTest.kt** - 4 tests: the 63-character A-label limit is exact, and oversized labels are rejected before Punycode work (#79)
 - **HostnameBidiTest.kt** - 9 tests: in a Bidi domain `hostname` applies the Bidi rule to ASCII labels too; a valid hostname is a valid idn-hostname (#82)
+- **NumericParsingTest.kt** - 5 tests: numbers are converted only for `SchemaKeywords.NUMERIC_KEYWORDS`; integer tokens are classified without parsing (#84)
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 38 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors

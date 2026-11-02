@@ -123,4 +123,7 @@ object SchemaKeywords {
 
     /** Keywords whose value is instance data, never a schema: a "$id" or "$anchor" inside it is just data. */
     internal val DATA_KEYWORDS = setOf(CONST, ENUM, DEFAULT, EXAMPLES)
+
+    /** Keywords that compare a number's value: without any of them a number needs no Long or BigDecimal conversion. */
+    internal val NUMERIC_KEYWORDS = setOf(MINIMUM, MAXIMUM, EXCLUSIVE_MINIMUM, EXCLUSIVE_MAXIMUM, MULTIPLE_OF)
 }

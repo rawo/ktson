@@ -138,6 +138,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking verdict change:** in a domain with a right-to-left A-label, `hostname` (and the domain of `email`)
   applies the RFC 5893 Bidi rule to plain ASCII labels too, as `idn-hostname` does: `xn--4db.1abc` and
   `xn--4db.123` are rejected (#82).
+- A number is converted to `Long`/`BigDecimal` only when the schema has a numeric keyword (`minimum`, `maximum`,
+  `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`), and `type: integer` recognises a plain digit token without
+  converting it: a 100,000-digit integer against `{}` took about 225 ms, now a few microseconds (#84).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the
