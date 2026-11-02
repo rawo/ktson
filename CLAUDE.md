@@ -156,6 +156,7 @@ validate()
 - **MultipleOfTest.kt** - 4 tests: `multipleOf` stays exact and bounded for compact numbers such as `1e2147483647`
 - **AnyOfEvaluationTest.kt** - 3 tests: `anyOf` stops at the first valid branch; all branches still feed `unevaluated*` (#78)
 - **SchemaVersionTest.kt** - 11 tests: `$schema` selects a draft only for its exact meta-schema identifier (#81)
+- **RegexFormatScanTest.kt** - 2 tests: the `regex` format scan recognises ECMA group forms and stays linear (#80)
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 38 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors

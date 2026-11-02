@@ -1555,13 +1555,14 @@ class JsonValidator @JvmOverloads constructor(
                     i++
                 }
                 c == '(' && !inClass && pattern.startsWith("(?", i) -> {
-                    val rest = pattern.substring(i + 2)
-                    val recognised = rest.startsWith(":") ||
-                        rest.startsWith("=") ||
-                        rest.startsWith("!") ||
-                        rest.startsWith("<=") ||
-                        rest.startsWith("<!") ||
-                        (rest.startsWith("<") && rest.getOrNull(1)?.isLetter() == true)
+                    // Inspected in place: copying the rest of the pattern for each group made the scan quadratic (#80)
+                    val kind = pattern.getOrNull(i + 2)
+                    val recognised = kind == ':' ||
+                        kind == '=' ||
+                        kind == '!' ||
+                        pattern.startsWith("<=", i + 2) ||
+                        pattern.startsWith("<!", i + 2) ||
+                        (kind == '<' && pattern.getOrNull(i + 3)?.isLetter() == true)
                     if (!recognised) return false
                     i += 2
                 }

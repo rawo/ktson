@@ -127,6 +127,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   meta-schema identifiers, optionally with an empty fragment. `https://json-schema.org/draft/2019-09/schema-custom`
   and other identifiers that merely start with one no longer switch a schema to that draft. `fromUri` is now
   `@JvmStatic` (#81).
+- The `regex` format's syntax check no longer copies the rest of the pattern at every `(?` group: 4,096 flat
+  non-capturing groups allocated about 43 MB, now linear (#80).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the
