@@ -273,4 +273,22 @@ class UriResolverTest :
 			shouldThrow<URISyntaxException> { UriResolver.isAbsoluteUri("http://[::1") }
 		}
 	}
+
+	describe("IRI components containing U+2028 and U+2029 (#77)") {
+		listOf('\u2028', '\u2029').forEach { separator ->
+			val name = "U+%04X".format(separator.code)
+			listOf("before${separator}after", "${separator}after").forEach { fragment ->
+				val iri = "https://example.com/p?q=$separator#$fragment"
+				it("keeps the whole fragment and query of an IRI with $name ${if (fragment.first() == separator) "first" else "inside"} its fragment") {
+					val parts = UriResolver.parseUri(iri)
+					parts.query.shouldBe("q=$separator")
+					parts.fragment.shouldBe(fragment)
+					UriResolver.extractFragment(iri).shouldBe(fragment)
+					UriResolver.normalizeUri(iri).shouldBe(iri)
+					UriResolver.resolveUri(iri, "x").shouldBe("https://example.com/x")
+					UriResolver.resolveUri("https://example.com/", "#$fragment").shouldBe("https://example.com/#$fragment")
+				}
+			}
+		}
+	}
 })

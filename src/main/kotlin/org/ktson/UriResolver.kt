@@ -71,10 +71,12 @@ object UriResolver {
         override fun toString(): String = buildUri(scheme, authority, path, query, fragment)
 
         companion object {
-            private val PARTS = Regex("^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\\?([^#]*))?(#(.*))?")
+            // DOT_MATCHES_ALL: a fragment may contain U+2028 and U+2029, which "." skips by default; and the whole
+            // input must match, so no component can be cut short silently (#77)
+            private val PARTS = Regex("(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\\?([^#]*))?(#(.*))?", RegexOption.DOT_MATCHES_ALL)
 
             fun of(uri: String): UriParts {
-                val groups = PARTS.find(uri)!!.groups
+                val groups = checkNotNull(PARTS.matchEntire(uri)) { "Appendix B matches every string" }.groups
                 return UriParts(groups[2]?.value, groups[4]?.value, groups[5]?.value ?: "", groups[7]?.value, groups[9]?.value)
             }
         }
