@@ -118,6 +118,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unpaired surrogates, noncharacters (U+FDD0, U+FFFE, U+1FFFE ...) and the plane-14 tags below U+E1000 are
   rejected, and private-use characters are accepted only in the query. The same rule applies when
   `UriResolver` parses a non-ASCII `$id` or `$ref` (#76).
+- Basic output is flattened in one iterative pass: converting a deep error tree no longer allocates
+  quadratically (a 1,024-level chain took about 8.6 MB) or recurses once per level (#75).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the

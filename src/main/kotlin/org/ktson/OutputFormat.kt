@@ -101,7 +101,7 @@ sealed class OutputFormat<T : ValidationOutput> {
         override fun from(result: ValidationResult): BasicOutput = when (result) {
             is ValidationResult.Valid -> BasicOutput(valid = true, keywordLocation = "", instanceLocation = "")
             is ValidationResult.Invalid ->
-                BasicOutput(valid = false, keywordLocation = "", instanceLocation = "", errors = result.validationErrors.flatMap { it.toBasicUnits() })
+                BasicOutput(valid = false, keywordLocation = "", instanceLocation = "", errors = basicUnits(result.validationErrors))
         }
     }
 
@@ -126,8 +126,21 @@ fun <T : ValidationOutput> ValidationResult.toOutput(format: OutputFormat<T>): T
 /** The validator always sets schemaPath; only a hand-built error can lack one, and maps to the root. */
 private fun ValidationError.keywordLocationOrRoot(): String = schemaPath ?: ""
 
-private fun ValidationError.toBasicUnits(): List<BasicUnit> = listOf(BasicUnit(valid = false, keywordLocation = keywordLocationOrRoot(), instanceLocation = instanceLocation, error = message, absoluteKeywordLocation = absoluteKeywordLocation)) +
-        causes.flatMap { it.toBasicUnits() }
+/**
+ * The error trees [errors] as Basic units, each unit before its causes (depth first, in order). Built iteratively
+ * into one list, so a deep tree neither recurses nor copies its descendants once per ancestor (#75).
+ */
+private fun basicUnits(errors: List<ValidationError>): List<BasicUnit> = buildList {
+    val pending = ArrayDeque<ValidationError>()
+    errors.asReversed().forEach(pending::addLast)
+    while (pending.isNotEmpty()) {
+        val error = pending.removeLast()
+        add(error.toBasicUnit())
+        error.causes.asReversed().forEach(pending::addLast)
+    }
+}
+
+private fun ValidationError.toBasicUnit(): BasicUnit = BasicUnit(valid = false, keywordLocation = keywordLocationOrRoot(), instanceLocation = instanceLocation, error = message, absoluteKeywordLocation = absoluteKeywordLocation)
 
 private fun ValidationError.toDetailed(): DetailedOutput = DetailedOutput(
     valid = false,

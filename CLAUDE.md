@@ -143,6 +143,7 @@ validate()
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
 - **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
 - **OutputFormatTest.kt** - 40 tests for the Flag, Basic and Detailed output formats
+- **BasicOutputFlatteningTest.kt** - 3 tests: Basic units in pre-order, a 100,000-level chain, allocation linear in the units (#75)
 - **ValidatorLifecycleTest.kt** - 3 tests: a dropped validator frees its schema, remote schemas and caches; a live one does not keep schemas with `$id` it validated, and its pattern and numeric-limit caches stay bounded
 - **FormatAssertionOptionTest.kt** - 4 tests: `formatAssertion` true asserts and false does not, in both drafts
 - **SchemaMetadataTest.kt** - 10 tests: non-string `$id`/`$schema` construct, are reported by `validateSchema` and never make `validate()` throw
