@@ -129,6 +129,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `@JvmStatic` (#81).
 - The `regex` format's syntax check no longer copies the rest of the pattern at every `(?` group: 4,096 flat
   non-capturing groups allocated about 43 MB, now linear (#80).
+- **Breaking verdict change:** `uri-template` literals beyond ASCII must be RFC 6570 `ucschar` or `iprivate`, read by
+  code point: C1 controls, unpaired surrogates and noncharacters are rejected. The apostrophe stays valid, per the
+  verified RFC 6570 Errata ID 6937 and the official suite (#83).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the

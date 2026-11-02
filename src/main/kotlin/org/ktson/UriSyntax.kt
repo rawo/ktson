@@ -132,14 +132,14 @@ internal object UriSyntax {
      * RFC 3987 ucschar: %xA0-D7FF / %xF900-FDCF / %xFDF0-FFEF, then planes 1-13 and plane 14 from E1000, each
      * without its last two code points. So C1 controls, surrogates, private use and noncharacters are excluded.
      */
-    private fun isUcschar(codePoint: Int): Boolean = when (codePoint) {
+    fun isUcschar(codePoint: Int): Boolean = when (codePoint) {
         in 0xA0..0xD7FF, in 0xF900..0xFDCF, in 0xFDF0..0xFFEF -> true
         in 0x10000..0xDFFFD, in 0xE1000..0xEFFFD -> (codePoint and 0xFFFF) <= 0xFFFD
         else -> false
     }
 
     /** RFC 3987 iprivate: %xE000-F8FF / %xF0000-FFFFD / %x100000-10FFFD. */
-    private fun isIprivate(codePoint: Int): Boolean = codePoint in 0xE000..0xF8FF || (codePoint >= 0xF0000 && (codePoint and 0xFFFF) <= 0xFFFD)
+    fun isIprivate(codePoint: Int): Boolean = codePoint in 0xE000..0xF8FF || (codePoint >= 0xF0000 && (codePoint and 0xFFFF) <= 0xFFFD)
 
     /**
      * Characters legal outside an authority, with percent-encoding required to be complete triplets. Read by

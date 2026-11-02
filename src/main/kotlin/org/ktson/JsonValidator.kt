@@ -1609,6 +1609,13 @@ class JsonValidator @JvmOverloads constructor(
                     if (i + 2 >= value.length || !UriSyntax.isHexChar(value[i + 1]) || !UriSyntax.isHexChar(value[i + 2])) return false
                     i += 3
                 }
+                // RFC 6570 literals beyond ASCII are ucschar or iprivate, read by code point so that an unpaired
+                // surrogate is rejected (#83)
+                c.code > 0x7F -> {
+                    val codePoint = value.codePointAt(i)
+                    if (!UriSyntax.isUcschar(codePoint) && !UriSyntax.isIprivate(codePoint)) return false
+                    i += Character.charCount(codePoint)
+                }
                 c.code <= 0x20 || c.code == 0x7F || c in URI_TEMPLATE_FORBIDDEN_LITERALS -> return false
                 else -> i++
             }
@@ -2377,6 +2384,9 @@ private val REGEX_UUID = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
         private val REGEX_DURATION_DATE = Regex("^(\\d+Y(\\d+M(\\d+D)?)?|\\d+M(\\d+D)?|\\d+D)$")
         private val REGEX_DURATION_TIME = Regex("^(\\d+H(\\d+M(\\d+S)?)?|\\d+M(\\d+S)?|\\d+S)$")
 
+        // ASCII characters RFC 6570 excludes from literals, besides controls and the delimiters { } % handled apart.
+        // Not the apostrophe: Errata ID 6937 (verified) corrects %x26 / %x28-3B to %x26-3B, as the RFC's own '{var}'
+        // example needs, and the official suite tests it.
         private val URI_TEMPLATE_FORBIDDEN_LITERALS = setOf(' ', '"', '<', '>', '^', '`', '|', '\\')
         private val URI_TEMPLATE_OPERATORS = setOf('+', '#', '.', '/', ';', '?', '&')
         private val URI_TEMPLATE_RESERVED_OPERATORS = setOf('=', ',', '!', '@', '|')

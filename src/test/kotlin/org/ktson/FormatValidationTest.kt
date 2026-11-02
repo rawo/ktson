@@ -398,6 +398,18 @@ class FormatValidationTest :
         it("a delete character in a literal is invalid") { runTest { invalid("a\u007Fb", "uri-template") } }
     }
 
+    describe("uri-template format: RFC 6570 literals (#83)") {
+        fun text(codePoint: Int) = String(Character.toChars(codePoint))
+        // C1 controls, unpaired surrogates and noncharacters are not literals
+        listOf(0x80, 0x9F, 0xD800, 0xDC00, 0xFDD0, 0xFFFE, 0x1FFFE).forEach { codePoint ->
+            it("rejects U+%04X in literal text".format(codePoint)) { runTest { invalid("https://example.com/a${text(codePoint)}{var}", "uri-template") } }
+        }
+        // An apostrophe is, per RFC 6570 Errata ID 6937 (the RFC's own '{var}' example), as are ucschar and iprivate
+        listOf("'", "%27", text(0xE9), text(0x1F600), text(0xE000), text(0x10FFFD)).forEach { literal ->
+            it("accepts ${JsonPrimitive(literal)} in literal text") { runTest { valid("https://example.com/a$literal{var}", "uri-template") } }
+        }
+    }
+
     describe("regex format: ECMA 262 syntax") {
         it("a named group is valid") { runTest { valid("(?<name>x)", "regex") } }
         it("a named backreference is valid") { runTest { valid("(?<n>a)\\k<n>", "regex") } }
