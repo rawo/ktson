@@ -96,7 +96,8 @@ The validator architecture is straightforward with minimal abstractions:
 8. **OutputFormat** (`OutputFormat.kt`) - Standard JSON Schema output (2020-12 §12)
    - `FlagOutput`, `BasicOutput`/`BasicUnit`, `DetailedOutput`, selected by the `OutputFormat<T>` token
    - `validate(instance, schema, format)` / `result.toOutput(format)`; a pure mapping over `ValidationResult`
-   - Serialise with `toJson()`, never through the `ValidationOutput` interface
+   - Serialise with `toJson()`, never through the `ValidationOutput` interface. `DetailedOutput.toJson()` is a hand-written
+     iterative writer (#85): a new `DetailedOutput` field must be added to it, in declaration order, and to its test
    - `@file:JvmName("ValidationOutputs")`: Java calls `ValidationOutputs.toOutput(...)`; renaming it breaks Java callers
 
 9. **AbsoluteLocations** (`AbsoluteLocations.kt`) - Fills `ValidationError.absoluteKeywordLocation`
@@ -143,6 +144,7 @@ validate()
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
 - **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
 - **OutputFormatTest.kt** - 40 tests for the Flag, Basic and Detailed output formats
+- **DetailedOutputJsonTest.kt** - 5 tests: `DetailedOutput.toJson()` matches the generated serializer and writes a 100,000-level tree without recursion (#85)
 - **BasicOutputFlatteningTest.kt** - 3 tests: Basic units in pre-order, a 100,000-level chain, allocation linear in the units (#75)
 - **ValidatorLifecycleTest.kt** - 3 tests: a dropped validator frees its schema, remote schemas and caches; a live one does not keep schemas with `$id` it validated, and its pattern and numeric-limit caches stay bounded
 - **FormatAssertionOptionTest.kt** - 4 tests: `formatAssertion` true asserts and false does not, in both drafts

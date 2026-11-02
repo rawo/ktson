@@ -141,6 +141,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A number is converted to `Long`/`BigDecimal` only when the schema has a numeric keyword (`minimum`, `maximum`,
   `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`), and `type: integer` recognises a plain digit token without
   converting it: a 100,000-digit integer against `{}` took about 225 ms, now a few microseconds (#84).
+- `DetailedOutput.toJson()` writes the error tree iteratively, so serialising a deep result on a thread with a
+  small stack no longer throws `StackOverflowError` (the generated serializer recursed once per level). The JSON
+  is unchanged (#85).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the

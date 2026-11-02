@@ -6,6 +6,7 @@ package org.ktson
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 
 /*
  * Standard JSON Schema output formats (JSON Schema Core 2020-12 §12, same shape as 2019-09 §10.4).
@@ -79,7 +80,53 @@ data class DetailedOutput(
     /** See [ValidationError.absoluteKeywordLocation]; omitted on the root and when the schema has no absolute URI. */
     val absoluteKeywordLocation: String? = null,
 ) : ValidationOutput {
-    override fun toJson(): String = outputJson.encodeToString(serializer(), this)
+    /**
+     * The same JSON as the generated serializer (fields in declaration order, nulls omitted), written with an
+     * explicit stack: the generated serializer recurses once per level, so a deep result produced on a large-stack
+     * thread could overflow the stack of the thread serialising it (#85).
+     */
+    override fun toJson(): String = buildString {
+        // A node whose errors are being written; the next child to write is errors[next]
+        class Open(val node: DetailedOutput) {
+            var next = 0
+        }
+
+        val open = ArrayDeque<Open>()
+
+        fun StringBuilder.field(name: String, value: String) = append(",\"").append(name).append("\":").append(JsonPrimitive(value))
+
+        fun StringBuilder.close(node: DetailedOutput) {
+            node.absoluteKeywordLocation?.let { field("absoluteKeywordLocation", it) }
+            append('}')
+        }
+
+        fun StringBuilder.start(node: DetailedOutput) {
+            append("{\"valid\":").append(node.valid)
+            field("keywordLocation", node.keywordLocation)
+            field("instanceLocation", node.instanceLocation)
+            node.error?.let { field("error", it) }
+            if (node.errors == null) {
+                close(node)
+            } else {
+                append(",\"errors\":[")
+                open.addLast(Open(node))
+            }
+        }
+
+        start(this@DetailedOutput)
+        while (open.isNotEmpty()) {
+            val current = open.last()
+            val children = current.node.errors!!
+            if (current.next < children.size) {
+                if (current.next > 0) append(',')
+                start(children[current.next++])
+            } else {
+                open.removeLast()
+                append(']')
+                close(current.node)
+            }
+        }
+    }
 }
 
 /**
