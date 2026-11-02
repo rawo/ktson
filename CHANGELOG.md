@@ -132,6 +132,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking verdict change:** `uri-template` literals beyond ASCII must be RFC 6570 `ucschar` or `iprivate`, read by
   code point: C1 controls, unpaired surrogates and noncharacters are rejected. The apostrophe stays valid, per the
   verified RFC 6570 Errata ID 6937 and the official suite (#83).
+- `idn-hostname` and `idn-email` reject a label longer than 63 code points (after IDNA mapping) before any Punycode
+  work, and the encoder no longer allocates a filtered copy per round: a 2,048-character label allocated about
+  65 MB, now under 2 MB. The 63-character A-label limit is unchanged (#79).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the

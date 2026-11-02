@@ -1218,6 +1218,9 @@ class JsonValidator @JvmOverloads constructor(
         if (labels.any { it.isEmpty() }) return false
 
         val uLabels = labels.map { label ->
+            // A label longer than 63 characters cannot be one, whatever it decodes to; checked before any Punycode
+            // work, which grows quadratically with the label (#79). Mapping has already dropped ignored characters.
+            if (label.length > MAX_LABEL_LENGTH && label.codePointCount(0, label.length) > MAX_LABEL_LENGTH) return false
             if (label.startsWith(ACE_PREFIX)) {
                 val uLabel = punycodeDecode(label.substring(ACE_PREFIX.length)) ?: return false
                 // A-labels must be canonical: re-encoding has to reproduce the label exactly
@@ -1441,7 +1444,7 @@ class JsonValidator @JvmOverloads constructor(
     private fun punycodeEncode(input: String): String {
         val codePoints = input.codePoints().toArray()
         val output = StringBuilder()
-        codePoints.filter { it < 0x80 }.forEach { output.appendCodePoint(it) }
+        for (cp in codePoints) if (cp < 0x80) output.appendCodePoint(cp)
         val basicCount = output.length
         if (basicCount > 0) output.append('-')
 
@@ -1450,7 +1453,9 @@ class JsonValidator @JvmOverloads constructor(
         var delta = 0
         var bias = PUNYCODE_INITIAL_BIAS
         while (handled < codePoints.size) {
-            val m = codePoints.filter { it >= n }.min()
+            // The smallest code point not yet handled, found without allocating a filtered copy each round (#79)
+            var m = Int.MAX_VALUE
+            for (cp in codePoints) if (cp in n until m) m = cp
             delta += (m - n) * (handled + 1)
             n = m
             for (cp in codePoints) {
