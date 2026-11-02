@@ -76,11 +76,19 @@ internal object UriSyntax {
             afterAuthority = rest
         }
 
-        if (authority != null && !isValidUriAuthority(authority, allowUcs)) return false
-        // Square brackets delimit an IP-literal host and are illegal anywhere else
-        if (!isValidUriCharacters(afterAuthority, allowUcs)) return false
+        val nonAscii = if (allowUcs) NonAscii.UCSCHAR else NonAscii.FORBIDDEN
+        if (authority != null && !isValidUriAuthority(authority, nonAscii)) return false
         // "#" starts the fragment, and a fragment cannot contain another one (RFC 3986 §3.5)
-        if (afterAuthority.count { it == '#' } > 1) return false
+        val fragmentStart = afterAuthority.indexOf('#').takeIf { it >= 0 } ?: afterAuthority.length
+        if (afterAuthority.indexOf('#', fragmentStart + 1) >= 0) return false
+        val beforeFragment = afterAuthority.substring(0, fragmentStart)
+        val queryStart = beforeFragment.indexOf('?').takeIf { it >= 0 } ?: beforeFragment.length
+        // Square brackets delimit an IP-literal host and are illegal anywhere else. RFC 3987 admits private-use
+        // characters only in the query (#76).
+        val queryNonAscii = if (allowUcs) NonAscii.UCSCHAR_OR_IPRIVATE else NonAscii.FORBIDDEN
+        if (!isValidUriCharacters(beforeFragment.substring(0, queryStart), nonAscii)) return false
+        if (!isValidUriCharacters(beforeFragment.substring(queryStart), queryNonAscii)) return false
+        if (!isValidUriCharacters(afterAuthority.substring(fragmentStart), nonAscii)) return false
 
         // A relative-path reference whose first segment contains a colon would be
         // read as a scheme, so RFC 3986 forbids it
@@ -101,8 +109,43 @@ internal object UriSyntax {
         return colon
     }
 
-    /** Characters legal outside an authority, with percent-encoding required to be complete triplets. */
-    private fun isValidUriCharacters(value: String, allowUcs: Boolean): Boolean {
+    /** Which non-ASCII characters a URI component admits. */
+    private enum class NonAscii {
+        /** A URI (RFC 3986): none. */
+        FORBIDDEN,
+
+        /** An IRI component (RFC 3987 iunreserved): ucschar. */
+        UCSCHAR,
+
+        /** An IRI query (RFC 3987 iquery): ucschar and iprivate. */
+        UCSCHAR_OR_IPRIVATE,
+        ;
+
+        fun admits(codePoint: Int): Boolean = when (this) {
+            FORBIDDEN -> false
+            UCSCHAR -> isUcschar(codePoint)
+            UCSCHAR_OR_IPRIVATE -> isUcschar(codePoint) || isIprivate(codePoint)
+        }
+    }
+
+    /**
+     * RFC 3987 ucschar: %xA0-D7FF / %xF900-FDCF / %xFDF0-FFEF, then planes 1-13 and plane 14 from E1000, each
+     * without its last two code points. So C1 controls, surrogates, private use and noncharacters are excluded.
+     */
+    private fun isUcschar(codePoint: Int): Boolean = when (codePoint) {
+        in 0xA0..0xD7FF, in 0xF900..0xFDCF, in 0xFDF0..0xFFEF -> true
+        in 0x10000..0xDFFFD, in 0xE1000..0xEFFFD -> (codePoint and 0xFFFF) <= 0xFFFD
+        else -> false
+    }
+
+    /** RFC 3987 iprivate: %xE000-F8FF / %xF0000-FFFFD / %x100000-10FFFD. */
+    private fun isIprivate(codePoint: Int): Boolean = codePoint in 0xE000..0xF8FF || (codePoint >= 0xF0000 && (codePoint and 0xFFFF) <= 0xFFFD)
+
+    /**
+     * Characters legal outside an authority, with percent-encoding required to be complete triplets. Read by
+     * code point, so an unpaired surrogate is seen as itself and rejected.
+     */
+    private fun isValidUriCharacters(value: String, nonAscii: NonAscii): Boolean {
         var i = 0
         while (i < value.length) {
             val c = value[i]
@@ -112,8 +155,9 @@ internal object UriSyntax {
                     i += 3
                 }
                 c.code > 127 -> {
-                    if (!allowUcs) return false
-                    i++
+                    val codePoint = value.codePointAt(i)
+                    if (!nonAscii.admits(codePoint)) return false
+                    i += Character.charCount(codePoint)
                 }
                 c in URI_FORBIDDEN_CHARS || c.code <= 0x20 || c.code == 0x7F -> return false
                 else -> i++
@@ -122,12 +166,12 @@ internal object UriSyntax {
         return true
     }
 
-    private fun isValidUriAuthority(authority: String, allowUcs: Boolean): Boolean {
+    private fun isValidUriAuthority(authority: String, nonAscii: NonAscii): Boolean {
         // userinfo may not contain an unencoded at-sign, so at most one may appear
         if (authority.count { it == '@' } > 1) return false
         val userinfo = authority.substringBeforeLast('@', "")
         if ('[' in userinfo || ']' in userinfo) return false
-        if (!isValidUriCharacters(userinfo, allowUcs)) return false
+        if (!isValidUriCharacters(userinfo, nonAscii)) return false
 
         val hostAndPort = authority.substringAfterLast('@')
         val port: String?
@@ -148,7 +192,7 @@ internal object UriSyntax {
             port = if (colon >= 0) hostAndPort.substring(colon + 1) else null
             // a reg-name cannot contain a colon; an IPv6 host must be bracketed
             if ('[' in host || ']' in host || ':' in host) return false
-            if (!isValidUriCharacters(host, allowUcs)) return false
+            if (!isValidUriCharacters(host, nonAscii)) return false
         }
         return port == null || port.all { it in '0'..'9' }
     }

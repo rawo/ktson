@@ -327,6 +327,32 @@ class FormatValidationTest :
         it("an embedded IPv4 with a leading zero is invalid") { runTest { invalid("//[::ffff:192.168.0.01]/p", "iri-reference") } }
     }
 
+    describe("iri and iri-reference: RFC 3987 character repertoire (#76)") {
+        fun text(codePoint: Int) = String(Character.toChars(codePoint))
+        listOf("iri", "iri-reference").forEach { format ->
+            // C1 controls, an unpaired surrogate, noncharacters, a plane-14 tag below E1000, and private use outside a query
+            listOf(0x80, 0x9F, 0xD800, 0xDFFF, 0xFDD0, 0xFFFE, 0x1FFFE, 0xE0001, 0xE000, 0xF0000).forEach { codePoint ->
+                val name = "U+%04X".format(codePoint)
+                it("$format rejects $name in a path") { runTest { invalid("https://example.com/${text(codePoint)}", format) } }
+                it("$format rejects $name in a fragment") { runTest { invalid("https://example.com/#${text(codePoint)}", format) } }
+            }
+            listOf(0x80, 0xD800, 0xFDD0).forEach { codePoint ->
+                it("$format rejects U+%04X in a query".format(codePoint)) { runTest { invalid("https://example.com/?${text(codePoint)}", format) } }
+                it("$format rejects U+%04X in a host".format(codePoint)) { runTest { invalid("https://exa${text(codePoint)}mple.com/", format) } }
+            }
+            // Ordinary, supplementary-plane, line-separator and plane-14 ucschar, and private use inside a query
+            listOf(0xE9, 0xA0, 0x2028, 0xFFEF, 0x1F600, 0x10000, 0xE1000).forEach { codePoint ->
+                it("$format accepts U+%04X in a path and fragment".format(codePoint)) {
+                    runTest { valid("https://example.com/${text(codePoint)}#${text(codePoint)}", format) }
+                }
+            }
+            listOf(0xE000, 0xF8FF, 0xF0000, 0x10FFFD).forEach { codePoint ->
+                it("$format accepts private-use U+%04X in a query".format(codePoint)) { runTest { valid("https://example.com/?q=${text(codePoint)}", format) } }
+            }
+        }
+        it("uri still rejects every non-ASCII character") { runTest { invalid("https://example.com/\u00E9", "uri") } }
+    }
+
     describe("uri format: authority rules") {
         it("an IPv6 host is valid") { runTest { valid("http://[::1]/p", "uri") } }
         it("an embedded IPv4 with a leading zero is invalid") { runTest { invalid("http://[::ffff:01.2.3.4]", "uri") } }
