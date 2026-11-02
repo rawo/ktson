@@ -1855,33 +1855,27 @@ class JsonValidator @JvmOverloads constructor(
         dynamicScope: List<JsonElement>,
     ) {
         val branchErrors = mutableListOf<ValidationError>()
-        val anyValid = schemas.mapIndexed { index, schema ->
+        schemas.forEachIndexed { index, schema ->
             val tempErrors = mutableListOf<ValidationError>()
             validateElement(instance, schema, path, at(schemaPath, ANY_OF, index.toString()), tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
-            if (tempErrors.isNotEmpty()) {
-                branchErrors.add(
-                    ValidationError(path, "Branch $index failed", ANY_OF, at(schemaPath, ANY_OF, index.toString()), causes = tempErrors),
-                )
-            }
-            tempErrors.isEmpty()
-        }.any { it }
-
-        if (!anyValid) {
-            val depthError = branchErrors.flatMap { it.causes }.firstOrNull { it.keyword == "depth" }
-            if (depthError != null) {
-                errors.add(depthError)
-            } else {
-                errors.add(
-                    ValidationError(
-                        path,
-                        "Instance does not match any of the ${schemas.size} anyOf schemas",
-                        ANY_OF,
-                        schemaPath = at(schemaPath, ANY_OF),
-                        causes = branchErrors,
-                    ),
-                )
-            }
+            // One valid branch decides anyOf: the other branches' errors would be discarded, and their annotations are
+            // gathered by collectEvaluated*() when unevaluated* needs them, so they are not evaluated here (#78)
+            if (tempErrors.isEmpty()) return
+            branchErrors.add(
+                ValidationError(path, "Branch $index failed", ANY_OF, at(schemaPath, ANY_OF, index.toString()), causes = tempErrors),
+            )
         }
+
+        val depthError = branchErrors.flatMap { it.causes }.firstOrNull { it.keyword == "depth" }
+        errors.add(
+            depthError ?: ValidationError(
+                path,
+                "Instance does not match any of the ${schemas.size} anyOf schemas",
+                ANY_OF,
+                schemaPath = at(schemaPath, ANY_OF),
+                causes = branchErrors,
+            ),
+        )
     }
 
     /**

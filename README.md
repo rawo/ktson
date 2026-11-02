@@ -517,7 +517,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 1186 tests (100% passing)
+- **Custom Tests**: 1189 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -538,6 +538,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - ECMA 262 `pattern` dialect (whitespace, `\c`, `$`, `.`, `\p` aliases): 44 tests
   - `email` / `idn-email` local parts (dot-atom, quoted string): 38 tests
   - Exact, bounded `multipleOf` (huge exponents, agreement with `BigDecimal.remainder`): 4 tests
+  - `anyOf` short circuit (loads, failure reports, `unevaluated*` annotations): 3 tests
   - Bounded cache: 4 tests
   - `validateSchema` worker thread (thread-locals, interrupts): 3 tests
   - Remote loading (single flight, reentrant and failing loaders, load cycles): 7 tests

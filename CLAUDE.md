@@ -154,6 +154,7 @@ validate()
 - **EcmaPatternTest.kt** - 44 tests: ECMA 262 semantics of `\s`, `\S`, `\c`, `$`, `.` and `\p` aliases in `pattern`
 - **IdnEmailTest.kt** - 38 tests: `email`/`idn-email` local parts; quoted strings follow RFC 5321 qtext/quoted-pair (no tab), non-ASCII only for idn-email
 - **MultipleOfTest.kt** - 4 tests: `multipleOf` stays exact and bounded for compact numbers such as `1e2147483647`
+- **AnyOfEvaluationTest.kt** - 3 tests: `anyOf` stops at the first valid branch; all branches still feed `unevaluated*` (#78)
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 38 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
@@ -295,6 +296,9 @@ Release notes are generated from the commit log, so commits must follow Conventi
    `collectEvaluated*()` functions use it, so validation and `unevaluated*` always agree on where a
    reference leads, and `validateElement()` stamps `absoluteKeywordLocation` for every hop. A new
    reference keyword goes into `resolveReferences()`, never into a copy
+9. Verdict passes may stop early (`anyOf` returns at its first valid branch, #78) because `unevaluated*`
+   annotations come only from the separate `collectEvaluated*()` passes, which visit every branch. Keep that split:
+   never make annotation collection depend on what the verdict pass evaluated
 
 ### Reference Resolution
 - `$ref` resolution uses `ReferenceResolver` in `JsonPointer.kt`, one per validation: `validateInternal()` creates an
