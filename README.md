@@ -517,7 +517,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 1220 tests (100% passing)
+- **Custom Tests**: 1229 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -541,6 +541,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - `anyOf` short circuit (loads, failure reports, `unevaluated*` annotations): 3 tests
   - `regex` format syntax scan (group forms, linear allocation): 2 tests
   - IDN label length (exact limit, cheap rejection): 4 tests
+  - `hostname` Bidi rule on ASCII labels in Bidi domains: 9 tests
   - Bounded cache: 4 tests
   - `validateSchema` worker thread (thread-locals, interrupts): 3 tests
   - Remote loading (single flight, reentrant and failing loaders, load cycles): 7 tests

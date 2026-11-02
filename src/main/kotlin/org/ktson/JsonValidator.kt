@@ -1207,7 +1207,13 @@ class JsonValidator @JvmOverloads constructor(
         }
         val bidiDomain = decoded.any { label -> label.codePoints().anyMatch { isRtlCodePoint(it) } }
         return decoded.withIndex().all { (i, uLabel) ->
-            uLabel == labels[i] || isValidULabel(uLabel, bidiDomain)
+            if (uLabel == labels[i]) {
+                // A plain ASCII label keeps the RFC 1123 rules it already passed, but in a Bidi domain the Bidi rule
+                // applies to it as well (RFC 5893 §2), as idn-hostname requires (#82)
+                !bidiDomain || satisfiesBidiRule(uLabel.codePoints().toArray())
+            } else {
+                isValidULabel(uLabel, bidiDomain)
+            }
         }
     }
 

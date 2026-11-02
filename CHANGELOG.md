@@ -135,6 +135,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `idn-hostname` and `idn-email` reject a label longer than 63 code points (after IDNA mapping) before any Punycode
   work, and the encoder no longer allocates a filtered copy per round: a 2,048-character label allocated about
   65 MB, now under 2 MB. The 63-character A-label limit is unchanged (#79).
+- **Breaking verdict change:** in a domain with a right-to-left A-label, `hostname` (and the domain of `email`)
+  applies the RFC 5893 Bidi rule to plain ASCII labels too, as `idn-hostname` does: `xn--4db.1abc` and
+  `xn--4db.123` are rejected (#82).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the
