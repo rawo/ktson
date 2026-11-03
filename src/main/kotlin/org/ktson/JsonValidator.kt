@@ -698,7 +698,8 @@ class JsonValidator @JvmOverloads constructor(
             } else {
                 val dec = element.content.toBigDecimalOrNull()
                 if (dec != null) {
-                    if (dec.stripTrailingZeros().scale() <= 0) {
+                    // A nonpositive scale is an integer already; stripping one can overflow the scale (#86)
+                    if (dec.scale() <= 0 || dec.stripTrailingZeros().scale() <= 0) {
                         TYPE_INTEGER
                     } else {
                         TYPE_NUMBER

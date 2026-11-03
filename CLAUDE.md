@@ -156,6 +156,7 @@ validate()
 - **EcmaPatternTest.kt** - 44 tests: ECMA 262 semantics of `\s`, `\S`, `\c`, `$`, `.` and `\p` aliases in `pattern`
 - **IdnEmailTest.kt** - 38 tests: `email`/`idn-email` local parts; quoted strings follow RFC 5321 qtext/quoted-pair (no tab), non-ASCII only for idn-email
 - **MultipleOfTest.kt** - 4 tests: `multipleOf` stays exact and bounded for compact numbers such as `1e2147483647`
+- **ScaleBoundaryTest.kt** - 4 tests: `type` and `multipleOf` decide `100e2147483647`, whose stripped scale would overflow, without throwing (#86)
 - **AnyOfEvaluationTest.kt** - 3 tests: `anyOf` stops at the first valid branch; all branches still feed `unevaluated*` (#78)
 - **SchemaVersionTest.kt** - 11 tests: `$schema` selects a draft only for its exact meta-schema identifier (#81)
 - **RegexFormatScanTest.kt** - 2 tests: the `regex` format scan recognises ECMA group forms and stays linear (#80)
@@ -228,7 +229,8 @@ anchor/`$id` searches and error-location walks are iterative and need no limit; 
 ### 3. Numeric Precision
 Bounds, integer classification, `multipleOf` and numeric equality use exact `Long`/`BigDecimal`
 arithmetic. `multipleOf` uses `BigDecimal.isMultipleOf()` (`Divisibility.kt`): exact, and never expands powers of ten,
-so `1e2147483647` neither allocates gigabytes nor throws (#70); do not use `BigDecimal.remainder`. Integer tokens
+so `1e2147483647` neither allocates gigabytes nor throws (#70); do not use `BigDecimal.remainder`. Never call
+`stripTrailingZeros()` on a number with a nonpositive scale: for `100e2147483647` it overflows the scale and throws (#86). Integer tokens
 within `Long` range take a fast path; parsed decimal schema limits are
 cached in a `ConcurrentHashMap` (instance numbers are never cached). `optional/bignum.json` runs
 for both drafts. Decimal validation costs more than approximate `Double` arithmetic; see
