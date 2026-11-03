@@ -119,6 +119,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ArithmeticException`, and `1e100000` against `multipleOf: 3` no longer allocates about 26 MB (#70).
 - `type` and `multipleOf` no longer make `validate()` throw `ArithmeticException` for numbers such as
   `100e2147483647`, whose trailing zeros cannot be stripped within BigDecimal's 32-bit scale; they are integers (#86).
+- `multipleOf` counts a divisor's factors of five in O(log n) divisions instead of one division per factor: a
+  divisor of `5^16000` (11,184 digits) cost about 82 MB and 100 ms per validation, now about 0.6 MB and 2 ms (#87).
 - URI parsing no longer cuts an IRI's fragment short at U+2028 or U+2029: `parseUri`, `extractFragment`,
   `normalizeUri` and `resolveUri` keep the whole fragment (#77).
 - **Breaking verdict change:** `iri` and `iri-reference` admit only the RFC 3987 repertoire: C1 controls,

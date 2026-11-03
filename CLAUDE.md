@@ -155,7 +155,7 @@ validate()
 - **IndeterminateResultTest.kt** - 17 tests: undecided results (depth limit, unevaluable regex) are never inverted into Valid
 - **EcmaPatternTest.kt** - 44 tests: ECMA 262 semantics of `\s`, `\S`, `\c`, `$`, `.` and `\p` aliases in `pattern`
 - **IdnEmailTest.kt** - 38 tests: `email`/`idn-email` local parts; quoted strings follow RFC 5321 qtext/quoted-pair (no tab), non-ASCII only for idn-email
-- **MultipleOfTest.kt** - 4 tests: `multipleOf` stays exact and bounded for compact numbers such as `1e2147483647`
+- **MultipleOfTest.kt** - 6 tests: `multipleOf` stays exact and bounded for compact numbers such as `1e2147483647` and divisors such as `5^16000` (#87)
 - **ScaleBoundaryTest.kt** - 4 tests: `type` and `multipleOf` decide `100e2147483647`, whose stripped scale would overflow, without throwing (#86)
 - **AnyOfEvaluationTest.kt** - 3 tests: `anyOf` stops at the first valid branch; all branches still feed `unevaluated*` (#78)
 - **SchemaVersionTest.kt** - 11 tests: `$schema` selects a draft only for its exact meta-schema identifier (#81)

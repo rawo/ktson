@@ -21,18 +21,40 @@ internal fun BigDecimal.isMultipleOf(divisor: BigDecimal): Boolean {
     val k = divisor.scale().toLong() - scale().toLong()
 
     val a = unscaledValue().abs()
-    var rest = divisor.unscaledValue()
-    val twos = rest.lowestSetBit
-    rest = rest.shiftRight(twos)
-    var fives = 0
-    while (rest.mod(FIVE).signum() == 0) {
-        rest = rest.divide(FIVE)
-        fives++
-    }
+    val unit = divisor.unscaledValue()
+    val twos = unit.lowestSetBit
+    val (fives, rest) = unit.shiftRight(twos).splitFives()
     if (a.mod(rest).signum() != 0) return false
     if (a.lowestSetBit < twos - k) return false
     val missingFives = fives - k
     // a < 2^bitLength < 5^bitLength, so a cannot hold more fives than it has bits
     if (missingFives > a.bitLength()) return false
     return missingFives <= 0 || a.mod(FIVE.pow(missingFives.toInt())).signum() == 0
+}
+
+/**
+ * Splits this positive number into 5^count · rest, with rest not divisible by five. Dividing by five once per factor
+ * made 5^16000 cost 82 MB and 100 ms (#87); dividing by 5, 5^2, 5^4, ... while they divide, then by the same powers
+ * from the largest down, takes O(log count) divisions.
+ */
+private fun BigInteger.splitFives(): Pair<Int, BigInteger> {
+    var rest = this
+    var count = 0
+    val powers = mutableListOf(FIVE)
+    while (true) {
+        val (quotient, remainder) = rest.divideAndRemainder(powers.last())
+        if (remainder.signum() != 0) break
+        rest = quotient
+        count += 1 shl (powers.size - 1)
+        powers.add(powers.last().multiply(powers.last()))
+    }
+    // Fewer than 2^(powers.size - 1) fives are left: take each power at most once
+    for (i in powers.indices.reversed()) {
+        val (quotient, remainder) = rest.divideAndRemainder(powers[i])
+        if (remainder.signum() == 0) {
+            rest = quotient
+            count += 1 shl i
+        }
+    }
+    return count to rest
 }

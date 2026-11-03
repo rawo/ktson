@@ -7,10 +7,12 @@ import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.Json
 import java.lang.management.ManagementFactory
 import java.math.BigDecimal
+import java.math.BigInteger
 
 /**
  * multipleOf is exact, and its cost follows the size of the numbers as written, not their exponents:
- * "1e2147483647" is a 12-character literal whose expansion has two billion digits (#70).
+ * "1e2147483647" is a 12-character literal whose expansion has two billion digits (#70), and a divisor's factors
+ * of five are counted in O(log n) divisions (#87).
  */
 class MultipleOfTest :
     DescribeSpec({
@@ -44,6 +46,37 @@ class MultipleOfTest :
                 val before = threads.getThreadAllocatedBytes(Thread.currentThread().threadId())
                 validator.validate(instance, schema).isValid shouldBe false
                 (threads.getThreadAllocatedBytes(Thread.currentThread().threadId()) - before) shouldBeLessThan 1_000_000L
+            }
+        }
+
+        describe("divisors with many factors of five") {
+            it("allocates little for multipleOf 5^16000") {
+                // Removing one factor of five per pass allocated about 82 MB here (#87)
+                val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
+                val validator = JsonValidator()
+                val schema = JsonSchema.fromString("""{"multipleOf":${BigInteger.valueOf(5).pow(16_000)}}""")
+                val instance = Json.parseToJsonElement("1")
+                repeat(3) { validator.validate(instance, schema) }
+                val before = threads.getThreadAllocatedBytes(Thread.currentThread().threadId())
+                validator.validate(instance, schema).isValid shouldBe false
+                (threads.getThreadAllocatedBytes(Thread.currentThread().threadId()) - before) shouldBeLessThan 5_000_000L
+            }
+
+            it("counts the fives exactly") {
+                val five = BigInteger.valueOf(5)
+                var mismatches = 0
+                for (fives in listOf(0, 1, 2, 3, 4, 7, 8, 9, 15, 16, 17, 31, 32, 33, 100, 255, 256, 257)) {
+                    val divisor = BigDecimal(five.pow(fives).multiply(BigInteger.valueOf(6)))
+                    for (extra in -1..1) {
+                        for (scale in listOf(0, 3, -2)) {
+                            val value = BigDecimal(five.pow((fives + extra).coerceAtLeast(0)).multiply(BigInteger.valueOf(42)), scale)
+                            val expected = value.remainder(divisor).signum() == 0
+                            if (value.isMultipleOf(divisor) != expected) mismatches++
+                            if (isValid(value.toString(), """{"multipleOf":$divisor}""") != expected) mismatches++
+                        }
+                    }
+                }
+                mismatches shouldBeLessThan 1
             }
         }
 
