@@ -144,6 +144,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DetailedOutput.toJson()` writes the error tree iteratively, so serialising a deep result on a thread with a
   small stack no longer throws `StackOverflowError` (the generated serializer recursed once per level). The JSON
   is unchanged (#85).
+- `unevaluatedProperties` / `unevaluatedItems` reuse the verdicts of `anyOf`/`oneOf` branches and `if` conditions
+  instead of validating them again to collect what they evaluated. Each level of such applicators nested at one
+  instance location used to cost about 2.6 times the level below: 20 levels (an 842-byte schema) took about 18 s,
+  now under a millisecond. Verdicts are unchanged (#30).
 - A long-lived validator's compiled-pattern and numeric-limit caches are bounded (1,024 entries each)
   instead of growing with every distinct `pattern` and limit it sees (#40).
 - A `$dynamicRef` target is evaluated in its own resource: an external target, or one found through the

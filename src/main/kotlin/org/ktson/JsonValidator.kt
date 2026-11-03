@@ -342,25 +342,15 @@ class JsonValidator @JvmOverloads constructor(
 
         when (schemaElement) {
             is JsonObject -> {
-                // $ref, $recursiveRef, $dynamicRef are evaluated alongside sibling keywords
-                // (Draft 2019-09+ removed the Draft 7 rule that $ref short-circuits siblings)
-                resolveReferences(schemaElement, evaluation, effectiveResourceRoot, effectiveScope, version).forEach { hop ->
-                    val hopPath = at(schemaPath, hop.keyword)
-                    val target = hop.target
-                    if (target != null) {
-                        // The resource keeps the base it was reached under while the hop is evaluated and stamped
-                        evaluation.references.withBase(hop.resourceRoot, hop.resourceBase) {
-                            val before = errors.size
-                            validateElement(instance, target, path, hopPath, errors, version, evaluation, depth + 1, hop.resourceRoot, hop.dynamicScope)
-                            val candidates = listOf(hop.resourceRoot, effectiveResourceRoot) + hop.dynamicScope.asReversed() + evaluation.rootSchema
-                            evaluation.absoluteLocations.stamp(errors, before, hopPath, target, candidates, evaluation.rootSchema)
-                        }
-                    } else {
-                        errors.add(ValidationError(path, "Could not resolve ${hop.description}: ${hop.reference}", hop.keyword, hopPath))
-                    }
+                // Branch verdicts at this instance are remembered for the collection pass of unevaluated* (#30)
+                val collects = (instance is JsonObject && schemaElement.containsKey(UNEVALUATED_PROPERTIES)) ||
+                    (instance is JsonArray && schemaElement.containsKey(UNEVALUATED_ITEMS))
+                if (collects) evaluation.enterCollector(instance)
+                try {
+                    validateObjectSchemaElement(instance, schemaElement, path, schemaPath, errors, version, evaluation, depth, effectiveResourceRoot, effectiveScope)
+                } finally {
+                    if (collects) evaluation.leaveCollector(instance)
                 }
-
-                validateAgainstObjectSchema(instance, schemaElement, path, schemaPath, errors, version, evaluation, depth, effectiveResourceRoot, effectiveScope)
             }
             is JsonPrimitive -> {
                 // Boolean schema
@@ -375,6 +365,91 @@ class JsonValidator @JvmOverloads constructor(
             else -> {} // Arrays and nulls are ignored as schemas
         }
     }
+
+    /** Validates against an object schema: its reference keywords, then its other keywords. */
+    private fun validateObjectSchemaElement(
+        instance: JsonElement,
+        schemaElement: JsonObject,
+        path: String,
+        schemaPath: String,
+        errors: MutableList<ValidationError>,
+        version: SchemaVersion,
+        evaluation: Evaluation,
+        depth: Int,
+        effectiveResourceRoot: JsonElement,
+        effectiveScope: List<JsonElement>,
+    ) {
+        // $ref, $recursiveRef, $dynamicRef are evaluated alongside sibling keywords
+        // (Draft 2019-09+ removed the Draft 7 rule that $ref short-circuits siblings)
+        resolveReferences(schemaElement, evaluation, effectiveResourceRoot, effectiveScope, version).forEach { hop ->
+            val hopPath = at(schemaPath, hop.keyword)
+            val target = hop.target
+            if (target != null) {
+                // The resource keeps the base it was reached under while the hop is evaluated and stamped
+                evaluation.references.withBase(hop.resourceRoot, hop.resourceBase) {
+                    val before = errors.size
+                    validateElement(instance, target, path, hopPath, errors, version, evaluation, depth + 1, hop.resourceRoot, hop.dynamicScope)
+                    val candidates = listOf(hop.resourceRoot, effectiveResourceRoot) + hop.dynamicScope.asReversed() + evaluation.rootSchema
+                    evaluation.absoluteLocations.stamp(errors, before, hopPath, target, candidates, evaluation.rootSchema)
+                }
+            } else {
+                errors.add(ValidationError(path, "Could not resolve ${hop.description}: ${hop.reference}", hop.keyword, hopPath))
+            }
+        }
+
+        validateAgainstObjectSchema(instance, schemaElement, path, schemaPath, errors, version, evaluation, depth, effectiveResourceRoot, effectiveScope)
+    }
+
+    /**
+     * Validates an anyOf/oneOf branch or an if condition into [errors], which must start empty, and remembers a
+     * decided verdict for the collection of evaluated properties and items (#30). Returns whether it was undecided.
+     */
+    private fun validateBranch(
+        instance: JsonElement,
+        schema: JsonElement,
+        path: String,
+        schemaPath: String,
+        errors: MutableList<ValidationError>,
+        version: SchemaVersion,
+        evaluation: Evaluation,
+        depth: Int,
+        resourceRoot: JsonElement,
+        dynamicScope: List<JsonElement>,
+    ): Boolean {
+        val undecided = evaluation.leftUndecided {
+            validateElement(instance, schema, path, schemaPath, errors, version, evaluation, depth, resourceRoot, dynamicScope)
+        }
+        if (!undecided && evaluation.collects(instance)) {
+            evaluation.rememberVerdict(application(instance, schema, evaluation, depth, resourceRoot, dynamicScope), errors.isEmpty())
+        }
+        return undecided
+    }
+
+    /** Whether a branch is valid, for the collection pass: the verdict validation already reached, if it has one (#30). */
+    private fun isValidBranch(
+        instance: JsonElement,
+        schema: JsonElement,
+        path: String,
+        version: SchemaVersion,
+        evaluation: Evaluation,
+        depth: Int,
+        resourceRoot: JsonElement,
+        dynamicScope: List<JsonElement>,
+    ): Boolean {
+        evaluation.knownVerdict(application(instance, schema, evaluation, depth, resourceRoot, dynamicScope))?.let { return it }
+        val errors = mutableListOf<ValidationError>()
+        validateBranch(instance, schema, path, "", errors, version, evaluation, depth, resourceRoot, dynamicScope)
+        return errors.isEmpty()
+    }
+
+    private fun application(
+        instance: JsonElement,
+        schema: JsonElement,
+        evaluation: Evaluation,
+        depth: Int,
+        resourceRoot: JsonElement,
+        dynamicScope: List<JsonElement>,
+    ) = Application(schema, instance, resourceRoot, evaluation.references.getAbsoluteUri(resourceRoot), dynamicScope, depth)
 
     /** Where one reference keyword of a schema leads; [target] is null when it cannot be resolved. */
     private class ReferenceHop(
@@ -509,9 +584,7 @@ class JsonValidator @JvmOverloads constructor(
         // Conditional schemas (2019-09 and later)
         schema[IF]?.let { ifSchema ->
             val ifErrors = mutableListOf<ValidationError>()
-            val conditionUndecided = evaluation.leftUndecided {
-                validateElement(instance, ifSchema, path, at(schemaPath, IF), ifErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
-            }
+            val conditionUndecided = validateBranch(instance, ifSchema, path, at(schemaPath, IF), ifErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
 
             if (ifErrors.isNotEmpty() && conditionUndecided) {
                 // Neither branch can be chosen when the condition's failure may not be real
@@ -1885,7 +1958,7 @@ class JsonValidator @JvmOverloads constructor(
         val branchErrors = mutableListOf<ValidationError>()
         schemas.forEachIndexed { index, schema ->
             val tempErrors = mutableListOf<ValidationError>()
-            validateElement(instance, schema, path, at(schemaPath, ANY_OF, index.toString()), tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+            validateBranch(instance, schema, path, at(schemaPath, ANY_OF, index.toString()), tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
             // One valid branch decides anyOf: the other branches' errors would be discarded, and their annotations are
             // gathered by collectEvaluated*() when unevaluated* needs them, so they are not evaluated here (#78)
             if (tempErrors.isEmpty()) return
@@ -1925,9 +1998,7 @@ class JsonValidator @JvmOverloads constructor(
         val undecidedBranchErrors = mutableListOf<ValidationError>()
         val matchingBranches = schemas.mapIndexedNotNull { index, schema ->
             val tempErrors = mutableListOf<ValidationError>()
-            val undecided = evaluation.leftUndecided {
-                validateElement(instance, schema, path, at(schemaPath, ONE_OF, index.toString()), tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
-            }
+            val undecided = validateBranch(instance, schema, path, at(schemaPath, ONE_OF, index.toString()), tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
             if (tempErrors.isNotEmpty()) {
                 val branchError = ValidationError(path, "Branch $index failed", ONE_OF, at(schemaPath, ONE_OF, index.toString()), causes = tempErrors)
                 branchErrors.add(branchError)
@@ -2064,9 +2135,7 @@ class JsonValidator @JvmOverloads constructor(
 
         // anyOf: only valid branches contribute
         schemaElement[ANY_OF]?.jsonArray?.forEach { subSchema ->
-            val tempErrors = mutableListOf<ValidationError>()
-            validateElement(instance, subSchema, path, "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
-            if (tempErrors.isEmpty()) {
+            if (isValidBranch(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope)) {
                 evaluated.addAll(collectEvaluatedIndices(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
             }
         }
@@ -2075,9 +2144,7 @@ class JsonValidator @JvmOverloads constructor(
         schemaElement[ONE_OF]?.jsonArray?.let { schemas ->
             val validBranch =
                 schemas.firstOrNull { subSchema ->
-                    val tempErrors = mutableListOf<ValidationError>()
-                    validateElement(instance, subSchema, path, "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
-                    tempErrors.isEmpty()
+                    isValidBranch(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                 }
             validBranch?.let {
                 evaluated.addAll(collectEvaluatedIndices(instance, it, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
@@ -2086,9 +2153,7 @@ class JsonValidator @JvmOverloads constructor(
 
         // if/then/else: when if passes collect from if AND then; when fails collect from else
         schemaElement[IF]?.let { ifSchema ->
-            val ifErrors = mutableListOf<ValidationError>()
-            validateElement(instance, ifSchema, path, "", ifErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
-            if (ifErrors.isEmpty()) {
+            if (isValidBranch(instance, ifSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope)) {
                 evaluated.addAll(collectEvaluatedIndices(instance, ifSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
                 schemaElement[THEN]?.let { thenSchema ->
                     evaluated.addAll(collectEvaluatedIndices(instance, thenSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
@@ -2190,9 +2255,7 @@ class JsonValidator @JvmOverloads constructor(
 
         // anyOf: annotations only from valid branches
         schemaElement[ANY_OF]?.jsonArray?.forEach { subSchema ->
-            val tempErrors = mutableListOf<ValidationError>()
-            validateElement(instance, subSchema, path, "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
-            if (tempErrors.isEmpty()) {
+            if (isValidBranch(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope)) {
                 evaluated.addAll(collectEvaluatedProperties(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
             }
         }
@@ -2201,9 +2264,7 @@ class JsonValidator @JvmOverloads constructor(
         schemaElement[ONE_OF]?.jsonArray?.let { schemas ->
             val validBranch =
                 schemas.firstOrNull { subSchema ->
-                    val tempErrors = mutableListOf<ValidationError>()
-                    validateElement(instance, subSchema, path, "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
-                    tempErrors.isEmpty()
+                    isValidBranch(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                 }
             validBranch?.let {
                 evaluated.addAll(collectEvaluatedProperties(instance, it, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
@@ -2212,9 +2273,7 @@ class JsonValidator @JvmOverloads constructor(
 
         // if/then/else: when if passes, collect from the if schema AND then; when if fails, collect from else
         schemaElement[IF]?.let { ifSchema ->
-            val ifErrors = mutableListOf<ValidationError>()
-            validateElement(instance, ifSchema, path, "", ifErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
-            if (ifErrors.isEmpty()) {
+            if (isValidBranch(instance, ifSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope)) {
                 // if passed: its own property annotations also contribute
                 evaluated.addAll(collectEvaluatedProperties(instance, ifSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
                 schemaElement[THEN]?.let { thenSchema ->

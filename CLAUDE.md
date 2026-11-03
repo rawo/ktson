@@ -130,7 +130,7 @@ validate()
       → Validates conditionals (if/then/else) → recursive
 ```
 
-**CRITICAL**: `validateElement()` has **30 recursive call sites** (plus one entry point from `validateInternal()`). See "Known Limitations" below.
+**CRITICAL**: `validateElement()` has **22 recursive call sites** (plus one entry point from `validateInternal()`). See "Known Limitations" below.
 
 ### Test Structure
 
@@ -166,6 +166,7 @@ validate()
 - **ReferenceResolutionTest.kt** - 38 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
 - **UnevaluatedAcrossResourcesTest.kt** - 6 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated
+- **UnevaluatedNestingTest.kt** - 8 tests: 40 levels of `anyOf`/`oneOf`/`if` with `unevaluated*` at one location stay fast; reused branch verdicts respect the dynamic scope and are never undecided (#30)
 - **AbsoluteKeywordLocationTest.kt** - 45 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
 - **JavaOutputUsageTest.kt** - 2 tests running `src/test/java/org/ktson/JavaOutputUsage.java`, a Java caller of the output API
 - **JavaApiUsageTest.kt** - 11 tests running `src/test/java/org/ktson/JavaApiUsage.java`, a Java caller of `JsonSchema`, `JsonValidator` and `JsonPointer`
@@ -280,7 +281,7 @@ Release notes are generated from the commit log, so commits must follow Conventi
 4. Thread safety is critical - use `EdgeCaseAndThreadSafetyTest` as reference
 
 ### When Modifying Validation Logic
-1. Changes to `validateElement()` affect 30 recursive call sites
+1. Changes to `validateElement()` affect 22 recursive call sites
 2. Test against both Draft 2019-09 and 2020-12 test suites
 3. Consider stack depth implications for recursive changes
 4. Pass the keyword location on every error: `ValidationError(path, msg, KEYWORD, at(schemaPath, KEYWORD))`.
@@ -306,6 +307,12 @@ Release notes are generated from the commit log, so commits must follow Conventi
 9. Verdict passes may stop early (`anyOf` returns at its first valid branch, #78) because `unevaluated*`
    annotations come only from the separate `collectEvaluated*()` passes, which visit every branch. Keep that split:
    never make annotation collection depend on what the verdict pass evaluated
+10. The collection passes ask whether an `anyOf`/`oneOf` branch or an `if` condition is valid through `isValidBranch()`,
+   and the verdict pass validates them through `validateBranch()`, which remembers decided verdicts in the `Evaluation`
+   while a schema with `unevaluated*` is evaluated at that instance (#30). Re-validating them instead made each nesting
+   level cost ~2.6× the one below. The `Application` key holds everything a verdict depends on (schema, instance,
+   resource and its base, dynamic scope, depth); a new input to a verdict must be added to it. Undecided verdicts are
+   never remembered, so they are reached and marked again
 
 ### Reference Resolution
 - `$ref` resolution uses `ReferenceResolver` in `JsonPointer.kt`, one per validation: `validateInternal()` creates an

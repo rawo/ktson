@@ -517,7 +517,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 1239 tests (100% passing)
+- **Custom Tests**: 1247 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -530,6 +530,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Output formats: 40 tests
   - Basic output flattening (order, deep trees, linear allocation): 3 tests
   - Detailed output JSON (same as the generated serializer, deep trees): 5 tests
+  - Nested `unevaluated*` under `anyOf`/`oneOf`/`if` (time, dynamic scope, undecided branches): 8 tests
   - Absolute keyword locations: 45 tests
   - Reference resolution (percent-encoding, base URIs, `$id` registration, reference resources): 38 tests
   - Keyword-named properties (`$id`, `$anchor`, `$dynamicAnchor`): 7 tests
