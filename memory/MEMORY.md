@@ -1,7 +1,7 @@
 # KtSON Project Memory
 
-Keep this file up to date along with the README: update it in the same commit when test counts, fixed issues or
-review decisions change.
+Keep this file up to date along with the README, `docs/IMPLEMENTATION_STATUS.md` and `docs/FEATURES.md`: update all
+of them in the same commit as every change (test counts, fixed issues, features, review decisions).
 
 ## Project State (as of 2026-11-03)
 
@@ -62,6 +62,8 @@ review decisions change.
   - #89: `contains` without `maxContains` stops at `minContains` matches.
   - Tokens whose exponent is outside BigDecimal's 32-bit scale (`1e-2147483648`) remain documented as unsupported.
 - **#22 (removing this file): closed as irrelevant.** This file is kept and maintained.
+- **#24: DONE (2026-11-03).** `docs/IMPLEMENTATION_STATUS.md` and `docs/FEATURES.md` describe the current state and
+  are updated with every change.
 
 ## User Preferences
 

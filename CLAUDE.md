@@ -257,6 +257,11 @@ commit, then push a tag `v<version>`. `.github/workflows/release.yml` then:
 
 Only tags matching `v*` trigger it. KtSON is not published to Maven Central (out of scope for now).
 
+### Keeping docs current
+Every change updates, in the same commit, whatever it makes stale: `CHANGELOG.md`, the README (test counts, test
+list, features), `docs/IMPLEMENTATION_STATUS.md`, `docs/FEATURES.md`, the test list in this file and
+`memory/MEMORY.md` (project state, test counts, review decisions).
+
 ### Commit Messages
 Release notes are generated from the commit log, so commits must follow Conventional Commits:
 - `feat: ...` and `fix: ...` become the **What's New** and **Bug Fixes** sections; a scope
@@ -367,10 +372,10 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - `docs/SPEC_INSTANCE_LOCATION.md` - implemented in 3.0.0: RFC 6901 instance locations and legacy `path` deprecation
 - `docs/SPEC_OUTPUT_FORMATS.md` - Flag/Basic/Detailed implemented in 3.1.0; absoluteKeywordLocation implemented, unreleased; annotations deferred; Verbose dropped
 - `docs/SPEC_ARBITRARY_PRECISION_NUMBERS.md` - implemented: exact numeric comparisons, regression coverage and benchmarks
-- `docs/IMPLEMENTATION_STATUS.md` - Feature completeness tracking
+- `docs/IMPLEMENTATION_STATUS.md` - Feature completeness tracking; update with every change (see Keeping docs current)
 - `docs/OFFICIAL_TEST_SUITE_RESULTS.md` - Detailed test results (100% pass rate)
 - `docs/TESTING.md` - Testing methodology
-- `docs/FEATURES.md` - Complete feature list
+- `docs/FEATURES.md` - Complete feature list; update with every change (see Keeping docs current)
 
 ### Configuration
 - `build.gradle.kts` - Gradle build configuration with test memory settings
