@@ -10,6 +10,8 @@ internal object UriSyntax {
      * most resolvers, so "192.168.0.01" is not the same address as written.
      */
     fun isValidIPv4(value: String): Boolean {
+        // "255.255.255.255": reject longer strings before splitting them (#88)
+        if (value.length > 15) return false
         val parts = value.split('.')
         if (parts.size != 4) return false
         return parts.all { part ->
@@ -22,7 +24,9 @@ internal object UriSyntax {
     }
 
     fun isValidIPv6(value: String): Boolean {
-        if (value.isEmpty()) return false
+        // The longest form is six full groups and an IPv4 tail, "ffff:...:ffff:255.255.255.255"; reject longer
+        // strings before copying and splitting them (#88)
+        if (value.isEmpty() || value.length > 45) return false
         val hasMixed = '.' in value
         if (hasMixed) {
             val lastColon = value.lastIndexOf(':')
@@ -38,7 +42,7 @@ internal object UriSyntax {
     private fun isValidPureIPv6Part(s: String): Boolean {
         if (":::" in s) return false
         val hasCompress = "::" in s
-        if (hasCompress && s.windowed(2).count { it == "::" } > 1) return false
+        if (hasCompress && s.indexOf("::") != s.lastIndexOf("::")) return false
         return if (hasCompress) {
             val sides = s.split("::")
             val left = if (sides[0].isEmpty()) emptyList() else sides[0].split(":")

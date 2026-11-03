@@ -121,6 +121,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `100e2147483647`, whose trailing zeros cannot be stripped within BigDecimal's 32-bit scale; they are integers (#86).
 - `multipleOf` counts a divisor's factors of five in O(log n) divisions instead of one division per factor: a
   divisor of `5^16000` (11,184 digits) cost about 82 MB and 100 ms per validation, now about 0.6 MB and 2 ms (#87).
+- `ipv4` and `ipv6` (and IP literals in `uri`, `iri` and `email`) reject strings longer than any address (15 and
+  45 characters) before splitting them: a 1 MB candidate allocated about 53–63 MB, now nothing proportional (#88).
 - URI parsing no longer cuts an IRI's fragment short at U+2028 or U+2029: `parseUri`, `extractFragment`,
   `normalizeUri` and `resolveUri` keep the whole fragment (#77).
 - **Breaking verdict change:** `iri` and `iri-reference` admit only the RFC 3987 repertoire: C1 controls,
