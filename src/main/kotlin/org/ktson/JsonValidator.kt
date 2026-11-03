@@ -954,33 +954,6 @@ class JsonValidator @JvmOverloads constructor(
 
         // Contains
         schema[CONTAINS]?.let { containsSchema ->
-            val matchingIndices = mutableListOf<Int>()
-            // Items that failed contains in a way that could not be decided: they might match after all
-            val undecidedItemErrors = mutableListOf<ValidationError>()
-            var undecidedItems = 0
-            instance.forEachIndexed { index, item ->
-                val itemErrors = mutableListOf<ValidationError>()
-                val undecided = evaluation.leftUndecided {
-                    validateElement(item, containsSchema, childOf(path, index.toString()), at(schemaPath, CONTAINS), itemErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
-                }
-                if (itemErrors.isEmpty()) {
-                    matchingIndices.add(index)
-                } else if (undecided) {
-                    undecidedItems++
-                    undecidedItemErrors.addAll(itemErrors)
-                }
-            }
-
-            // maxContains counts matches, so an undecided item that might match can push the count past it
-            fun checkMaxContains(max: Int) {
-                when {
-                    matchingIndices.size > max -> errors.add(
-                        ValidationError(path, "Array contains ${matchingIndices.size} matching items, maximum is $max", MAX_CONTAINS, at(schemaPath, MAX_CONTAINS)),
-                    )
-                    matchingIndices.size + undecidedItems > max -> errors.add(undecidedError(path, MAX_CONTAINS, schemaPath, undecidedItemErrors))
-                }
-            }
-
             // Min/Max contains (2019-09 and later) - handle decimal values
             val minContains = schema[MIN_CONTAINS]?.jsonPrimitive?.let {
                 it.doubleOrNull?.toInt() ?: it.intOrNull ?: 1
@@ -990,24 +963,47 @@ class JsonValidator @JvmOverloads constructor(
                 it.doubleOrNull?.toInt() ?: it.intOrNull
             }
 
-            // Special case: if minContains is 0, contains is always valid
-            if (minContains == 0) {
-                // Check maxContains only
-                maxContains?.let { checkMaxContains(it) }
-            } else {
-                // Normal case: minContains >= 1
-                if (matchingIndices.size < minContains) {
-                    errors.add(
-                        ValidationError(
-                            path,
-                            "Array contains ${matchingIndices.size} matching items, minimum is $minContains",
-                            if (schema.containsKey(MIN_CONTAINS)) MIN_CONTAINS else CONTAINS,
-                            at(schemaPath, if (schema.containsKey(MIN_CONTAINS)) MIN_CONTAINS else CONTAINS),
-                        ),
-                    )
+            // Without maxContains, the assertion holds once minContains items match: later items cannot change it, and
+            // unevaluatedItems learns which items matched from collectEvaluatedIndices (#89)
+            if (maxContains == null && minContains <= 0) return@let
+            var matches = 0
+            // Items that failed contains in a way that could not be decided: they might match after all
+            val undecidedItemErrors = mutableListOf<ValidationError>()
+            var undecidedItems = 0
+            for ((index, item) in instance.withIndex()) {
+                if (maxContains == null && matches >= minContains) break
+                val itemErrors = mutableListOf<ValidationError>()
+                val undecided = evaluation.leftUndecided {
+                    validateElement(item, containsSchema, childOf(path, index.toString()), at(schemaPath, CONTAINS), itemErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
                 }
+                if (itemErrors.isEmpty()) {
+                    matches++
+                } else if (undecided) {
+                    undecidedItems++
+                    undecidedItemErrors.addAll(itemErrors)
+                }
+            }
 
-                maxContains?.let { checkMaxContains(it) }
+            // minContains 0 makes contains always valid
+            if (minContains > 0 && matches < minContains) {
+                errors.add(
+                    ValidationError(
+                        path,
+                        "Array contains $matches matching items, minimum is $minContains",
+                        if (schema.containsKey(MIN_CONTAINS)) MIN_CONTAINS else CONTAINS,
+                        at(schemaPath, if (schema.containsKey(MIN_CONTAINS)) MIN_CONTAINS else CONTAINS),
+                    ),
+                )
+            }
+
+            // maxContains counts matches, so an undecided item that might match can push the count past it
+            maxContains?.let { max ->
+                when {
+                    matches > max -> errors.add(
+                        ValidationError(path, "Array contains $matches matching items, maximum is $max", MAX_CONTAINS, at(schemaPath, MAX_CONTAINS)),
+                    )
+                    matches + undecidedItems > max -> errors.add(undecidedError(path, MAX_CONTAINS, schemaPath, undecidedItemErrors))
+                }
             }
         }
 

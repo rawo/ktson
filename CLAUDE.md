@@ -158,6 +158,7 @@ validate()
 - **MultipleOfTest.kt** - 6 tests: `multipleOf` stays exact and bounded for compact numbers such as `1e2147483647` and divisors such as `5^16000` (#87)
 - **ScaleBoundaryTest.kt** - 4 tests: `type` and `multipleOf` decide `100e2147483647`, whose stripped scale would overflow, without throwing (#86)
 - **AnyOfEvaluationTest.kt** - 3 tests: `anyOf` stops at the first valid branch; all branches still feed `unevaluated*` (#78)
+- **ContainsEvaluationTest.kt** - 6 tests: `contains` without `maxContains` stops at `minContains` matches; `maxContains`, failure messages and `unevaluatedItems` still see every match (#89)
 - **SchemaVersionTest.kt** - 11 tests: `$schema` selects a draft only for its exact meta-schema identifier (#81)
 - **RegexFormatScanTest.kt** - 2 tests: the `regex` format scan recognises ECMA group forms and stays linear (#80)
 - **IdnLabelLengthTest.kt** - 4 tests: the 63-character A-label limit is exact, and oversized labels are rejected before Punycode work (#79)
@@ -308,7 +309,8 @@ Release notes are generated from the commit log, so commits must follow Conventi
    reference leads, and `validateElement()` stamps `absoluteKeywordLocation` for every hop. A new
    reference keyword goes into `resolveReferences()`, never into a copy. Below a schema with `$id`, every call passes
    its effective resource root and dynamic scope, in the collectors as in `validateElement()` (#90)
-9. Verdict passes may stop early (`anyOf` returns at its first valid branch, #78) because `unevaluated*`
+9. Verdict passes may stop early (`anyOf` returns at its first valid branch, #78; `contains` without `maxContains`
+   at `minContains` matches, #89) because `unevaluated*`
    annotations come only from the separate `collectEvaluated*()` passes, which visit every branch. Keep that split:
    never make annotation collection depend on what the verdict pass evaluated
 10. The collection passes ask whether an `anyOf`/`oneOf` branch or an `if` condition is valid through `isValidBranch()`,
