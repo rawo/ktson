@@ -1,5 +1,21 @@
 # KtSON Project Memory
 
+## Code Review Decisions (2026-11-02)
+
+- **Issues #84 and #85: DONE — fixes independently verified on fetched master `c49c1e7`.** The original findings are resolved; do not refile them. Verification passed 5,804 standard tests, nine performance tests, Gradle checks, and five independent tests.
+- #84: schemas without numeric assertions skip conversion; the original 100,000-digit empty-schema case now allocates 544 bytes and takes about 0.004 ms instead of 484 KB and 225 ms. Exact numeric assertions and integer classification were verified.
+- #85: Detailed JSON serialization is iterative. The original depth-950 result now serializes on a 1 MB consumer stack, matching generated serialization exactly. Another 250 branching/escaping comparisons and direct serialization of a 100,000-level output on that stack passed.
+- Verification report: `/private/tmp/ktson-issues84-85-verification/VERIFICATION_SUMMARY.txt`. The default branch remains `master`, not `main`; both fixing commits are present there. No GitHub issue states or comments were changed.
+- **Issues #79, #80, #81, and #82: DONE — fixes independently verified on fetched master `d3c85f8`.** The original findings are resolved; do not refile the same defects. Verification passed 5,794 standard tests, nine performance tests, Gradle checks, and six independent reproducer/boundary tests.
+- #79: oversized IDN labels now fail before Punycode work; the original 2,048-code-point case allocates about 16 KB instead of 65 MB. Mapping, supplementary characters, and the exact A-label length boundary were verified.
+- #80: regex group openers are scanned without suffix copies; the original 4,096-group case allocates about 485 KB instead of 43 MB, with linear scaling and syntax controls verified.
+- #81: dialect matching is exact, allowing an empty fragment; unknown identifiers retain the caller's default. Both drafts and the Java API were verified.
+- #82: ASCII labels in Bidi domains receive Bidi checks; reported hostname/email cases are rejected consistently while valid ASCII and internationalized controls remain accepted.
+- Verification report: `/private/tmp/ktson-issues79-82-verification/VERIFICATION_SUMMARY.txt`. No GitHub issue states or comments were changed during verification.
+- **Issue [#83](https://github.com/rawo/ktson/issues/83): DONE. Do not revisit, re-investigate, or refile it in future code review rounds.** This exclusion is an explicit user instruction.
+- The Unicode URI-template defect was fixed in commit `6dec486`; the response review passed all 418 format-validation tests, including the new regressions.
+- The apostrophe allegation was a false positive: verified RFC 6570 erratum 6937 permits literal apostrophes, and the pinned official suite requires acceptance. Keep apostrophes valid; do not report them again as a URI-template defect.
+
 ## Project State (as of 2026-02-22)
 
 - Version: 0.0.2-SNAPSHOT, pre-release
