@@ -2109,7 +2109,7 @@ class JsonValidator @JvmOverloads constructor(
             val matchingIndices = mutableListOf<Int>()
             instance.forEachIndexed { index, item ->
                 val tempErrors = mutableListOf<ValidationError>()
-                validateElement(item, containsSchema, childOf(path, index.toString()), "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+                validateElement(item, containsSchema, childOf(path, index.toString()), "", tempErrors, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)
                 if (tempErrors.isEmpty()) matchingIndices.add(index)
             }
             // Annotation only produced when contains validates (minContains satisfied)
@@ -2130,13 +2130,13 @@ class JsonValidator @JvmOverloads constructor(
 
         // allOf: all branches always contribute
         schemaElement[ALL_OF]?.jsonArray?.forEach { subSchema ->
-            evaluated.addAll(collectEvaluatedIndices(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
+            evaluated.addAll(collectEvaluatedIndices(instance, subSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope))
         }
 
         // anyOf: only valid branches contribute
         schemaElement[ANY_OF]?.jsonArray?.forEach { subSchema ->
-            if (isValidBranch(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope)) {
-                evaluated.addAll(collectEvaluatedIndices(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
+            if (isValidBranch(instance, subSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)) {
+                evaluated.addAll(collectEvaluatedIndices(instance, subSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope))
             }
         }
 
@@ -2144,23 +2144,23 @@ class JsonValidator @JvmOverloads constructor(
         schemaElement[ONE_OF]?.jsonArray?.let { schemas ->
             val validBranch =
                 schemas.firstOrNull { subSchema ->
-                    isValidBranch(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+                    isValidBranch(instance, subSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)
                 }
             validBranch?.let {
-                evaluated.addAll(collectEvaluatedIndices(instance, it, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
+                evaluated.addAll(collectEvaluatedIndices(instance, it, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope))
             }
         }
 
         // if/then/else: when if passes collect from if AND then; when fails collect from else
         schemaElement[IF]?.let { ifSchema ->
-            if (isValidBranch(instance, ifSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope)) {
-                evaluated.addAll(collectEvaluatedIndices(instance, ifSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
+            if (isValidBranch(instance, ifSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)) {
+                evaluated.addAll(collectEvaluatedIndices(instance, ifSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope))
                 schemaElement[THEN]?.let { thenSchema ->
-                    evaluated.addAll(collectEvaluatedIndices(instance, thenSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
+                    evaluated.addAll(collectEvaluatedIndices(instance, thenSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope))
                 }
             } else {
                 schemaElement[ELSE]?.let { elseSchema ->
-                    evaluated.addAll(collectEvaluatedIndices(instance, elseSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
+                    evaluated.addAll(collectEvaluatedIndices(instance, elseSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope))
                 }
             }
         }
@@ -2175,7 +2175,7 @@ class JsonValidator @JvmOverloads constructor(
                 else ->
                     yetUnevaluated.forEach { index ->
                         val tempErrors = mutableListOf<ValidationError>()
-                        validateElement(instance[index], unevalItemsSchema, childOf(path, index.toString()), "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+                        validateElement(instance[index], unevalItemsSchema, childOf(path, index.toString()), "", tempErrors, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)
                         if (tempErrors.isEmpty()) evaluated.add(index)
                     }
             }
@@ -2250,13 +2250,13 @@ class JsonValidator @JvmOverloads constructor(
 
         // allOf: annotations from all branches (they must all be valid for the schema to be valid)
         schemaElement[ALL_OF]?.jsonArray?.forEach { subSchema ->
-            evaluated.addAll(collectEvaluatedProperties(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
+            evaluated.addAll(collectEvaluatedProperties(instance, subSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope))
         }
 
         // anyOf: annotations only from valid branches
         schemaElement[ANY_OF]?.jsonArray?.forEach { subSchema ->
-            if (isValidBranch(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope)) {
-                evaluated.addAll(collectEvaluatedProperties(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
+            if (isValidBranch(instance, subSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)) {
+                evaluated.addAll(collectEvaluatedProperties(instance, subSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope))
             }
         }
 
@@ -2264,24 +2264,24 @@ class JsonValidator @JvmOverloads constructor(
         schemaElement[ONE_OF]?.jsonArray?.let { schemas ->
             val validBranch =
                 schemas.firstOrNull { subSchema ->
-                    isValidBranch(instance, subSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+                    isValidBranch(instance, subSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)
                 }
             validBranch?.let {
-                evaluated.addAll(collectEvaluatedProperties(instance, it, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
+                evaluated.addAll(collectEvaluatedProperties(instance, it, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope))
             }
         }
 
         // if/then/else: when if passes, collect from the if schema AND then; when if fails, collect from else
         schemaElement[IF]?.let { ifSchema ->
-            if (isValidBranch(instance, ifSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope)) {
+            if (isValidBranch(instance, ifSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)) {
                 // if passed: its own property annotations also contribute
-                evaluated.addAll(collectEvaluatedProperties(instance, ifSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
+                evaluated.addAll(collectEvaluatedProperties(instance, ifSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope))
                 schemaElement[THEN]?.let { thenSchema ->
-                    evaluated.addAll(collectEvaluatedProperties(instance, thenSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
+                    evaluated.addAll(collectEvaluatedProperties(instance, thenSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope))
                 }
             } else {
                 schemaElement[ELSE]?.let { elseSchema ->
-                    evaluated.addAll(collectEvaluatedProperties(instance, elseSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
+                    evaluated.addAll(collectEvaluatedProperties(instance, elseSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope))
                 }
             }
         }
@@ -2290,7 +2290,7 @@ class JsonValidator @JvmOverloads constructor(
         schemaElement[DEPENDENT_SCHEMAS]?.jsonObject?.let { depSchemas ->
             depSchemas.forEach { (propName, depSchema) ->
                 if (propName in instance) {
-                    evaluated.addAll(collectEvaluatedProperties(instance, depSchema, path, version, evaluation, depth + 1, resourceRoot, dynamicScope))
+                    evaluated.addAll(collectEvaluatedProperties(instance, depSchema, path, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope))
                 }
             }
         }
@@ -2306,7 +2306,7 @@ class JsonValidator @JvmOverloads constructor(
                 else ->
                     yetUnevaluated.forEach { propName ->
                         val tempErrors = mutableListOf<ValidationError>()
-                        validateElement(instance[propName]!!, unevalPropsSchema, childOf(path, propName), "", tempErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+                        validateElement(instance[propName]!!, unevalPropsSchema, childOf(path, propName), "", tempErrors, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)
                         if (tempErrors.isEmpty()) evaluated.add(propName)
                     }
             }

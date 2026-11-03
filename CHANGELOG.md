@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - References whose fragment percent-encodes non-ASCII characters (`#/$defs/%C3%A9`) now resolve (#8).
   - References inside loaded documents with nested relative `$id` resolve the same way on every
     validation; before, each search re-registered the resource one directory deeper (#15).
+- **Breaking verdict change:** `unevaluatedProperties` / `unevaluatedItems` evaluate the branches of an inline
+  subschema with its own `$id` in that subschema's resource, as validation does. Before, a local `$ref` or
+  `$dynamicRef` in such a branch resolved against the parent resource when annotations were collected, so
+  properties and items the branch evaluated were rejected, or a same-named definition of the parent was credited
+  and unevaluated ones were accepted (#90).
 - **Breaking loader change:** relative `$ref`s now resolve against `JsonSchema.baseUri` (and a relative
   root `$id` against it), so with a `baseUri` set `schemaLoader` receives the absolute URI
   (`https://ex.com/schemas/other.json`, not `other.json`), and schemas with different base URIs no

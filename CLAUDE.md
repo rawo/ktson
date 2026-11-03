@@ -165,7 +165,7 @@ validate()
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 38 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
-- **UnevaluatedAcrossResourcesTest.kt** - 6 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated
+- **UnevaluatedAcrossResourcesTest.kt** - 17 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated, and evaluates the branches of an inline `$id` subschema in its own resource (#90)
 - **UnevaluatedNestingTest.kt** - 8 tests: 40 levels of `anyOf`/`oneOf`/`if` with `unevaluated*` at one location stay fast; reused branch verdicts respect the dynamic scope and are never undecided (#30)
 - **AbsoluteKeywordLocationTest.kt** - 45 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
 - **JavaOutputUsageTest.kt** - 2 tests running `src/test/java/org/ktson/JavaOutputUsage.java`, a Java caller of the output API
@@ -303,7 +303,8 @@ Release notes are generated from the commit log, so commits must follow Conventi
    which returns each hop's target, resource root and dynamic scope. `validateElement()` and both
    `collectEvaluated*()` functions use it, so validation and `unevaluated*` always agree on where a
    reference leads, and `validateElement()` stamps `absoluteKeywordLocation` for every hop. A new
-   reference keyword goes into `resolveReferences()`, never into a copy
+   reference keyword goes into `resolveReferences()`, never into a copy. Below a schema with `$id`, every call passes
+   its effective resource root and dynamic scope, in the collectors as in `validateElement()` (#90)
 9. Verdict passes may stop early (`anyOf` returns at its first valid branch, #78) because `unevaluated*`
    annotations come only from the separate `collectEvaluated*()` passes, which visit every branch. Keep that split:
    never make annotation collection depend on what the verdict pass evaluated

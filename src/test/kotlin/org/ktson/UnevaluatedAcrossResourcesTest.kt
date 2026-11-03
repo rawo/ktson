@@ -47,6 +47,53 @@ class UnevaluatedAcrossResourcesTest :
                     isValid(schema, """{"foo":1}""", version, loader) shouldBe true
                     isValid(schema, """{"bar":1}""", version, loader) shouldBe false
                 }
+
+                // An inline subschema with $id is a resource of its own: the branches of its applicators are
+                // evaluated in it when collecting annotations too, as they are during validation (#90)
+                describe("branches of an inline subschema with ${'$'}id") {
+                    fun inline(branches: String, subDefs: String, rootDefs: String = "{}", keyword: String = "unevaluatedProperties") = """
+                        {"${'$'}id":"https://ex.com/root",
+                         "allOf":[{"${'$'}id":"sub",$branches,"${'$'}defs":$subDefs}],
+                         "$keyword":false,
+                         "${'$'}defs":$rootDefs}
+                    """
+
+                    it("count properties a local ref of the subschema evaluated") {
+                        val schema = inline(""""anyOf":[{"${'$'}ref":"#/${'$'}defs/x"}]""", """{"x":{"properties":{"a":true}}}""")
+                        isValid(schema, """{"a":1}""", version) shouldBe true
+                        isValid(schema, """{"a":1,"z":2}""", version) shouldBe false
+                    }
+
+                    it("are not judged against a definition of the same name in the parent resource") {
+                        val schema = inline(""""anyOf":[{"${'$'}ref":"#/${'$'}defs/x"}]""", """{"x":{"properties":{"a":true}}}""", """{"x":{"required":["b"]}}""")
+                        isValid(schema, """{"a":1}""", version) shouldBe true
+                    }
+
+                    it("do not take credit for properties the parent's definition would evaluate") {
+                        val schema = inline(""""anyOf":[{"${'$'}ref":"#/${'$'}defs/x"}]""", """{"x":{"properties":{"q":true}}}""", """{"x":{"properties":{"a":true}}}""")
+                        isValid(schema, """{"a":1}""", version) shouldBe false
+                    }
+
+                    it("count properties of an if condition resolved in the subschema") {
+                        val schema = inline(""""if":{"${'$'}ref":"#/${'$'}defs/x"},"then":true""", """{"x":{"properties":{"a":{"const":1}}}}""")
+                        isValid(schema, """{"a":1}""", version) shouldBe true
+                        isValid(schema, """{"a":2}""", version) shouldBe false
+                    }
+
+                    it("count items a local ref of the subschema evaluated") {
+                        val schema = inline(""""anyOf":[{"${'$'}ref":"#/${'$'}defs/x"}]""", """{"x":{$firstItem}}""", keyword = "unevaluatedItems")
+                        isValid(schema, "[1]", version) shouldBe true
+                        isValid(schema, "[1,2]", version) shouldBe false
+                    }
+
+                    if (version == SchemaVersion.DRAFT_2020_12) {
+                        it("count properties a dynamic ref of the subschema evaluated") {
+                            val schema = inline(""""anyOf":[{"${'$'}dynamicRef":"#node"}]""", """{"node":{"${'$'}dynamicAnchor":"node","properties":{"a":true}}}""")
+                            isValid(schema, """{"a":1}""", version) shouldBe true
+                            isValid(schema, """{"a":1,"z":2}""", version) shouldBe false
+                        }
+                    }
+                }
             }
         }
     })
