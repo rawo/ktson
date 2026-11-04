@@ -674,15 +674,6 @@ KtSON follows strict code quality standards:
 - **Thread Safety**: Verified with concurrent validation tests
 - **Documentation**: Comprehensive inline documentation and separate docs
 
-Check code style:
-```bash
-./gradlew ktlintCheck
-```
-
-Auto-format code:
-```bash
-./gradlew ktlintFormat
-```
 
 ## License
 
