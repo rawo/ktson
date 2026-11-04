@@ -197,6 +197,24 @@ internal class ReferenceResolver(private val store: SchemaStore) {
     private val schemaAbsoluteUris = java.util.IdentityHashMap<JsonElement, String>()
 
     /**
+     * One frame per [withBase] in progress, innermost last: what each registration made during it replaced (null when
+     * there was none), so the hop can restore it (#91). A frame is created on the hop's first registration.
+     */
+    private val hops = ArrayList<java.util.IdentityHashMap<JsonElement, String?>?>()
+
+    private fun restore(schema: JsonElement, uri: String?) {
+        if (uri == null) schemaAbsoluteUris.remove(schema) else schemaAbsoluteUris[schema] = uri
+    }
+
+    /** Sets [schema]'s registration, remembering what it replaces in the innermost hop. */
+    private fun register(schema: JsonElement, uri: String) {
+        val previous = schemaAbsoluteUris.put(schema, uri)
+        if (hops.isEmpty()) return
+        val frame = hops.last() ?: java.util.IdentityHashMap<JsonElement, String?>().also { hops[hops.lastIndex] = it }
+        if (!frame.containsKey(schema)) frame[schema] = previous
+    }
+
+    /**
      * Register the resolved absolute URI for an inline schema element.
      * Call this whenever validateElement enters a new resource root (schema with $id).
      * This enables correct relative URI resolution for nested schemas with relative $id values.
@@ -209,7 +227,7 @@ internal class ReferenceResolver(private val store: SchemaStore) {
         // Never downgrade: a later search that only knows a relative $id must not replace the absolute
         // URI registered for the same schema (that made resolution depend on evaluation order).
         val replacesAbsolute = schemaAbsoluteUris[schema]?.let { isAbsolute(it) } == true
-        if (!replacesAbsolute || isAbsolute(absoluteUri)) schemaAbsoluteUris[schema] = absoluteUri
+        if (!replacesAbsolute || isAbsolute(absoluteUri)) register(schema, absoluteUri)
     }
 
     /** Whether [schema] already has an absolute URI registered (see [registerAbsoluteUri]). */
@@ -303,15 +321,19 @@ internal class ReferenceResolver(private val store: SchemaStore) {
     /**
      * Runs [block] with [resource]'s base set to [base], then restores what was registered before. A
      * reference hop knows the base its resource was reached under (#52); the same element may be reached
-     * under other bases elsewhere (#54), so the registration lasts only as long as the hop.
+     * under other bases elsewhere (#54), so the registration lasts only as long as the hop. So do the
+     * registrations made during it: a relative $id below [resource] resolves against [base], and one parsed
+     * document may be reached under another base later in the same validation (#91).
      */
     internal fun <T> withBase(resource: JsonElement, base: String?, block: () -> T): T {
         if (base == null) return block()
         val previous = schemaAbsoluteUris.put(resource, base)
+        hops.add(null)
         try {
             return block()
         } finally {
-            if (previous == null) schemaAbsoluteUris.remove(resource) else schemaAbsoluteUris[resource] = previous
+            hops.removeAt(hops.lastIndex)?.forEach { (schema, replaced) -> restore(schema, replaced) }
+            restore(resource, previous)
         }
     }
 

@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `$dynamicRef` in such a branch resolved against the parent resource when annotations were collected, so
   properties and items the branch evaluated were rejected, or a same-named definition of the parent was credited
   and unevaluated ones were accepted (#90).
+- **Breaking verdict change:** a relative `$id` inside a document that `schemaLoader` returns for several retrieval
+  URIs resolves against the URI each reference reached it under. Before, the first context's base stuck to the
+  nested resource for the rest of the validation, so its references led into the first document's host: instances
+  were wrongly accepted or rejected depending on property order (#91).
 - **Breaking loader change:** relative `$ref`s now resolve against `JsonSchema.baseUri` (and a relative
   root `$id` against it), so with a `baseUri` set `schemaLoader` receives the absolute URI
   (`https://ex.com/schemas/other.json`, not `other.json`), and schemas with different base URIs no
