@@ -1,6 +1,6 @@
 # Implementation Status
 
-## Current State (3.1.0 and unreleased fixes, 2026-11-03)
+## Current State (4.0.0, 2026-11-04)
 
 **Official test suite**: 100% (4,462 / 4,462 assertions in `draft2019-09` and `draft2020-12`, including
 `optional/format`, `optional/bignum.json` and `optional/ecmascript-regex.json`). 168 assertions are excluded:

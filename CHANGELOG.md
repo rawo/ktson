@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-11-04
+
+Major release: `absoluteKeywordLocation` in errors and output, and conformance and robustness fixes, many of which
+change verdicts or the URIs `schemaLoader` receives. See "Upgrading from 3.1.0" in the README.
+
 ### Added
 - `ValidationError.absoluteKeywordLocation` and the same field on `BasicUnit` and `DetailedOutput`:
   the canonical URI of the schema resource holding the failing keyword plus a JSON Pointer within

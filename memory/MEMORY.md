@@ -3,9 +3,10 @@
 Keep this file up to date along with the README, `docs/IMPLEMENTATION_STATUS.md` and `docs/FEATURES.md`: update all
 of them in the same commit as every change (test counts, fixed issues, features, review decisions).
 
-## Project State (as of 2026-11-03)
+## Project State (as of 2026-11-04)
 
-- Version: 3.1.0 (released 2026-10-21); unreleased fixes are listed in `CHANGELOG.md`
+- Version: 4.0.0 (release prepared 2026-11-04: breaking verdict changes since 3.1.0, released 2026-10-21);
+  later changes go under `## [Unreleased]` in `CHANGELOG.md`
 - Kotlin 2.4.0, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
 - Official JSON Schema Test Suite: 4,462 assertions run, 100% passing (168 excluded), pinned by `TEST_SUITE_REF`
   in `.github/workflows/build.yml`

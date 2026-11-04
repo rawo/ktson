@@ -85,8 +85,8 @@ official test suite is not needed for this):
 ```bash
 git clone https://github.com/rawo/ktson.git
 cd ktson
-git checkout v3.1.0            # a release tag; master may contain unreleased changes
-./gradlew publishToMavenLocal  # installs org.ktson:ktson:3.1.0 into ~/.m2/repository
+git checkout v4.0.0            # a release tag; master may contain unreleased changes
+./gradlew publishToMavenLocal  # installs org.ktson:ktson:4.0.0 into ~/.m2/repository
 ```
 
 Then add `mavenLocal()` to your repositories and depend on that version.
@@ -100,7 +100,7 @@ repositories {
 }
 
 dependencies {
-    implementation("org.ktson:ktson:3.1.0")
+    implementation("org.ktson:ktson:4.0.0")
 }
 ```
 
@@ -113,7 +113,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.ktson:ktson:3.1.0'
+    implementation 'org.ktson:ktson:4.0.0'
 }
 ```
 
@@ -125,7 +125,7 @@ Maven reads `~/.m2/repository` by default, so no extra repository is needed:
 <dependency>
     <groupId>org.ktson</groupId>
     <artifactId>ktson</artifactId>
-    <version>3.1.0</version>
+    <version>4.0.0</version>
 </dependency>
 ```
 
@@ -447,6 +447,49 @@ See [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) for detailed 
    - `absoluteKeywordLocation` is omitted when the schema has neither an absolute `$id` nor a base
      URI, as JSON Schema 2020-12 §12.3.3 allows.
 
+## Upgrading from 3.1.0
+
+4.0.0 brings `absoluteKeywordLocation` and many conformance fixes. Most code compiles unchanged, but verdicts
+change: every change moves toward the JSON Schema specification and the official test suite.
+[CHANGELOG.md](CHANGELOG.md) lists each one.
+
+**Recompile.** `ValidationError`, `BasicUnit` and `DetailedOutput` gain `absoluteKeywordLocation`, so their
+`copy(...)` signatures change, and code compiled against 3.1 that calls them must be recompiled. The five-argument
+`ValidationError` constructor is kept.
+
+**API changes.**
+- `ReferenceResolver` is internal; nothing in the API accepted or returned one.
+- `UriResolver.parseUri` returns components as written (`/a%2Fb`, not `/a/b`).
+- A negative `maxValidationDepth` throws `IllegalArgumentException` when the validator is created.
+- `kotlinx-serialization-json` is an `api` dependency. `kotlinx-coroutines-core` is no longer a runtime
+  dependency, so declare it yourself if you used it through KtSON.
+
+**`schemaLoader` may receive different URIs.** Relative references resolve against `JsonSchema.baseUri`, and
+URI resolution follows RFC 3986 §5.2 (empty path segments are kept, a query-only reference keeps the path).
+Nested relative `$id`s resolve per validation and per retrieval URI. A loader keyed by the old URIs needs updating.
+
+**Verdict changes**, by area:
+- `validateSchema` checks schemas against their draft's official meta-schema, so it rejects schemas it used to
+  accept.
+- `not`, `if`, `oneOf` and `maxContains` no longer turn an undecided subschema (depth limit, regex engine
+  overflow) into success.
+- References: targets are evaluated in their own resource, and the dynamic scope includes resources without
+  `$id`. `unevaluated*` follows references and inline `$id` resources.
+- Drafts: `$schema` selects a draft only by its exact identifier, and draft-specific keywords apply only in their
+  own draft. `formatAssertion = false` now works in 2019-09 too.
+- `pattern` follows ECMA 262 for `\s`, `\S`, `\c`, `$`, `.` and `\p{...}` aliases.
+- Stricter formats:
+  - quoted local parts in `email` and `idn-email`
+  - the character repertoire of `iri`, `iri-reference` and `uri-template`
+  - fragments and IPvFuture hosts in `uri`
+  - the Bidi rule in `hostname`
+
+**Fewer exceptions.** `validate()` reports a `depth` error instead of throwing `StackOverflowError`. It no
+longer throws for huge exponents, IPvFuture `$id`s, non-string `$id`/`$schema` values or properties named after
+keywords.
+
+Pin 3.1.0 if you need the old verdicts.
+
 ## Upgrading from 3.0.0
 
 3.1.0 only adds API, so it is a drop-in replacement: no code changes and no changed verdicts.
@@ -512,7 +555,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ## Project Status
 
-**Version**: 3.1.0  
+**Version**: 4.0.0  
 **Status**: ✅ Stable
 
 ### Test Coverage

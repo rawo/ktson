@@ -1,7 +1,7 @@
 # Spec: standard JSON Schema output formats
 
 **Status**: `Flag`, `Basic` and `Detailed` implemented in 3.1.0; `absoluteKeywordLocation`
-implemented, unreleased (see [absoluteKeywordLocation](#absolutekeywordlocation)); annotations
+implemented in 4.0.0 (see [absoluteKeywordLocation](#absolutekeywordlocation)); annotations
 deferred (see [Deferred](#deferred)); `Verbose` dropped (see [Dropped](#dropped))
 **Depends on**: [SPEC_INSTANCE_LOCATION.md](SPEC_INSTANCE_LOCATION.md) (implemented in 3.0.0)
 
