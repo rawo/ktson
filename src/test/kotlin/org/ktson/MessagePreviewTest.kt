@@ -2,14 +2,18 @@ package org.ktson
 
 import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.ints.shouldBeLessThan
+import io.kotest.matchers.longs.shouldBeLessThan
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldEndWith
 import io.kotest.matchers.string.shouldStartWith
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import java.lang.management.ManagementFactory
 
 /**
  * Error messages quote JSON values, but must stay small however large the value is (#48): a failing
@@ -50,6 +54,28 @@ class MessagePreviewTest :
                 repeat(10_000) { deep = JsonArray(listOf(deep)) }
                 val text = deep.preview()
                 text shouldBe "[".repeat(MAX_PREVIEW_LENGTH) + "..."
+            }
+
+            it("cuts a huge member name before escaping it") {
+                // Escaping the whole name first allocated about 31 MB here (#93)
+                val threads = ManagementFactory.getThreadMXBean() as com.sun.management.ThreadMXBean
+                val validator = JsonValidator()
+                val schema = JsonSchema(buildJsonObject { put("const", JsonObject(mapOf("\u0001".repeat(1_000_000) to JsonNull))) })
+                val instance = JsonPrimitive(0)
+                repeat(2) { validator.validate(instance, schema) }
+                val before = threads.getThreadAllocatedBytes(Thread.currentThread().threadId())
+                val text = validator.validate(instance, schema).getErrors().single().message
+                (threads.getThreadAllocatedBytes(Thread.currentThread().threadId()) - before) shouldBeLessThan 200_000L
+                text shouldStartWith "Value must be const: {\"\\u0001\\u0001"
+                text.length shouldBeLessThan 300
+            }
+
+            it("cuts member names at exactly the prefix of the full rendering") {
+                val value = Json.parseToJsonElement("""{"a\"b\u0001c":1,"long name with \\ and \n":{"x":"y"}}""")
+                val full = value.toString()
+                for (budget in 0..full.length + 1) {
+                    value.preview(budget) shouldBe if (full.length <= budget) full else full.take(budget) + "..."
+                }
             }
 
             it("renders small values exactly as before") {

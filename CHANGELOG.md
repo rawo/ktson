@@ -133,6 +133,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A reference applied many times in one validation finds its target once: anchor and `$id` searches are remembered
   per validation. For a schema with 2,000 definitions and 100 array items, `#anchor` refs went from about 70 MB to
   0.8 MB, already-loaded remote refs from 128 MB to 1.6 MB, and `$id` targets from 64 MB to 1.3 MB (#92).
+- `const` and `enum` messages cut a long object member name before escaping it, as they already did for string values:
+  a 1,000,000-character key allocated about 31 MB for a message under 200 characters (#93).
 - URI parsing no longer cuts an IRI's fragment short at U+2028 or U+2029: `parseUri`, `extractFragment`,
   `normalizeUri` and `resolveUri` keep the whole fragment (#77).
 - **Breaking verdict change:** `iri` and `iri-reference` admit only the RFC 3987 repertoire: C1 controls,

@@ -28,10 +28,13 @@ internal fun JsonElement.preview(budget: Int = MAX_PREVIEW_LENGTH): String {
         return false
     }
 
-    /** Appends a scalar; a long string is cut before being escaped, so it is never copied whole. */
+    /** Appends a string as JSON; a long one is cut before being escaped, so it is never copied whole. */
+    fun emitString(text: String): Boolean = emit(JsonPrimitive(if (text.length > budget - out.length) text.take(budget - out.length) else text).toString())
+
+    /** Appends a scalar. */
     fun emitScalar(value: JsonPrimitive): Boolean = when {
         value is JsonNull -> emit("null")
-        value.isString && value.content.length > budget - out.length -> emit(JsonPrimitive(value.content.take(budget - out.length)).toString())
+        value.isString -> emitString(value.content)
         else -> emit(value.toString())
     }
 
@@ -62,7 +65,8 @@ internal fun JsonElement.preview(budget: Int = MAX_PREVIEW_LENGTH): String {
         val (key, value) = frame.entries.next()
         if (!frame.first && !emit(",")) return out.toString()
         frame.first = false
-        if (key != null && !emit(JsonPrimitive(key).toString() + ":")) return out.toString()
+        // A member name is cut like a string value, before escaping (#93)
+        if (key != null && !(emitString(key) && emit(":"))) return out.toString()
         if (value is JsonPrimitive) {
             if (!emitScalar(value)) return out.toString()
         } else {

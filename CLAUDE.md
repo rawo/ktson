@@ -141,6 +141,7 @@ validate()
 - **UriResolverTest.kt** - 92 tests for RFC 3986 URI resolution, including every §5.4 example and empty path segments
 - **DepthLimitTest.kt** - 16 tests for `maxValidationDepth` protection
 - **ErrorMessageTest.kt** - 32 tests for error content (instance path, keyword, keyword location, wording)
+- **MessagePreviewTest.kt** - 8 tests: `const`/`enum` messages quote values within a fixed budget; strings and member names are cut before escaping, at exactly the prefix of the full rendering (#48, #93)
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
 - **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
 - **OutputFormatTest.kt** - 40 tests for the Flag, Basic and Detailed output formats

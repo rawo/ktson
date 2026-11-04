@@ -72,7 +72,7 @@ The draft is selected by `$schema` when it names a supported meta-schema exactly
   - `absoluteKeywordLocation`: the canonical URI of the keyword in its own schema resource
     (`https://example.com/root#/$defs/p/minimum`), when the schema has an absolute `$id` or a base URI
   - `causes`: the branch errors behind `anyOf`, `oneOf` and similar failures
-  - `message`: a human-readable description
+  - `message`: a human-readable description; quoted values are cut at about 100 characters, however large
 - `validateSchema()` checks a schema against its draft's embedded meta-schema
 
 ## Standard Output Formats ✅
@@ -119,7 +119,7 @@ implemented yet ([#5](https://github.com/rawo/ktson/issues/5)).
 - **Official JSON Schema Test Suite:** 4,462 / 4,462 assertions (100%) for `draft2019-09` and `draft2020-12`,
   including `optional/format`, `optional/bignum.json` and `optional/ecmascript-regex.json`; plus the official
   `output-tests` against Basic output
-- **Custom tests:** 1,282, covering keywords for both drafts, formats, references, `unevaluated*`, output formats,
+- **Custom tests:** 1,284, covering keywords for both drafts, formats, references, `unevaluated*`, output formats,
   error locations, numeric precision, concurrency, validator lifecycle and Java callers. The README's Test Coverage
   section and `CLAUDE.md` break them down per file
 - **Performance tests:** 9, run with `./gradlew performanceTest`
