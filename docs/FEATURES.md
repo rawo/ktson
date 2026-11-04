@@ -93,7 +93,8 @@ implemented yet ([#5](https://github.com/rawo/ktson/issues/5)).
 - **Undecided results:** results the validator cannot decide (the depth limit, a regex the engine cannot
   evaluate) are never turned into Valid by `not`, `if`, `oneOf` or `maxContains`
 - **Bounded cost:** work follows the size of the input as written, not exponents, nesting of `unevaluated*`, or
-  impossible lengths. This applies to `multipleOf`, IDN labels, the `regex` format, IP addresses and `contains`
+  impossible lengths. This applies to `multipleOf`, IDN labels, the `regex` format, IP addresses and `contains`; a
+  reference applied to many items finds its target once per validation
 - **No throwing on malformed input:** non-string `$id` / `$schema` values are reported by `validateSchema`, not
   thrown, and an unparsable URI leaves `absoluteKeywordLocation` empty instead of failing validation
 
@@ -118,7 +119,7 @@ implemented yet ([#5](https://github.com/rawo/ktson/issues/5)).
 - **Official JSON Schema Test Suite:** 4,462 / 4,462 assertions (100%) for `draft2019-09` and `draft2020-12`,
   including `optional/format`, `optional/bignum.json` and `optional/ecmascript-regex.json`; plus the official
   `output-tests` against Basic output
-- **Custom tests:** 1,278, covering keywords for both drafts, formats, references, `unevaluated*`, output formats,
+- **Custom tests:** 1,282, covering keywords for both drafts, formats, references, `unevaluated*`, output formats,
   error locations, numeric precision, concurrency, validator lifecycle and Java callers. The README's Test Coverage
   section and `CLAUDE.md` break them down per file
 - **Performance tests:** 9, run with `./gradlew performanceTest`

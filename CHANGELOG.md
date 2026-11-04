@@ -130,6 +130,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `contains` without `maxContains` stops evaluating items once `minContains` of them match, and evaluates none for
   `minContains: 0`: a matching first item no longer validates (or loads references for) the rest of the array.
   `unevaluatedItems` still sees every match. Verdicts are unchanged (#89).
+- A reference applied many times in one validation finds its target once: anchor and `$id` searches are remembered
+  per validation. For a schema with 2,000 definitions and 100 array items, `#anchor` refs went from about 70 MB to
+  0.8 MB, already-loaded remote refs from 128 MB to 1.6 MB, and `$id` targets from 64 MB to 1.3 MB (#92).
 - URI parsing no longer cuts an IRI's fragment short at U+2028 or U+2029: `parseUri`, `extractFragment`,
   `normalizeUri` and `resolveUri` keep the whole fragment (#77).
 - **Breaking verdict change:** `iri` and `iri-reference` admit only the RFC 3987 repertoire: C1 controls,

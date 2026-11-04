@@ -7,7 +7,7 @@
 `vocabulary.json`, `infinite-loop-detection.json` and the rest of `optional/`. The suite is pinned to
 `TEST_SUITE_REF` in `.github/workflows/build.yml`.
 
-**Custom tests**: 1,278 (100% passing); see the README's Test Coverage section and the per-file list in `CLAUDE.md`.
+**Custom tests**: 1,282 (100% passing); see the README's Test Coverage section and the per-file list in `CLAUDE.md`.
 
 ## What's Implemented ✅
 
@@ -27,6 +27,7 @@
 - `$id`-based lookup with RFC 3986 resolution (`UriResolver`, `UriSyntax`; no `java.net.URI`)
 - Relative references resolved against `JsonSchema.baseUri`; a loaded document's nested relative `$id`s resolve
   against the URI each reference retrieved it under
+- Anchor and `$id` lookups are done once per validation, however often a reference is applied
 - Percent-decoded fragments, sibling keywords alongside `$ref`
 
 ### Unevaluated Keywords

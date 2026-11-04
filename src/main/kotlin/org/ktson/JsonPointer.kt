@@ -206,6 +206,14 @@ internal class ReferenceResolver(private val store: SchemaStore) {
         if (uri == null) schemaAbsoluteUris.remove(schema) else schemaAbsoluteUris[schema] = uri
     }
 
+    /**
+     * Anchor and `$id` searches already done in this validation, so a reference applied to every item of an array
+     * walks the schema once, not once per item (#92). An anchor search depends only on the resource; an `$id` search
+     * also on the base of the document searched, which is part of its key. Misses are remembered too.
+     */
+    private val anchors = HashMap<SearchKey, JsonElement?>()
+    private val resourcesById = HashMap<SearchKey, ResolvedReference?>()
+
     /** Sets [schema]'s registration, remembering what it replaces in the innermost hop. */
     private fun register(schema: JsonElement, uri: String) {
         val previous = schemaAbsoluteUris.put(schema, uri)
@@ -294,21 +302,24 @@ internal class ReferenceResolver(private val store: SchemaStore) {
         rootSchema: JsonElement,
         resourceRoot: JsonElement,
     ): ResolvedReference? {
-        fun inDocument(resource: JsonElement) = ResolvedReference(resource, resource, getAbsoluteUri(resource).takeIf { isAbsolute(it) })
-
         val baseId = getAbsoluteUri(resourceRoot)
         if (isAbsolute(baseId)) {
-            runCatching { UriResolver.resolveUri(baseId, uriPart) }.getOrNull()?.let { findSchemaByUri(rootSchema, it) }?.let { return inDocument(it) }
+            runCatching { UriResolver.resolveUri(baseId, uriPart) }.getOrNull()?.let { findResource(rootSchema, it) }?.let { return it }
         }
-        findSchemaByUri(rootSchema, uriPart)?.let { return inDocument(it) }
+        findResource(rootSchema, uriPart)?.let { return it }
 
         val absoluteUri = if (baseId.isNotEmpty()) runCatching { UriResolver.resolveUri(baseId, uriPart) }.getOrDefault(uriPart) else uriPart
         store.cached(absoluteUri)?.let { return loaded(it, absoluteUri) }
         // The target URI may be embedded within resourceRoot (e.g. a nested $id sub-schema)
         if (absoluteUri != uriPart || baseId.isNotEmpty()) {
-            findSchemaByUri(resourceRoot, absoluteUri)?.let { return inDocument(it) }
+            findResource(resourceRoot, absoluteUri)?.let { return it }
         }
         return store.load(absoluteUri)?.let { loaded(it, absoluteUri) }
+    }
+
+    /** The resource in [document] whose `$id` is [targetUri], with its base, searched once per base of [document]. */
+    private fun findResource(document: JsonElement, targetUri: String): ResolvedReference? = resourcesById.remember(SearchKey(document, getAbsoluteUri(document), targetUri)) {
+        findSchemaByUri(document, targetUri)?.let { ResolvedReference(it, it, getAbsoluteUri(it).takeIf { uri -> isAbsolute(uri) }) }
     }
 
     /** A document retrieved from [retrievalUri]: its own $id, resolved against that URI, else the URI is its base. */
@@ -355,6 +366,11 @@ internal class ReferenceResolver(private val store: SchemaStore) {
     private fun findAnchorInResource(
         schema: JsonElement,
         anchorName: String,
+    ): JsonElement? = anchors.remember(SearchKey(schema, "", anchorName)) { searchAnchor(schema, anchorName) }
+
+    private fun searchAnchor(
+        schema: JsonElement,
+        anchorName: String,
     ): JsonElement? {
         // Iterative depth-first search in document order, so deeply nested schemas cannot overflow the stack (#31)
         val pending = ArrayDeque<SearchNode>()
@@ -379,7 +395,9 @@ internal class ReferenceResolver(private val store: SchemaStore) {
         schema: JsonElement,
         anchorName: String,
         isRoot: Boolean = true,
-    ): JsonElement? = findDynamicAnchor(schema, anchorName, isRoot, isSchema = true)
+    ): JsonElement? = anchors.remember(SearchKey(schema, if (isRoot) "dynamic" else "dynamic, inner", anchorName)) {
+        findDynamicAnchor(schema, anchorName, isRoot, isSchema = true)
+    }
 
     private fun findDynamicAnchor(
         schema: JsonElement,
@@ -520,6 +538,16 @@ internal fun JsonObject.subschemaValues(isSchema: Boolean): Sequence<Pair<JsonEl
     } else {
         values.asSequence().map { it to true }
     }
+
+/** A search in [document] (by identity) for [target], under [context]: the document's base, or the kind of search. */
+private class SearchKey(val document: JsonElement, val context: String, val target: String) {
+    override fun equals(other: Any?): Boolean = other is SearchKey && document === other.document && context == other.context && target == other.target
+
+    override fun hashCode(): Int = (System.identityHashCode(document) * 31 + context.hashCode()) * 31 + target.hashCode()
+}
+
+/** The value remembered for [key], null included, else [compute]'s, remembered. */
+private inline fun <V> HashMap<SearchKey, V?>.remember(key: SearchKey, compute: () -> V?): V? = if (containsKey(key)) get(key) else compute().also { put(key, it) }
 
 /** One object waiting in an iterative schema search, with its position and the base URI in effect there. */
 private class SearchNode(val element: JsonObject, val isRoot: Boolean, val isSchema: Boolean, val baseUri: String)

@@ -167,6 +167,7 @@ validate()
 - **NumericParsingTest.kt** - 5 tests: numbers are converted only for `SchemaKeywords.NUMERIC_KEYWORDS`; integer tokens are classified without parsing (#84)
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 38 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
+- **ReferenceLookupCostTest.kt** - 4 tests: anchor, `$id` and loaded-document references applied to 100 items walk a 2,000-definition schema once; equal anchor names in different resources stay apart (#92)
 - **SharedDocumentBaseTest.kt** - 4 tests: a relative `$id` in one parsed document loaded under two URIs resolves in each retrieval context, in either order (#91)
 - **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
 - **UnevaluatedAcrossResourcesTest.kt** - 17 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated, and evaluates the branches of an inline `$id` subschema in its own resource (#90)
@@ -347,6 +348,9 @@ Release notes are generated from the commit log, so commits must follow Conventi
   in its fragments are followed. `SchemaStore` keeps no element→URI map: a loader may return one parsed object for
   several URIs, so the base must travel with the reference (#54). Registrations made during a hop (a relative `$id`
   below the resource) are undone with it, so another retrieval context of the same document derives its own (#91)
+- Anchor and `$id` searches are remembered per validation in `ReferenceResolver` (#92), keyed by the searched element's
+  identity, the kind of search or the document's base, and the target. A new input to a search must join the key; never
+  move these caches to the validator (#37, #40)
 - When adding new ref types, update `ReferenceResolver` in `JsonPointer.kt` and `resolveReferences()` in `JsonValidator.kt`
 - The root's absolute base (`JsonSchema.absoluteBaseUri()`: absolute `$id`, else `$id` resolved against `baseUri`, else `baseUri`) is registered before validation, so `schemaLoader` receives absolute URIs
 - `$id` registrations only improve: an absolute URI is never replaced by a relative one, and a registered resource is not re-resolved (its relative `$id` would otherwise nest again)

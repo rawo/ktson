@@ -9,7 +9,7 @@ of them in the same commit as every change (test counts, fixed issues, features,
 - Kotlin 2.4.0, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
 - Official JSON Schema Test Suite: 4,462 assertions run, 100% passing (168 excluded), pinned by `TEST_SUITE_REF`
   in `.github/workflows/build.yml`
-- Custom tests: 1,278 (100% passing); the full `./gradlew test` run is 5,843 tests
+- Custom tests: 1,282 (100% passing); the full `./gradlew test` run is 5,847 tests
 - `kotlinx-coroutines-core`/`-test` are test-only dependencies; the API is synchronous
 
 ## Architecture
@@ -63,6 +63,8 @@ of them in the same commit as every change (test counts, fixed issues, features,
   - Tokens whose exponent is outside BigDecimal's 32-bit scale (`1e-2147483648`) remain documented as unsupported.
 - **#91 (2026-11-04): DONE** (breaking verdict change). `$id` registrations made during a `withBase` hop are undone
   with it, so a document shared by several retrieval URIs resolves its nested relative `$id`s per context.
+- **#92 (2026-11-04): DONE.** Anchor and `$id` searches are remembered per validation in `ReferenceResolver`.
+  #13 (`AbsoluteLocations` searches when stamping failures) is a separate, still-open issue.
 - **#22 (removing this file): closed as irrelevant.** This file is kept and maintained.
 - **#24: DONE (2026-11-03).** `docs/IMPLEMENTATION_STATUS.md` and `docs/FEATURES.md` describe the current state and
   are updated with every change.
