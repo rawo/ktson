@@ -252,7 +252,7 @@ for both drafts. Decimal validation costs more than approximate `Double` arithme
 ## Development Guidelines
 
 ### Releasing
-Bump `version` in `build.gradle.kts` (and the README/CLAUDE.md version references, CHANGELOG section),
+Use the `/release` skill (`.claude/skills/release/`), which follows these steps. Bump `version` in `build.gradle.kts` (and the README/CLAUDE.md version references, CHANGELOG section),
 commit, then push a tag `v<version>`. `.github/workflows/release.yml` then:
 1. `check` - fails unless the tag is on master and equals `v` + the `build.gradle.kts` version
 2. `build` - calls `build.yml` (the same build as CI: tests, official suite at `TEST_SUITE_REF`, ktlint)
@@ -263,7 +263,9 @@ Only tags matching `v*` trigger it. KtSON is not published to Maven Central (out
 ### Keeping docs current
 Every change updates, in the same commit, whatever it makes stale: `CHANGELOG.md`, the README (test counts, test
 list, features), `docs/IMPLEMENTATION_STATUS.md`, `docs/FEATURES.md`, the test list in this file and
-`memory/MEMORY.md` (project state, test counts, review decisions).
+`memory/MEMORY.md` (project state, test counts, review decisions). Take test counts from the last run with
+`python3 .claude/skills/fix-issue/scripts/test_counts.py --write`, never by adding to the old total. Issues are reviewed
+and fixed with the `/fix-issue` skill (`.claude/skills/fix-issue/`).
 
 ### Commit Messages
 Release notes are generated from the commit log, so commits must follow Conventional Commits:

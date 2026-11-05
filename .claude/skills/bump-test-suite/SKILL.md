@@ -39,7 +39,8 @@ git -C ../JSON-Schema-Test-Suite diff --stat <OLD_SHA> HEAD -- tests/draft2019-0
 ```
 
 Also note any **new files under `optional/`**. The runner skips `optional/` except
-`optional/format` and `optional/bignum.json`, so new optional files are not run. Mention them to
+`optional/format`, `optional/bignum.json` and `optional/ecmascript-regex.json`, so new optional files are
+not run. Mention them to
 the user rather than enabling them.
 
 ## 3. Run the official suite

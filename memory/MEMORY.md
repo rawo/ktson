@@ -76,5 +76,6 @@ of them in the same commit as every change (test counts, fixed issues, features,
 - AI agent playground project: most refactoring done by AI with human supervision
 - Feature branch per issue, small tested commits, fast-forward to master without squashing, ask before pushing
 - Run the full suite with the official suite (`CI=true ./gradlew test ktlintCheck`) before merging
+- Workflows live in project skills: `/fix-issue` (review, fix or reject issues), `/release`, `/bump-test-suite`
 - Conventional Commits; verdict changes are breaking (`!` and a `BREAKING CHANGE:` footer)
 - Use constants from `SchemaKeywords`, not string literals

@@ -16,7 +16,7 @@ def excluded(rel: str) -> bool:
     if rel in ("vocabulary.json", "infinite-loop-detection.json"):
         return True
     if rel.startswith("optional/"):
-        return not (rel.startswith("optional/format/") or rel == "optional/bignum.json")
+        return not (rel.startswith("optional/format/") or rel in ("optional/bignum.json", "optional/ecmascript-regex.json"))
     return False
 
 
