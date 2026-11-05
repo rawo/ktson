@@ -5,7 +5,7 @@ of them in the same commit as every change (test counts, fixed issues, features,
 
 ## Project State (as of 2026-11-04)
 
-- Version: 4.0.0 (release prepared 2026-11-04: breaking verdict changes since 3.1.0, released 2026-10-21);
+- Version: 4.0.0 (released 2026-11-04, tag `v4.0.0`; major because of breaking verdict changes since 3.1.0);
   later changes go under `## [Unreleased]` in `CHANGELOG.md`
 - Kotlin 2.4.0, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
 - Official JSON Schema Test Suite: 4,462 assertions run, 100% passing (168 excluded), pinned by `TEST_SUITE_REF`
