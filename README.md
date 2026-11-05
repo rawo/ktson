@@ -560,30 +560,33 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 1284 tests (100% passing)
+- **Custom Tests**: 1379 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
-  - Depth limit protection: 16 tests
+  - Depth limit protection: 19 tests
+  - Deeply nested values and schemas walked iteratively: 8 tests
   - URI resolver (including the RFC 3986 §5.4 examples): 92 tests
   - Format validation: 418 tests
   - Error messages: 32 tests
   - Bounded value previews in messages (huge strings, keys, objects, nesting): 8 tests
   - Numeric precision and concurrent numeric validation: 88 tests
-  - Instance locations, legacy access and JSON Pointer resolution: 117 tests
+  - Instance locations, legacy access and JSON Pointer resolution: 116 tests
+  - Canonical JSON Pointer array indices: 12 tests
   - Output formats: 40 tests
   - Basic output flattening (order, deep trees, linear allocation): 3 tests
   - Detailed output JSON (same as the generated serializer, deep trees): 5 tests
   - Nested `unevaluated*` under `anyOf`/`oneOf`/`if` (time, dynamic scope, undecided branches): 8 tests
-  - Absolute keyword locations: 45 tests
-  - Reference resolution (percent-encoding, base URIs, `$id` registration, reference resources): 38 tests
+  - Absolute keyword locations: 53 tests
+  - Reference resolution (percent-encoding, base URIs, `$id` registration, reference resources): 42 tests
   - A loaded document shared by several retrieval URIs: 4 tests
   - Reference lookups once per validation (anchors, `$id`s, loaded documents): 4 tests
-  - Keyword-named properties (`$id`, `$anchor`, `$dynamicAnchor`): 7 tests
+  - Keyword-named properties (`$id`, `$anchor`, `$dynamicAnchor`): 15 tests
   - `unevaluated*` across schema resources (URI-based `$ref`s, inline `$id` subschemas): 17 tests
   - Validator lifecycle (garbage collection, bounded caches): 3 tests
   - Undecided results under `not`, `if`, `oneOf` and `maxContains`: 17 tests
   - ECMA 262 `pattern` dialect (whitespace, `\c`, `$`, `.`, `\p` aliases): 44 tests
+  - Regexes that overflow the engine's stack: 4 tests
   - `email` / `idn-email` local parts (dot-atom, quoted string): 38 tests
   - Exact, bounded `multipleOf` (huge exponents, agreement with `BigDecimal.remainder`, many factors of five): 6 tests
   - `type` and `multipleOf` at the edge of BigDecimal's scale range: 4 tests
@@ -604,6 +607,8 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - Java interop for output formats: 2 tests
   - Java interop for the core API: 11 tests
   - `$schema` dialect detection: 11 tests
+  - Draft-specific keywords only in their own draft: 7 tests
+  - `validateSchema` against the official meta-schemas: 36 tests
 
 - **Official JSON Schema Test Suite**: 4,462 tests
   - ✅ Passing: 4,462 (100%)

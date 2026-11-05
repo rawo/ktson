@@ -139,11 +139,14 @@ validate()
 - **EdgeCaseAndThreadSafetyTest.kt** - 39 edge case and concurrency tests
 - **FormatValidationTest.kt** - 418 tests covering all supported format validators
 - **UriResolverTest.kt** - 92 tests for RFC 3986 URI resolution, including every §5.4 example and empty path segments
-- **DepthLimitTest.kt** - 16 tests for `maxValidationDepth` protection
+- **DepthLimitTest.kt** - 19 tests for `maxValidationDepth` protection
+- **DeepStructureTest.kt** - 8 tests: value comparison, schema checks and anchor/`$id` searches walk 10,000-level JSON iteratively (#31)
+- **PatternStackTest.kt** - 4 tests: a `pattern` or `patternProperties` regex that overflows the engine's stack fails as "could not be checked" instead of throwing (#32)
 - **ErrorMessageTest.kt** - 32 tests for error content (instance path, keyword, keyword location, wording)
 - **MessagePreviewTest.kt** - 8 tests: `const`/`enum` messages quote values within a fixed budget; strings and member names are cut before escaping, at exactly the prefix of the full rendering (#48, #93)
 - **NumericPrecisionTest.kt** - 88 tests for exact numeric comparisons and concurrent numeric validation
-- **InstanceLocationTest.kt** - 117 tests for instance pointers, schema-structure locations, causes and legacy access
+- **JsonPointerTest.kt** - 12 tests: RFC 6901 canonical array indices in `JsonPointer.resolve` and `$ref` fragments (#47)
+- **InstanceLocationTest.kt** - 116 tests for instance pointers, schema-structure locations, causes and legacy access
 - **OutputFormatTest.kt** - 40 tests for the Flag, Basic and Detailed output formats
 - **DetailedOutputJsonTest.kt** - 5 tests: `DetailedOutput.toJson()` matches the generated serializer and writes a 100,000-level tree without recursion (#85)
 - **BasicOutputFlatteningTest.kt** - 3 tests: Basic units in pre-order, a 100,000-level chain, allocation linear in the units (#75)
@@ -160,6 +163,8 @@ validate()
 - **ScaleBoundaryTest.kt** - 4 tests: `type` and `multipleOf` decide `100e2147483647`, whose stripped scale would overflow, without throwing (#86)
 - **AnyOfEvaluationTest.kt** - 3 tests: `anyOf` stops at the first valid branch; all branches still feed `unevaluated*` (#78)
 - **ContainsEvaluationTest.kt** - 6 tests: `contains` without `maxContains` stops at `minContains` matches; `maxContains`, failure messages and `unevaluatedItems` still see every match (#89)
+- **DialectKeywordsTest.kt** - 7 tests: `prefixItems` and `$dynamicRef` apply only in 2020-12, `$recursiveRef` only in 2019-09 (#43)
+- **MetaSchemaValidationTest.kt** - 36 tests: `validateSchema` against the official meta-schemas, error locations, deep schemas and the depth limit (#38)
 - **SchemaVersionTest.kt** - 11 tests: `$schema` selects a draft only for its exact meta-schema identifier (#81)
 - **RegexFormatScanTest.kt** - 2 tests: the `regex` format scan recognises ECMA group forms and stays linear (#80)
 - **IdnLabelLengthTest.kt** - 4 tests: the 63-character A-label limit is exact, and oversized labels are rejected before Punycode work (#79)
@@ -167,13 +172,13 @@ validate()
 - **HostnameBidiTest.kt** - 9 tests: in a Bidi domain `hostname` applies the Bidi rule to ASCII labels too; a valid hostname is a valid idn-hostname (#82)
 - **NumericParsingTest.kt** - 5 tests: numbers are converted only for `SchemaKeywords.NUMERIC_KEYWORDS`; integer tokens are classified without parsing (#84)
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
-- **ReferenceResolutionTest.kt** - 38 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
+- **ReferenceResolutionTest.kt** - 42 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **ReferenceLookupCostTest.kt** - 4 tests: anchor, `$id` and loaded-document references applied to 100 items walk a 2,000-definition schema once; equal anchor names in different resources stay apart (#92)
 - **SharedDocumentBaseTest.kt** - 4 tests: a relative `$id` in one parsed document loaded under two URIs resolves in each retrieval context, in either order (#91)
-- **KeywordNamedPropertyTest.kt** - 7 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
+- **KeywordNamedPropertyTest.kt** - 15 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
 - **UnevaluatedAcrossResourcesTest.kt** - 17 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated, and evaluates the branches of an inline `$id` subschema in its own resource (#90)
 - **UnevaluatedNestingTest.kt** - 8 tests: 40 levels of `anyOf`/`oneOf`/`if` with `unevaluated*` at one location stay fast; reused branch verdicts respect the dynamic scope and are never undecided (#30)
-- **AbsoluteKeywordLocationTest.kt** - 45 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
+- **AbsoluteKeywordLocationTest.kt** - 53 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
 - **JavaOutputUsageTest.kt** - 2 tests running `src/test/java/org/ktson/JavaOutputUsage.java`, a Java caller of the output API
 - **JavaApiUsageTest.kt** - 11 tests running `src/test/java/org/ktson/JavaApiUsage.java`, a Java caller of `JsonSchema`, `JsonValidator` and `JsonPointer`
 - **OfficialOutputTestRunner.kt** - Runs the suite's `output-tests` content files against Basic output (skips `readOnly.json`, which needs annotations); fails if a draft has no runnable files; also checks KtSON's Basic output for a `$ref` schema against the output schema's `basic` definition
