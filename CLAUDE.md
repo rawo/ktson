@@ -57,9 +57,9 @@ KtSON is a JSON Schema validator for Kotlin with comprehensive support for JSON 
 
 The validator architecture is straightforward with minimal abstractions:
 
-1. **JsonValidator** (`JsonValidator.kt`) - Main validation engine (~90KB)
+1. **JsonValidator** (`JsonValidator.kt`) - The validation engine (~2,220 lines, ~105KB)
    - Thread-safe synchronous validation
-   - Contains all validation logic in a single class
+   - Evaluates every keyword in a single class; the format grammars live in `UriSyntax` and `Idna`
    - Creates a per-validation `Evaluation` (`Evaluation.kt`) holding a `ReferenceResolver` for `$ref` resolution
    - Entry point: `validate(instance: JsonElement, schema: JsonSchema): ValidationResult`
 
@@ -376,8 +376,9 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - Helper validators live in `JsonValidator.kt`, grouped by family, except the IDNA ones in `Idna.kt`:
   - `isValidUriLike()` backs uri, uri-reference, iri and iri-reference from one RFC 3986/3987 parse
     (in `UriSyntax.kt`); IRI components admit only RFC 3987 `ucschar`, read by code point, and `iprivate` only in the query (#76)
-  - `Idna.isValidHostname()` / `Idna.isValidIdnHostname()` (in `Idna.kt`, also used by email and idn-email) share `isValidULabel()`, `punycodeDecode()`,
-    `punycodeEncode()` and `idnaMap()` (UTS 46 mapping: drop ignorables, NFKC, case-fold)
+  - `Idna.isValidHostname()` / `Idna.isValidIdnHostname()` (in `Idna.kt`, also used by email and idn-email) share
+    `isValidULabel()`, `punycodeDecode()`, `punycodeEncode()` and `idnaMap()` (UTS 46 mapping: drop ignorables, NFKC,
+    case-fold)
   - `isValidEcmaRegex()` rejects Java-only regex syntax (inline flags, `\a`, `(?#...)`), while
     `translateEcmaSyntax()` rewrites ECMA 262 constructs Java reads differently for both `format` and
     `pattern`: `[]`/`[^]`, `\s`/`\S` (ECMA whitespace), `\cx`, `$` (end of input), `.`; `translatePatternToJava()`
