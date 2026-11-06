@@ -179,9 +179,12 @@ class JsonValidator @JvmOverloads constructor(
     private fun List<JsonElement>.entering(resource: JsonElement): List<JsonElement> = if (any { it === resource }) this else this + resource
 
     /**
-     * Whether [schema] starts a schema resource: an object with `$id`, whatever the value's type. The verdict pass
-     * ([validateElement]) and both `unevaluated*` collectors enter resources through [resourceRootAt] and [scopeAt],
-     * which share this one test, so they always agree on the resource root and dynamic scope (guideline 8, #90).
+     * Whether [schema] starts a schema resource: an object with `$id`. The verdict pass ([validateElement]) and both
+     * `unevaluated*` collectors enter resources through [resourceRootAt] and [scopeAt], which share this one test, so
+     * they always agree on the resource root and dynamic scope (guideline 8, #90).
+     *
+     * It tests only for the key, as the three copies it replaced did, so a non-string `$id` starts a resource here
+     * although KtSON otherwise counts `$id` only when it is a string (#57). That mismatch is tracked in #104.
      */
     private fun startsResource(schema: JsonElement): Boolean = schema is JsonObject && schema.containsKey(SchemaKeywords.ID)
 
@@ -232,6 +235,7 @@ class JsonValidator @JvmOverloads constructor(
 
         // Register the absolute URI for new resource roots so relative $id and missing-$id schemas
         // resolve subsequent relative $refs correctly (e.g. base URI change, nested remote refs).
+        // `is JsonObject` is only for the smart cast; startsResource decides
         if (schemaElement is JsonObject && startsResource(schemaElement)) {
             val rawId = schemaElement.stringKeyword(SchemaKeywords.ID) ?: ""
             // A resource's absolute URI is fixed by where it sits in its document. Once registered, keep
