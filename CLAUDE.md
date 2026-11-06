@@ -60,7 +60,7 @@ The validator architecture is straightforward with minimal abstractions:
 1. **JsonValidator** (`JsonValidator.kt`) - The validation engine (~1,600 lines, ~78KB)
    - Thread-safe synchronous validation
    - Evaluates every keyword in a single class; the format grammars live in `Formats`, `UriSyntax` and `Idna`,
-     and the ECMA 262 regex dialect in `EcmaRegex`
+     the ECMA 262 regex dialect in `EcmaRegex`, and the `validateSchema()` worker in `MetaSchemaCheck`
    - Creates a per-validation `Evaluation` (`Evaluation.kt`) holding a `ReferenceResolver` for `$ref` resolution
    - Entry point: `validate(instance: JsonElement, schema: JsonSchema): ValidationResult`
 

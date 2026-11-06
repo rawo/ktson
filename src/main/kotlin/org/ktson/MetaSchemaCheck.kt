@@ -9,7 +9,8 @@ import java.util.concurrent.ConcurrentHashMap
  * The machinery behind [JsonValidator.validateSchema]: an iterative nesting check against [maxValidationDepth], then
  * the schema checked against its draft's meta-schema (embedded in [MetaSchemas]) by a separate validator, on a worker
  * thread with a large stack that inherits no thread-locals and is joined uninterruptibly. Owned by one validator and
- * created on its first validateSchema call, so it, and the meta-schema validator it creates, die with that validator.
+ * created on its first validateSchema call with meta-schema validation enabled, so it, and the meta-schema validator
+ * it creates, die with that validator.
  */
 internal class MetaSchemaCheck(private val maxValidationDepth: Int) {
     fun validateSchema(schema: JsonSchema): ValidationResult {

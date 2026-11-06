@@ -122,7 +122,10 @@ class JsonValidator @JvmOverloads constructor(
         return metaSchemaCheck.validateSchema(schema)
     }
 
-    /** The validateSchema machinery, created on first use; it and its meta-schema validator die with this validator. */
+    /**
+     * The validateSchema machinery, created on the first validateSchema call with meta-schema validation enabled;
+     * it and its meta-schema validator die with this validator.
+     */
     private val metaSchemaCheck by lazy { MetaSchemaCheck(maxValidationDepth) }
 
     /**
