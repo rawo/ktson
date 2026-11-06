@@ -388,6 +388,9 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - Add new formats by extending the when expression in `Formats.isValid()`
 - Helper validators live in `Formats.kt`, grouped by family, except the URI/IP grammar in `UriSyntax.kt`, the IDNA
   ones in `Idna.kt` and the regex dialect in `EcmaRegex.kt`:
+  - In `Formats.kt`: date/time (`isValidDate()`, `isValidTime()`, `isValidDateTime()`), email and idn-email
+    (`isValidEmail()`, `isValidIdnEmail()` and their local-part and domain helpers), json-pointer and
+    `isValidRelativeJsonPointer()`, uuid, `isValidUriTemplate()` and its helpers, and `isValidDuration()`
   - `isValidUriLike()` backs uri, uri-reference, iri and iri-reference from one RFC 3986/3987 parse
     (in `UriSyntax.kt`); IRI components admit only RFC 3987 `ucschar`, read by code point, and `iprivate` only in the query (#76)
   - `Idna.isValidHostname()` / `Idna.isValidIdnHostname()` (in `Idna.kt`, also used by email and idn-email) share

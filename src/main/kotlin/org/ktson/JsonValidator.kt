@@ -39,7 +39,6 @@ import org.ktson.SchemaKeywords.PROPERTY_NAMES
 import org.ktson.SchemaKeywords.RECURSIVE_REF
 import org.ktson.SchemaKeywords.REF
 import org.ktson.SchemaKeywords.REQUIRED
-import org.ktson.SchemaKeywords.SCHEMA
 import org.ktson.SchemaKeywords.SCHEMA_FALSE
 import org.ktson.SchemaKeywords.THEN
 import org.ktson.SchemaKeywords.TYPE
@@ -1091,7 +1090,7 @@ class JsonValidator @JvmOverloads constructor(
     }
 
     /**
-     * Validates format keyword (basic implementation)
+     * Reports a `format` error when [Formats.isValid] rejects [value].
      */
     private fun validateFormat(value: String, format: String, path: String, schemaPath: String, errors: MutableList<ValidationError>) {
         if (!Formats.isValid(format, value)) {
