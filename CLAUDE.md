@@ -57,7 +57,7 @@ KtSON is a JSON Schema validator for Kotlin with comprehensive support for JSON 
 
 The validator architecture is straightforward with minimal abstractions:
 
-1. **JsonValidator** (`JsonValidator.kt`) - The validation engine (~1,700 lines, ~82KB)
+1. **JsonValidator** (`JsonValidator.kt`) - The validation engine (~1,600 lines, ~78KB)
    - Thread-safe synchronous validation
    - Evaluates every keyword in a single class; the format grammars live in `Formats`, `UriSyntax` and `Idna`,
      and the ECMA 262 regex dialect in `EcmaRegex`
@@ -112,6 +112,9 @@ The validator architecture is straightforward with minimal abstractions:
      nesting check against `maxValidationDepth`. Its depth budget is `metaSchemaDepth()`: (limit + 1) × 16, in Long,
      capped at `Int.MAX_VALUE` (#73). The worker inherits no thread-locals and is joined
      uninterruptibly (interrupt status restored), so it never outlives the call (#56)
+   - The worker lives in `MetaSchemaCheck.kt`: an `internal class MetaSchemaCheck(maxValidationDepth)`, created lazily
+     by each `JsonValidator`, so the meta-schema validator dies with it; `validateSchema()` keeps the
+     `enableMetaSchemaValidation` check and delegates
    - Generated from `src/test/resources/schemas/draft/`; keep the two in sync (no runtime resources)
 
 11. **Idna** (`Idna.kt`) - Internationalized domain names for `hostname`, `idn-hostname`, `email` and `idn-email`

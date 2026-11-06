@@ -15,7 +15,10 @@ of them in the same commit as every change (test counts, fixed issues, features,
 
 ## Architecture
 
-- `JsonValidator.kt` (~1,700 lines): the validation engine; `validateElement()` has 22 recursive call sites
+- `JsonValidator.kt` (~1,600 lines): the validation engine; `validateElement()` has 22 recursive call sites
+- `MetaSchemaCheck.kt` (`internal class MetaSchemaCheck`, ~120 lines): the `validateSchema()` machinery - nesting
+  check, 64 MB-stack worker, uninterruptible join, lazily created meta-schema validator (#97); one per validator,
+  created lazily, so it dies with it
 - `Idna.kt` (`internal object Idna`, ~450 lines): Punycode, IDNA label rules and UTS 46 mapping for the hostname
   and email formats (#94)
 - `EcmaRegex.kt` (`internal object EcmaRegex`, ~200 lines): the ECMA 262 regex dialect - the `regex` format's syntax
