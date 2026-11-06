@@ -343,7 +343,8 @@ Release notes are generated from the commit log, so commits must follow Conventi
    `collectEvaluated*()` functions use it, so validation and `unevaluated*` always agree on where a
    reference leads, and `validateElement()` stamps `absoluteKeywordLocation` for every hop. A new
    reference keyword goes into `resolveReferences()`, never into a copy. Below a schema with `$id`, every call passes
-   its effective resource root and dynamic scope, in the collectors as in `validateElement()` (#90)
+   its effective resource root and dynamic scope, in the collectors as in `validateElement()` (#90); all three derive
+   them from `resourceRootAt()`/`scopeAt()` (one `startsResource()` test), never from their own copy (#98)
 9. Verdict passes may stop early (`anyOf` returns at its first valid branch, #78; `contains` without `maxContains`
    at `minContains` matches, #89) because `unevaluated*`
    annotations come only from the separate `collectEvaluated*()` passes, which visit every branch. Keep that split:

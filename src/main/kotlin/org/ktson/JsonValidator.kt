@@ -178,6 +178,19 @@ class JsonValidator @JvmOverloads constructor(
      */
     private fun List<JsonElement>.entering(resource: JsonElement): List<JsonElement> = if (any { it === resource }) this else this + resource
 
+    /**
+     * Whether [schema] starts a schema resource: an object with `$id`, whatever the value's type. The verdict pass
+     * ([validateElement]) and both `unevaluated*` collectors enter resources through [resourceRootAt] and [scopeAt],
+     * which share this one test, so they always agree on the resource root and dynamic scope (guideline 8, #90).
+     */
+    private fun startsResource(schema: JsonElement): Boolean = schema is JsonObject && schema.containsKey(SchemaKeywords.ID)
+
+    /** The resource root in effect at [schema]: [schema] itself when it [startsResource], else [resourceRoot]. */
+    private fun resourceRootAt(schema: JsonElement, resourceRoot: JsonElement): JsonElement = if (startsResource(schema)) schema else resourceRoot
+
+    /** The dynamic scope in effect at [schema]: [dynamicScope] [entering] it when it [startsResource], else unchanged. */
+    private fun scopeAt(schema: JsonElement, dynamicScope: List<JsonElement>): List<JsonElement> = if (startsResource(schema)) dynamicScope.entering(schema) else dynamicScope
+
     /** Whether this is a JSON integer token: an optional minus and digits, with no fraction or exponent. */
     private fun String.isIntegerToken(): Boolean {
         val start = if (startsWith('-')) 1 else 0
@@ -214,12 +227,12 @@ class JsonValidator @JvmOverloads constructor(
         }
 
         // Update resource root and dynamic scope when entering a new schema resource (one with $id)
-        val effectiveResourceRoot = if (schemaElement is JsonObject && schemaElement.containsKey(SchemaKeywords.ID)) schemaElement else resourceRoot
-        val effectiveScope = if (schemaElement is JsonObject && schemaElement.containsKey(SchemaKeywords.ID)) dynamicScope.entering(schemaElement) else dynamicScope
+        val effectiveResourceRoot = resourceRootAt(schemaElement, resourceRoot)
+        val effectiveScope = scopeAt(schemaElement, dynamicScope)
 
         // Register the absolute URI for new resource roots so relative $id and missing-$id schemas
         // resolve subsequent relative $refs correctly (e.g. base URI change, nested remote refs).
-        if (schemaElement is JsonObject && schemaElement.containsKey(SchemaKeywords.ID)) {
+        if (schemaElement is JsonObject && startsResource(schemaElement)) {
             val rawId = schemaElement.stringKeyword(SchemaKeywords.ID) ?: ""
             // A resource's absolute URI is fixed by where it sits in its document. Once registered, keep
             // it: re-resolving its relative $id against itself (it can be its own resourceRoot) would
@@ -1289,8 +1302,8 @@ class JsonValidator @JvmOverloads constructor(
         if (schemaElement is JsonPrimitive) return emptySet()
         if (schemaElement !is JsonObject) return emptySet()
 
-        val effectiveResourceRoot = if (schemaElement.containsKey(SchemaKeywords.ID)) schemaElement else resourceRoot
-        val effectiveScope = if (schemaElement.containsKey(SchemaKeywords.ID)) dynamicScope.entering(schemaElement) else dynamicScope
+        val effectiveResourceRoot = resourceRootAt(schemaElement, resourceRoot)
+        val effectiveScope = scopeAt(schemaElement, dynamicScope)
 
         val evaluated = mutableSetOf<Int>()
 
@@ -1439,10 +1452,8 @@ class JsonValidator @JvmOverloads constructor(
         }
         if (schemaElement !is JsonObject) return emptySet()
 
-        val effectiveResourceRoot =
-            if (schemaElement.containsKey(SchemaKeywords.ID)) schemaElement else resourceRoot
-        val effectiveScope =
-            if (schemaElement.containsKey(SchemaKeywords.ID)) dynamicScope.entering(schemaElement) else dynamicScope
+        val effectiveResourceRoot = resourceRootAt(schemaElement, resourceRoot)
+        val effectiveScope = scopeAt(schemaElement, dynamicScope)
 
         val evaluated = mutableSetOf<String>()
 
@@ -1586,16 +1597,8 @@ class JsonValidator @JvmOverloads constructor(
         return ValidationError(path, "Could not decide $keyword: a subschema could not be fully evaluated", keyword, at(schemaPath, keyword), causes)
     }
 
-    /**
-     * Checks if a property name matches any pattern
-     */
-
     /** A pattern that could not be evaluated counts as not matching, so additional/unevaluated checks fail closed. */
     private fun matchesAnyPattern(propName: String, patterns: Set<String>, evaluation: Evaluation): Boolean = patterns.any { patternMatches(it, propName, evaluation) == true }
-
-    /**
-     * Validates the structure of a schema itself
-     */
 
     companion object {
         private const val MAX_MESSAGE_VALUE_LENGTH = 40
