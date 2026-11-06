@@ -92,6 +92,23 @@ class UnevaluatedAcrossResourcesTest :
                             isValid(schema, """{"a":1}""", version) shouldBe true
                             isValid(schema, """{"a":1,"z":2}""", version) shouldBe false
                         }
+
+                        // "outer" enters the dynamic scope before its $ref reaches "inner", so the outermost
+                        // #ext (outer's) wins; a collector that did not enter "outer" would pick inner's (#98)
+                        it("enter its dynamic scope, so a dynamic ref below it resolves to its outermost anchor") {
+                            fun drift(keyword: String, outer: String, inner: String) = """
+                                {"${'$'}id":"https://ex.com/root",
+                                 "allOf":[{"${'$'}id":"outer","${'$'}ref":"inner","${'$'}defs":{"x":{"${'$'}dynamicAnchor":"ext",$outer}}}],
+                                 "$keyword":false,
+                                 "${'$'}defs":{"inner":{"${'$'}id":"inner","${'$'}dynamicRef":"#ext","${'$'}defs":{"y":{"${'$'}dynamicAnchor":"ext",$inner}}}}}
+                            """
+                            val properties = drift("unevaluatedProperties", """"properties":{"a":true}""", """"properties":{"b":true}""")
+                            isValid(properties, """{"a":1}""", version) shouldBe true
+                            isValid(properties, """{"b":1}""", version) shouldBe false
+                            val items = drift("unevaluatedItems", """"prefixItems":[true]""", """"prefixItems":[true,true]""")
+                            isValid(items, "[1]", version) shouldBe true
+                            isValid(items, "[1,2]", version) shouldBe false
+                        }
                     }
                 }
             }

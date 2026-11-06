@@ -196,7 +196,7 @@ validate()
 - **ReferenceLookupCostTest.kt** - 4 tests: anchor, `$id` and loaded-document references applied to 100 items walk a 2,000-definition schema once; equal anchor names in different resources stay apart (#92)
 - **SharedDocumentBaseTest.kt** - 4 tests: a relative `$id` in one parsed document loaded under two URIs resolves in each retrieval context, in either order (#91)
 - **KeywordNamedPropertyTest.kt** - 15 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
-- **UnevaluatedAcrossResourcesTest.kt** - 17 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated, and evaluates the branches of an inline `$id` subschema in its own resource (#90)
+- **UnevaluatedAcrossResourcesTest.kt** - 18 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated, and evaluates the branches of an inline `$id` subschema in its own resource and dynamic scope (#90, #98)
 - **UnevaluatedNestingTest.kt** - 8 tests: 40 levels of `anyOf`/`oneOf`/`if` with `unevaluated*` at one location stay fast; reused branch verdicts respect the dynamic scope and are never undecided (#30)
 - **AbsoluteKeywordLocationTest.kt** - 53 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
 - **JavaOutputUsageTest.kt** - 2 tests running `src/test/java/org/ktson/JavaOutputUsage.java`, a Java caller of the output API

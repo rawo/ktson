@@ -7,7 +7,7 @@
 `vocabulary.json`, `infinite-loop-detection.json` and the rest of `optional/`. The suite is pinned to
 `TEST_SUITE_REF` in `.github/workflows/build.yml`.
 
-**Custom tests**: 1,380 (100% passing); see the README's Test Coverage section and the per-file list in `CLAUDE.md`.
+**Custom tests**: 1,381 (100% passing); see the README's Test Coverage section and the per-file list in `CLAUDE.md`.
 
 ## What's Implemented ✅
 
