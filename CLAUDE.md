@@ -57,9 +57,10 @@ KtSON is a JSON Schema validator for Kotlin with comprehensive support for JSON 
 
 The validator architecture is straightforward with minimal abstractions:
 
-1. **JsonValidator** (`JsonValidator.kt`) - The validation engine (~2,220 lines, ~105KB)
+1. **JsonValidator** (`JsonValidator.kt`) - The validation engine (~2,030 lines, ~97KB)
    - Thread-safe synchronous validation
-   - Evaluates every keyword in a single class; the format grammars live in `UriSyntax` and `Idna`
+   - Evaluates every keyword in a single class; the format grammars live in `UriSyntax` and `Idna`,
+     and the ECMA 262 regex dialect in `EcmaRegex`
    - Creates a per-validation `Evaluation` (`Evaluation.kt`) holding a `ReferenceResolver` for `$ref` resolution
    - Entry point: `validate(instance: JsonElement, schema: JsonSchema): ValidationResult`
 
@@ -116,6 +117,12 @@ The validator architecture is straightforward with minimal abstractions:
 11. **Idna** (`Idna.kt`) - Internationalized domain names for `hostname`, `idn-hostname`, `email` and `idn-email`
    - RFC 3492 Punycode, the RFC 5890-5893 label rules (contextual and Bidi) and the UTS 46 mapping, with their tables
    - `internal object`; `JsonValidator` calls only `Idna.isValidHostname()` and `Idna.isValidIdnHostname()`
+
+12. **EcmaRegex** (`EcmaRegex.kt`) - The ECMA 262 regex dialect shared by the `regex` format and `pattern`/`patternProperties`
+   - The `regex` format's syntax check and the translation of ECMA 262 constructs Java reads differently, with their tables
+   - `internal object`; `JsonValidator` calls only `EcmaRegex.isValidEcmaRegex()` and `EcmaRegex.translatePatternToJava()`;
+     `patternCache`, `compiledPattern()` and `patternMatches()` stay in the validator (per-validator cache #40, undecided
+     handling #32/#51)
 
 ### Validation Flow
 
@@ -373,13 +380,14 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - Currently supported (19): email, uri, uri-reference, uri-template, date, time, date-time, duration, ipv4, ipv6, uuid, hostname, idn-hostname, idn-email, iri, iri-reference, json-pointer, relative-json-pointer, regex
 - Formats are validated in `validateFormat()` method
 - Add new formats by extending the when expression in `validateFormat()`
-- Helper validators live in `JsonValidator.kt`, grouped by family, except the IDNA ones in `Idna.kt`:
+- Helper validators live in `JsonValidator.kt`, grouped by family, except the IDNA ones in `Idna.kt` and the regex
+  dialect in `EcmaRegex.kt`:
   - `isValidUriLike()` backs uri, uri-reference, iri and iri-reference from one RFC 3986/3987 parse
     (in `UriSyntax.kt`); IRI components admit only RFC 3987 `ucschar`, read by code point, and `iprivate` only in the query (#76)
   - `Idna.isValidHostname()` / `Idna.isValidIdnHostname()` (in `Idna.kt`, also used by email and idn-email) share
     `isValidULabel()`, `punycodeDecode()`, `punycodeEncode()` and `idnaMap()` (UTS 46 mapping: drop ignorables, NFKC,
     case-fold)
-  - `isValidEcmaRegex()` rejects Java-only regex syntax (inline flags, `\a`, `(?#...)`), while
+  - `EcmaRegex.isValidEcmaRegex()` (in `EcmaRegex.kt`) rejects Java-only regex syntax (inline flags, `\a`, `(?#...)`), while
     `translateEcmaSyntax()` rewrites ECMA 262 constructs Java reads differently for both `format` and
     `pattern`: `[]`/`[^]`, `\s`/`\S` (ECMA whitespace), `\cx`, `$` (end of input), `.`; `translatePatternToJava()`
     also maps `\p{...}` General_Category aliases (#69)
