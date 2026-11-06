@@ -170,7 +170,7 @@ validate()
 - **OutputFormatTest.kt** - 40 tests for the Flag, Basic and Detailed output formats
 - **DetailedOutputJsonTest.kt** - 5 tests: `DetailedOutput.toJson()` matches the generated serializer and writes a 100,000-level tree without recursion (#85)
 - **BasicOutputFlatteningTest.kt** - 3 tests: Basic units in pre-order, a 100,000-level chain, allocation linear in the units (#75)
-- **ValidatorLifecycleTest.kt** - 3 tests: a dropped validator frees its schema, remote schemas and caches; a live one does not keep schemas with `$id` it validated, and its pattern and numeric-limit caches stay bounded
+- **ValidatorLifecycleTest.kt** - 4 tests: a dropped validator frees its schema, remote schemas, caches, `MetaSchemaCheck` and meta-schema validator; a live one does not keep schemas with `$id` it validated, and its pattern and numeric-limit caches stay bounded
 - **FormatAssertionOptionTest.kt** - 4 tests: `formatAssertion` true asserts and false does not, in both drafts
 - **SchemaMetadataTest.kt** - 10 tests: non-string `$id`/`$schema` construct, are reported by `validateSchema` and never make `validate()` throw
 - **DynamicRefResourceTest.kt** - 7 tests: `$dynamicRef` targets evaluated in their own resource; percent-encoded anchors keep the dynamic override; id-less roots and loaded documents are in the dynamic scope

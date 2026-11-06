@@ -22,6 +22,14 @@ class ValidatorLifecycleTest :
                 val refs = validateWithEveryCacheAndDrop()
                 awaitCollected(refs.all) shouldBe true
             }
+
+            it("frees its meta-schema check and meta-schema validator after validateSchema (#97)") {
+                // MetaSchemaCheck holds no reference back to its validator, so a leak of the check or its
+                // meta-schema validator would not keep the validator alive: each is checked on its own.
+                val refs = validateSchemaAndDrop()
+                awaitCollected(refs)
+                refs.map { it.get() == null } shouldBe listOf(true, true, true)
+            }
         }
 
         describe("a validator that is still referenced") {
@@ -89,6 +97,22 @@ private fun validateAndDropSchema(validator: JsonValidator): WeakReference<JsonE
     validator.validate(Json.parseToJsonElement("1"), schema).isInvalid shouldBe true
     return WeakReference(schema.schema)
 }
+
+/**
+ * Runs validateSchema, then returns weak references to the validator, its [MetaSchemaCheck] and that check's
+ * meta-schema validator, in that order.
+ */
+private fun validateSchemaAndDrop(): List<WeakReference<*>> {
+    val validator = JsonValidator()
+    validator.validateSchema(JsonSchema.fromString("""{"type":"string"}""")).isValid shouldBe true
+    val check = lazyField(JsonValidator::class.java, "metaSchemaCheck", validator).value!!
+    val metaSchemaValidator = lazyField(MetaSchemaCheck::class.java, "metaSchemaValidator", check)
+    metaSchemaValidator.isInitialized() shouldBe true
+    return listOf(WeakReference(validator), WeakReference(check), WeakReference(metaSchemaValidator.value))
+}
+
+/** The `by lazy` delegate behind the private property [name] of [owner]. */
+private fun lazyField(type: Class<*>, name: String, owner: Any): Lazy<*> = type.getDeclaredField("$name\$delegate").apply { isAccessible = true }.get(owner) as Lazy<*>
 
 /** The number of entries in the validator's private cache [field]. */
 private fun cacheSize(validator: JsonValidator, field: String): Int {
