@@ -113,6 +113,10 @@ The validator architecture is straightforward with minimal abstractions:
      uninterruptibly (interrupt status restored), so it never outlives the call (#56)
    - Generated from `src/test/resources/schemas/draft/`; keep the two in sync (no runtime resources)
 
+11. **Idna** (`Idna.kt`) - Internationalized domain names for `hostname`, `idn-hostname`, `email` and `idn-email`
+   - RFC 3492 Punycode, the RFC 5890-5893 label rules (contextual and Bidi) and the UTS 46 mapping, with their tables
+   - `internal object`; `JsonValidator` calls only `Idna.isValidHostname()` and `Idna.isValidIdnHostname()`
+
 ### Validation Flow
 
 ```
@@ -369,10 +373,10 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - Currently supported (19): email, uri, uri-reference, uri-template, date, time, date-time, duration, ipv4, ipv6, uuid, hostname, idn-hostname, idn-email, iri, iri-reference, json-pointer, relative-json-pointer, regex
 - Formats are validated in `validateFormat()` method
 - Add new formats by extending the when expression in `validateFormat()`
-- Helper validators live in `JsonValidator.kt`, grouped by family:
+- Helper validators live in `JsonValidator.kt`, grouped by family, except the IDNA ones in `Idna.kt`:
   - `isValidUriLike()` backs uri, uri-reference, iri and iri-reference from one RFC 3986/3987 parse
     (in `UriSyntax.kt`); IRI components admit only RFC 3987 `ucschar`, read by code point, and `iprivate` only in the query (#76)
-  - `isValidHostname()` / `isValidIdnHostname()` share `isValidULabel()`, `punycodeDecode()`,
+  - `Idna.isValidHostname()` / `Idna.isValidIdnHostname()` (in `Idna.kt`, also used by email and idn-email) share `isValidULabel()`, `punycodeDecode()`,
     `punycodeEncode()` and `idnaMap()` (UTS 46 mapping: drop ignorables, NFKC, case-fold)
   - `isValidEcmaRegex()` rejects Java-only regex syntax (inline flags, `\a`, `(?#...)`), while
     `translateEcmaSyntax()` rewrites ECMA 262 constructs Java reads differently for both `format` and

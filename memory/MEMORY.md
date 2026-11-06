@@ -15,7 +15,9 @@ of them in the same commit as every change (test counts, fixed issues, features,
 
 ## Architecture
 
-- `JsonValidator.kt` (~2,660 lines): all validation logic; `validateElement()` has 22 recursive call sites
+- `JsonValidator.kt` (~2,220 lines): all validation logic; `validateElement()` has 22 recursive call sites
+- `Idna.kt` (`internal object Idna`, ~450 lines): Punycode, IDNA label rules and UTS 46 mapping for the hostname
+  and email formats (#94)
 - `Evaluation.kt`: per-validation state (`ReferenceResolver`, `AbsoluteLocations`, undecided tracking,
   branch-verdict cache for `unevaluated*`)
 - `JsonPointer.kt`: RFC 6901, `SchemaStore` (per validator), `ReferenceResolver` (per validation)
