@@ -3,7 +3,7 @@
 Keep this file up to date along with the README, `docs/IMPLEMENTATION_STATUS.md` and `docs/FEATURES.md`: update all
 of them in the same commit as every change (test counts, fixed issues, features, review decisions).
 
-## Project State (as of 2026-11-04)
+## Project State (as of 2026-11-06)
 
 - Version: 4.0.0 (released 2026-11-04, tag `v4.0.0`; major because of breaking verdict changes since 3.1.0);
   later changes go under `## [Unreleased]` in `CHANGELOG.md`
@@ -77,6 +77,19 @@ of them in the same commit as every change (test counts, fixed issues, features,
 - **#92 (2026-11-04): DONE.** Anchor and `$id` searches are remembered per validation in `ReferenceResolver`.
   #13 (`AbsoluteLocations` searches when stamping failures) is a separate, still-open issue.
 - **#93 (2026-11-04): DONE.** `preview()` cuts member names before escaping them, like string values.
+- **#94–#98 (2026-11-06): DONE**, the split of `JsonValidator.kt` (2,662 → ~1,610 lines). Each went through its own
+  PR (#99–#103) with an independent review, merged by fast-forward.
+  - #94–#97 moved the pure helpers out: `Idna`, `EcmaRegex`, `Formats` and `MetaSchemaCheck`.
+  - #98: `startsResource()`/`resourceRootAt()`/`scopeAt()` replace three copies of the resource-root/scope rule.
+  - Rejected, do not re-propose without a concrete need:
+    - per-keyword classes or a `Keyword` interface (YAGNI; one recursive algorithm, no pluggable vocabularies)
+    - moving the `unevaluated*` collectors into their own class (would widen private functions for file size alone)
+    - a `FormatValidator` interface or registry, or one file per format (YAGNI)
+    - moving `jsonEquals` or the numeric helpers (marginal)
+  - Deferred: a `Scope` parameter object for the 7–10 parameters threaded through `validateElement`, only when a
+    change is blocked by those signatures.
+  - Open follow-up: #104, a non-string `$id` makes a subschema a resource root in the verdict and collection passes;
+    fixing it is a breaking verdict change.
 - **#22 (removing this file): closed as irrelevant.** This file is kept and maintained.
 - **#24: DONE (2026-11-03).** `docs/IMPLEMENTATION_STATUS.md` and `docs/FEATURES.md` describe the current state and
   are updated with every change.
