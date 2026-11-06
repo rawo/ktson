@@ -21,6 +21,7 @@ internal object EcmaRegex {
         }
     }
 
+    /** Rewrites an ECMA 262 pattern into Java regex syntax, for both the `pattern` keywords and the `regex` format. */
     fun translatePatternToJava(pattern: String): String {
         val withJavaCategories = pattern.replace(REGEX_UNICODE_CATEGORY) { match ->
             val flag = match.groupValues[1]

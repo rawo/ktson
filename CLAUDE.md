@@ -121,8 +121,8 @@ The validator architecture is straightforward with minimal abstractions:
 12. **EcmaRegex** (`EcmaRegex.kt`) - The ECMA 262 regex dialect shared by the `regex` format and `pattern`/`patternProperties`
    - The `regex` format's syntax check and the translation of ECMA 262 constructs Java reads differently, with their tables
    - `internal object`; `JsonValidator` calls only `EcmaRegex.isValidEcmaRegex()` and `EcmaRegex.translatePatternToJava()`;
-     `patternCache`, `compiledPattern()` and `patternMatches()` stay in the validator (per-validator cache #40, undecided
-     handling #32/#51)
+     `patternCache`, `compiledPattern()`, `patternMatches()` and `matchesAnyPattern()` stay in the validator (per-validator
+     cache #40, undecided handling #32/#51)
 
 ### Validation Flow
 
@@ -380,8 +380,8 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - Currently supported (19): email, uri, uri-reference, uri-template, date, time, date-time, duration, ipv4, ipv6, uuid, hostname, idn-hostname, idn-email, iri, iri-reference, json-pointer, relative-json-pointer, regex
 - Formats are validated in `validateFormat()` method
 - Add new formats by extending the when expression in `validateFormat()`
-- Helper validators live in `JsonValidator.kt`, grouped by family, except the IDNA ones in `Idna.kt` and the regex
-  dialect in `EcmaRegex.kt`:
+- Helper validators live in `JsonValidator.kt`, grouped by family, except the URI/IP grammar in `UriSyntax.kt`, the IDNA
+  ones in `Idna.kt` and the regex dialect in `EcmaRegex.kt`:
   - `isValidUriLike()` backs uri, uri-reference, iri and iri-reference from one RFC 3986/3987 parse
     (in `UriSyntax.kt`); IRI components admit only RFC 3987 `ucschar`, read by code point, and `iprivate` only in the query (#76)
   - `Idna.isValidHostname()` / `Idna.isValidIdnHostname()` (in `Idna.kt`, also used by email and idn-email) share
