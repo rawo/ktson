@@ -57,9 +57,9 @@ KtSON is a JSON Schema validator for Kotlin with comprehensive support for JSON 
 
 The validator architecture is straightforward with minimal abstractions:
 
-1. **JsonValidator** (`JsonValidator.kt`) - The validation engine (~2,030 lines, ~97KB)
+1. **JsonValidator** (`JsonValidator.kt`) - The validation engine (~1,700 lines, ~82KB)
    - Thread-safe synchronous validation
-   - Evaluates every keyword in a single class; the format grammars live in `UriSyntax` and `Idna`,
+   - Evaluates every keyword in a single class; the format grammars live in `Formats`, `UriSyntax` and `Idna`,
      and the ECMA 262 regex dialect in `EcmaRegex`
    - Creates a per-validation `Evaluation` (`Evaluation.kt`) holding a `ReferenceResolver` for `$ref` resolution
    - Entry point: `validate(instance: JsonElement, schema: JsonSchema): ValidationResult`
@@ -123,6 +123,12 @@ The validator architecture is straightforward with minimal abstractions:
    - `internal object`; `JsonValidator` calls only `EcmaRegex.isValidEcmaRegex()` and `EcmaRegex.translatePatternToJava()`;
      `patternCache`, `compiledPattern()`, `patternMatches()` and `matchesAnyPattern()` stay in the validator (per-validator
      cache #40, undecided handling #32/#51)
+
+13. **Formats** (`Formats.kt`) - The format vocabulary: the grammars behind the `format` keyword
+   - `isValid(format, value)` dispatches on the format name (unknown formats are valid) to date/time, email, idn-email,
+     JSON pointers, uuid, uri-template and duration, and to `UriSyntax`, `Idna` and `EcmaRegex` for the rest
+   - `internal object`; `JsonValidator` calls only `Formats.isValid()`, and keeps `formatAssertion` and the error
+     (message, `format` keyword location) in `validateFormat()`
 
 ### Validation Flow
 
@@ -378,9 +384,9 @@ Release notes are generated from the commit log, so commits must follow Conventi
 ### Format Validation
 - Format validation controlled by `formatAssertion` constructor parameter (default: true); `false` makes it an annotation in both drafts
 - Currently supported (19): email, uri, uri-reference, uri-template, date, time, date-time, duration, ipv4, ipv6, uuid, hostname, idn-hostname, idn-email, iri, iri-reference, json-pointer, relative-json-pointer, regex
-- Formats are validated in `validateFormat()` method
-- Add new formats by extending the when expression in `validateFormat()`
-- Helper validators live in `JsonValidator.kt`, grouped by family, except the URI/IP grammar in `UriSyntax.kt`, the IDNA
+- Formats are validated in `Formats.isValid()` (`Formats.kt`); `JsonValidator.validateFormat()` only turns a failure into an error
+- Add new formats by extending the when expression in `Formats.isValid()`
+- Helper validators live in `Formats.kt`, grouped by family, except the URI/IP grammar in `UriSyntax.kt`, the IDNA
   ones in `Idna.kt` and the regex dialect in `EcmaRegex.kt`:
   - `isValidUriLike()` backs uri, uri-reference, iri and iri-reference from one RFC 3986/3987 parse
     (in `UriSyntax.kt`); IRI components admit only RFC 3987 `ucschar`, read by code point, and `iprivate` only in the query (#76)
