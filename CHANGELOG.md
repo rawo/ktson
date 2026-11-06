@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Breaking verdict change:** a subschema whose `$id` is not a string (`{"$id":5}`, `{"$id":{}}`, `{"$id":null}`) no
+  longer becomes a schema resource of its own during validation. Validation ignores a malformed `$id` everywhere else
+  (#57), but the verdict pass and the `unevaluated*` collectors still made such a subschema the resource root, so a
+  local `$ref` below it resolved against the subschema itself: `{"properties":{"x":{"$id":5,"$ref":"#/$defs/a"}}}`
+  rejected every instance with "Could not resolve reference", and a same-named definition inside the subschema was
+  credited to `unevaluatedProperties` instead of the enclosing resource's. Such refs now resolve in the enclosing
+  resource (#104).
+
 ## [4.0.0] - 2026-11-04
 
 Major release: `absoluteKeywordLocation` in errors and output, and conformance and robustness fixes, many of which

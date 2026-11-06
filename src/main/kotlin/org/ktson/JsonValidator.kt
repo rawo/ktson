@@ -179,14 +179,12 @@ class JsonValidator @JvmOverloads constructor(
     private fun List<JsonElement>.entering(resource: JsonElement): List<JsonElement> = if (any { it === resource }) this else this + resource
 
     /**
-     * Whether [schema] starts a schema resource: an object with `$id`. The verdict pass ([validateElement]) and both
-     * `unevaluated*` collectors enter resources through [resourceRootAt] and [scopeAt], which share this one test, so
-     * they always agree on the resource root and dynamic scope (guideline 8, #90).
-     *
-     * It tests only for the key, as the three copies it replaced did, so a non-string `$id` starts a resource here
-     * although KtSON otherwise counts `$id` only when it is a string (#57). That mismatch is tracked in #104.
+     * Whether [schema] starts a schema resource: an object with a string `$id`. The verdict pass ([validateElement]) and
+     * both `unevaluated*` collectors enter resources through [resourceRootAt] and [scopeAt], which share this one test,
+     * so they always agree on the resource root and dynamic scope (guideline 8, #90). A non-string `$id` is malformed and
+     * ignored, as by every other `$id` reader (#57), so refs below it resolve in the enclosing resource (#104).
      */
-    private fun startsResource(schema: JsonElement): Boolean = schema is JsonObject && schema.containsKey(SchemaKeywords.ID)
+    private fun startsResource(schema: JsonElement): Boolean = schema is JsonObject && schema.stringKeyword(SchemaKeywords.ID) != null
 
     /** The resource root in effect at [schema]: [schema] itself when it [startsResource], else [resourceRoot]. */
     private fun resourceRootAt(schema: JsonElement, resourceRoot: JsonElement): JsonElement = if (startsResource(schema)) schema else resourceRoot

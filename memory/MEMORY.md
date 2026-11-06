@@ -10,7 +10,7 @@ of them in the same commit as every change (test counts, fixed issues, features,
 - Kotlin 2.4.0, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
 - Official JSON Schema Test Suite: 4,462 assertions run, 100% passing (168 excluded), pinned by `TEST_SUITE_REF`
   in `.github/workflows/build.yml`
-- Custom tests: 1,381 (100% passing); the full `./gradlew test` run is 5,851 tests
+- Custom tests: 1,393 (100% passing); the full `./gradlew test` run is 5,863 tests
 - `kotlinx-coroutines-core`/`-test` are test-only dependencies; the API is synchronous
 
 ## Architecture
@@ -88,8 +88,9 @@ of them in the same commit as every change (test counts, fixed issues, features,
     - moving `jsonEquals` or the numeric helpers (marginal)
   - Deferred: a `Scope` parameter object for the 7–10 parameters threaded through `validateElement`, only when a
     change is blocked by those signatures.
-  - Open follow-up: #104, a non-string `$id` makes a subschema a resource root in the verdict and collection passes;
-    fixing it is a breaking verdict change.
+  - Follow-up #104 is done (below).
+- **#104 (2026-11-06): DONE** (breaking verdict change). `startsResource()` requires a string `$id`, like every other
+  `$id` reader, so a malformed `$id` no longer makes a subschema a resource root in the verdict or collection passes.
 - **#22 (removing this file): closed as irrelevant.** This file is kept and maintained.
 - **#24: DONE (2026-11-03).** `docs/IMPLEMENTATION_STATUS.md` and `docs/FEATURES.md` describe the current state and
   are updated with every change.

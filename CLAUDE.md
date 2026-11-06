@@ -172,7 +172,8 @@ validate()
 - **BasicOutputFlatteningTest.kt** - 3 tests: Basic units in pre-order, a 100,000-level chain, allocation linear in the units (#75)
 - **ValidatorLifecycleTest.kt** - 4 tests: a dropped validator frees its schema, remote schemas, caches, `MetaSchemaCheck` and meta-schema validator; a live one does not keep schemas with `$id` it validated, and its pattern and numeric-limit caches stay bounded
 - **FormatAssertionOptionTest.kt** - 4 tests: `formatAssertion` true asserts and false does not, in both drafts
-- **SchemaMetadataTest.kt** - 10 tests: non-string `$id`/`$schema` construct, are reported by `validateSchema` and never make `validate()` throw
+- **SchemaMetadataTest.kt** - 22 tests: non-string `$id`/`$schema` construct, are reported by `validateSchema` and never make `validate()` throw;
+  a non-string `$id` starts no resource, for the verdict and `unevaluated*` alike (#104)
 - **DynamicRefResourceTest.kt** - 7 tests: `$dynamicRef` targets evaluated in their own resource; percent-encoded anchors keep the dynamic override; id-less roots and loaded documents are in the dynamic scope
 - **ConcurrentLoadingTest.kt** - 7 tests: one `schemaLoader` call per URI under concurrency; loaders may validate through the same validator (#55); waiters rethrow the loader's exception (#65); load cycles across threads are broken (#63)
 - **ValidateSchemaWorkerTest.kt** - 3 tests: the `validateSchema` worker inherits no thread-locals and never outlives an interrupted call
@@ -383,7 +384,8 @@ Release notes are generated from the commit log, so commits must follow Conventi
 - When adding new ref types, update `ReferenceResolver` in `JsonPointer.kt` and `resolveReferences()` in `JsonValidator.kt`
 - The root's absolute base (`JsonSchema.absoluteBaseUri()`: absolute `$id`, else `$id` resolved against `baseUri`, else `baseUri`) is registered before validation, so `schemaLoader` receives absolute URIs
 - `$id` registrations only improve: an absolute URI is never replaced by a relative one, and a registered resource is not re-resolved (its relative `$id` would otherwise nest again)
-- `$id`, `$anchor`, `$dynamicAnchor` and `$schema` count only when their value is a string (`stringKeyword()`): a property may be named `$id`, and a malformed value is left to `validateSchema` (#57)
+- `$id`, `$anchor`, `$dynamicAnchor` and `$schema` count only when their value is a string (`stringKeyword()`): a property may be named `$id`, and a malformed value is left to `validateSchema` (#57). That includes
+  `startsResource()`: a non-string `$id` starts no resource, so refs below it resolve in the enclosing one (#104)
 
 ### Format Validation
 - Format validation controlled by `formatAssertion` constructor parameter (default: true); `false` makes it an annotation in both drafts

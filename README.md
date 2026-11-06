@@ -560,7 +560,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 1381 tests (100% passing)
+- **Custom Tests**: 1393 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -601,7 +601,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - `validateSchema` worker thread (thread-locals, interrupts): 3 tests
   - Remote loading (single flight, reentrant and failing loaders, load cycles): 7 tests
   - `formatAssertion` option in both drafts: 4 tests
-  - Malformed `$id` / `$schema` values: 10 tests
+  - Malformed `$id` / `$schema` values (no exceptions, no resource boundary): 22 tests
   - `$dynamicRef` resources, encoded anchors and dynamic scope: 7 tests
   - Output-tests runner file discovery: 4 tests
   - Java interop for output formats: 2 tests
