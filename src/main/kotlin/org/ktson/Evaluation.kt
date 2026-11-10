@@ -42,6 +42,13 @@ internal class Evaluation(val rootSchema: JsonElement, store: SchemaStore) {
     private val verdicts = IdentityHashMap<JsonElement, HashMap<Application, Boolean>>()
 
     /**
+     * What each schema applied at an instance in [collectors] evaluated (property names or item indices), kept and
+     * dropped with [verdicts]. Every level of nested unevaluated* collects its subtree, so without them each level
+     * walked all the levels below it again (#106).
+     */
+    private val evaluatedSets = IdentityHashMap<JsonElement, HashMap<Application, Set<*>>>()
+
+    /**
      * Starts the evaluation of a schema with unevaluated* against [instance]. Until the matching [leaveCollector],
      * the verdicts of anyOf/oneOf branches and if conditions at [instance] are remembered, so the collection of
      * evaluated properties and items does not validate them again: at every nesting level that doubled the work (#30).
@@ -52,7 +59,10 @@ internal class Evaluation(val rootSchema: JsonElement, store: SchemaStore) {
 
     fun leaveCollector(instance: JsonElement) {
         collectors.removeAt(collectors.lastIndex)
-        if (collectors.lastOrNull() !== instance) verdicts.remove(instance)
+        if (collectors.lastOrNull() !== instance) {
+            verdicts.remove(instance)
+            evaluatedSets.remove(instance)
+        }
     }
 
     /** Whether a verdict at [instance] can be needed by a collection pass, and is worth remembering. */
@@ -66,6 +76,18 @@ internal class Evaluation(val rootSchema: JsonElement, store: SchemaStore) {
      */
     fun rememberVerdict(application: Application, valid: Boolean) {
         verdicts.getOrPut(application.instance) { HashMap() }[application] = valid
+    }
+
+    /** The members [application] evaluated, if collected before: property names at an object, indices at an array. */
+    @Suppress("UNCHECKED_CAST")
+    fun <T> knownEvaluated(application: Application): Set<T>? = evaluatedSets[application.instance]?.get(application) as Set<T>?
+
+    /**
+     * Remembers what [application] evaluated, at the instance [collects] accepts. As for [rememberVerdict], only a
+     * collection with no undecided result inside may be passed.
+     */
+    fun rememberEvaluated(application: Application, evaluated: Set<*>) {
+        evaluatedSets.getOrPut(application.instance) { HashMap() }[application] = evaluated
     }
 }
 

@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `item.json` evaluates `a`, and in a loaded document `schemaLoader` received the relative URI `item.json`. The
   collectors now register the resource as the verdict pass does (#105).
 
+### Performance
+- Nested `unevaluated*` no longer costs quadratic time in the nesting depth. Each level's verdict pass collects what
+  its subtree evaluated, and every level above it walked that subtree again, so 400 levels of `allOf` with
+  `unevaluatedProperties` over 2,000 evaluated properties took 10.2 s, each doubling of the levels costing about 4×. What a schema evaluated at an instance is now remembered while that
+  instance is collected, as the branch verdicts of #30 are: the same 400 levels take 0.16 s for
+  `unevaluatedProperties` and 0.16 s for `unevaluatedItems` (6.9 s before). Verdicts are unchanged (#106).
+
 ## [4.0.0] - 2026-11-04
 
 Major release: `absoluteKeywordLocation` in errors and output, and conformance and robustness fixes, many of which

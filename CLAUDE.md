@@ -198,7 +198,7 @@ validate()
 - **SharedDocumentBaseTest.kt** - 4 tests: a relative `$id` in one parsed document loaded under two URIs resolves in each retrieval context, in either order (#91)
 - **KeywordNamedPropertyTest.kt** - 15 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
 - **UnevaluatedAcrossResourcesTest.kt** - 24 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated, and evaluates the branches of an inline `$id` subschema in its own resource and dynamic scope; a relative `$id` inside a URI-based hop resolves against the hop's base in the collectors too (#90, #98, #105)
-- **UnevaluatedNestingTest.kt** - 8 tests: 40 levels of `anyOf`/`oneOf`/`if` with `unevaluated*` at one location stay fast; reused branch verdicts respect the dynamic scope and are never undecided (#30)
+- **UnevaluatedNestingTest.kt** - 12 tests: 40 levels of `anyOf`/`oneOf`/`if` with `unevaluated*` at one location stay fast, as do 400 levels of `allOf` over 2,000 evaluated members; reused branch verdicts respect the dynamic scope and are never undecided (#30, #106)
 - **AbsoluteKeywordLocationTest.kt** - 53 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
 - **JavaOutputUsageTest.kt** - 2 tests running `src/test/java/org/ktson/JavaOutputUsage.java`, a Java caller of the output API
 - **JavaApiUsageTest.kt** - 11 tests running `src/test/java/org/ktson/JavaApiUsage.java`, a Java caller of `JsonSchema`, `JsonValidator` and `JsonPointer`
@@ -357,7 +357,10 @@ Release notes are generated from the commit log, so commits must follow Conventi
    while a schema with `unevaluated*` is evaluated at that instance (#30). Re-validating them instead made each nesting
    level cost ~2.6× the one below. The `Application` key holds everything a verdict depends on (schema, instance,
    resource and its base, dynamic scope, depth); a new input to a verdict must be added to it. Undecided verdicts are
-   never remembered, so they are reached and marked again
+   never remembered, so they are reached and marked again. The collected sets themselves are remembered the same way,
+   per `Application` while the instance is collected (`knownEvaluated()`/`rememberEvaluated()`), so an outer level's
+   collection does not walk every level below it again (#106); a collection with an undecided result inside is not
+   remembered
 
 ### Reference Resolution
 - `$ref` resolution uses `ReferenceResolver` in `JsonPointer.kt`, one per validation: `validateInternal()` creates an

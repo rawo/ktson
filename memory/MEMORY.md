@@ -10,7 +10,7 @@ of them in the same commit as every change (test counts, fixed issues, features,
 - Kotlin 2.4.0, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
 - Official JSON Schema Test Suite: 4,462 assertions run, 100% passing (168 excluded), pinned by `TEST_SUITE_REF`
   in `.github/workflows/build.yml`
-- Custom tests: 1,399 (100% passing); the full `./gradlew test` run is 5,869 tests
+- Custom tests: 1,403 (100% passing); the full `./gradlew test` run is 5,873 tests
 - `kotlinx-coroutines-core`/`-test` are test-only dependencies; the API is synchronous
 
 ## Architecture
@@ -95,6 +95,9 @@ of them in the same commit as every change (test counts, fixed issues, features,
   (nested `unevaluated*` quadratic, `const`/`enum` big-number parsing, unresolvable remote ref reloaded per use; open).
   `enterResource()` registers a resource's absolute URI for the verdict pass and both collectors; before, only
   `validateElement()` did, and `withBase` undoes it after a hop (#91), so collectors lost a relative `$id` there.
+- **#106 (2026-11-10): DONE** (perf, verdicts unchanged). Collected `unevaluated*` sets are remembered per `Application`
+  in `Evaluation` while the instance is collected, like the #30 verdicts; not when undecided (the #51 test guards it).
+  400 levels of `allOf` over 2,000 members: 10.2 s → 0.16 s.
 - **#22 (removing this file): closed as irrelevant.** This file is kept and maintained.
 - **#24: DONE (2026-11-03).** `docs/IMPLEMENTATION_STATUS.md` and `docs/FEATURES.md` describe the current state and
   are updated with every change.

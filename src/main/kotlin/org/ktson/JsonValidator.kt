@@ -1314,6 +1314,11 @@ class JsonValidator @JvmOverloads constructor(
         val effectiveScope = scopeAt(schemaElement, dynamicScope)
         enterResource(schemaElement, resourceRoot, evaluation)
 
+        // Already collected while this instance is collected: an outer level's collection reaches every level below (#106)
+        val application = if (evaluation.collects(instance)) application(instance, schemaElement, evaluation, depth, effectiveResourceRoot, effectiveScope) else null
+        application?.let { evaluation.knownEvaluated<Int>(it) }?.let { return it }
+        val undecidedBefore = evaluation.undecided
+
         val evaluated = mutableSetOf<Int>()
 
         // prefixItems (2020-12 only): evaluates indices 0 until min(prefixItems.size, instance.size)
@@ -1433,6 +1438,7 @@ class JsonValidator @JvmOverloads constructor(
             }
         }
 
+        if (application != null && evaluation.undecided == undecidedBefore) evaluation.rememberEvaluated(application, evaluated)
         return evaluated
     }
 
@@ -1464,6 +1470,11 @@ class JsonValidator @JvmOverloads constructor(
         val effectiveResourceRoot = resourceRootAt(schemaElement, resourceRoot)
         val effectiveScope = scopeAt(schemaElement, dynamicScope)
         enterResource(schemaElement, resourceRoot, evaluation)
+
+        // Already collected while this instance is collected: an outer level's collection reaches every level below (#106)
+        val application = if (evaluation.collects(instance)) application(instance, schemaElement, evaluation, depth, effectiveResourceRoot, effectiveScope) else null
+        application?.let { evaluation.knownEvaluated<String>(it) }?.let { return it }
+        val undecidedBefore = evaluation.undecided
 
         val evaluated = mutableSetOf<String>()
 
@@ -1563,6 +1574,7 @@ class JsonValidator @JvmOverloads constructor(
             }
         }
 
+        if (application != null && evaluation.undecided == undecidedBefore) evaluation.rememberEvaluated(application, evaluated)
         return evaluated
     }
 
