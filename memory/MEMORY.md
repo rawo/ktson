@@ -10,7 +10,7 @@ of them in the same commit as every change (test counts, fixed issues, features,
 - Kotlin 2.4.0, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
 - Official JSON Schema Test Suite: 4,462 assertions run, 100% passing (168 excluded), pinned by `TEST_SUITE_REF`
   in `.github/workflows/build.yml`
-- Custom tests: 1,403 (100% passing); the full `./gradlew test` run is 5,873 tests
+- Custom tests: 1,410 (100% passing); the full `./gradlew test` run is 5,880 tests
 - `kotlinx-coroutines-core`/`-test` are test-only dependencies; the API is synchronous
 
 ## Architecture
@@ -98,6 +98,9 @@ of them in the same commit as every change (test counts, fixed issues, features,
 - **#106 (2026-11-10): DONE** (perf, verdicts unchanged). Collected `unevaluated*` sets are remembered per `Application`
   in `Evaluation` while the instance is collected, like the #30 verdicts; not when undecided (the #51 test guards it).
   400 levels of `allOf` over 2,000 members: 10.2 s → 0.16 s.
+- **#107 (2026-11-10): DONE** (perf, verdicts unchanged). `jsonEquals` compares numbers as `DecimalToken`s (sign,
+  significant digits, exponent) instead of `BigDecimal`s; a 400,000-digit `const` 3.6 s → 34 ms. Kept on purpose: a
+  number whose scale `BigDecimal` rejects equals only its own text (an oracle test pins the old equality).
 - **#22 (removing this file): closed as irrelevant.** This file is kept and maintained.
 - **#24: DONE (2026-11-03).** `docs/IMPLEMENTATION_STATUS.md` and `docs/FEATURES.md` describe the current state and
   are updated with every change.

@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `unevaluatedProperties` over 2,000 evaluated properties took 10.2 s, each doubling of the levels costing about 4×. What a schema evaluated at an instance is now remembered while that
   instance is collected, as the branch verdicts of #30 are: the same 400 levels take 0.16 s for
   `unevaluatedProperties` and 0.16 s for `unevaluatedItems` (6.9 s before). Verdicts are unchanged (#106).
+- `const`, `enum` and `uniqueItems` compare numbers by sign, significant digits and exponent instead of converting
+  both to `BigDecimal`, which is quadratic in the digits: a 400,000-digit instance took 3.6 s against `{"const":1}`,
+  10.8 s against a three-value `enum` and 7.2 s in a two-item `uniqueItems` array; each now takes under 35 ms. Verdicts
+  are unchanged, including for numbers `BigDecimal` rejects, which still equal only their own text (#107).
 
 ## [4.0.0] - 2026-11-04
 

@@ -560,7 +560,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 1403 tests (100% passing)
+- **Custom Tests**: 1410 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -596,7 +596,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - IDN label length (exact limit, cheap rejection): 4 tests
   - IP address length (longest forms, cheap rejection): 4 tests
   - `hostname` Bidi rule on ASCII labels in Bidi domains: 9 tests
-  - Number conversion only when a numeric keyword needs it: 5 tests
+  - Number conversion only when a numeric keyword needs it; `const`/`enum`/`uniqueItems` compare digits without converting: 12 tests
   - Bounded cache: 4 tests
   - `validateSchema` worker thread (thread-locals, interrupts): 3 tests
   - Remote loading (single flight, reentrant and failing loaders, load cycles): 7 tests

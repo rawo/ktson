@@ -586,23 +586,17 @@ class JsonValidator @JvmOverloads constructor(
     }
 
     /**
-     * Compares two numeric JSON primitives at full precision.
-     * Uses Long fast-path when both operands fit in 64 bits with no fractional or exponent parts.
-     * Returns null if either primitive is not a valid number.
+     * Whether two numeric JSON primitives have the same value, decided from their digits and exponents without converting
+     * them: BigDecimal parsing is quadratic in the digits, and an instance can have hundreds of thousands (#107). False
+     * when either is not a number. A number BigDecimal rejects (its scale outside Int range) equals nothing but its own
+     * text, as when this compared BigDecimals; [jsonEquals] checks the text first.
      */
-    private fun compareNumerics(a: JsonPrimitive, b: JsonPrimitive): Int? {
-        if (a is JsonNull || a.isString || a.booleanOrNull != null) return null
-        if (b is JsonNull || b.isString || b.booleanOrNull != null) return null
-
-        val aLong = a.content.toLongOrNull()
-        val bLong = b.content.toLongOrNull()
-        if (aLong != null && bLong != null) {
-            return aLong.compareTo(bLong)
-        }
-
-        val aDec = a.content.toBigDecimalOrNull() ?: return null
-        val bDec = b.content.toBigDecimalOrNull() ?: return null
-        return aDec.compareTo(bDec)
+    private fun numbersEqual(a: JsonPrimitive, b: JsonPrimitive): Boolean {
+        if (a is JsonNull || a.isString || a.booleanOrNull != null) return false
+        if (b is JsonNull || b.isString || b.booleanOrNull != null) return false
+        val x = DecimalToken.parse(a.content) ?: return false
+        val y = DecimalToken.parse(b.content) ?: return false
+        return x.sameValue(y)
     }
 
     /**
@@ -654,7 +648,7 @@ class JsonValidator @JvmOverloads constructor(
             when {
                 x is JsonPrimitive && y is JsonPrimitive -> {
                     if (x == y) continue
-                    if (compareNumerics(x, y) != 0) return false
+                    if (!numbersEqual(x, y)) return false
                 }
                 x is JsonArray && y is JsonArray -> {
                     if (x.size != y.size) return false

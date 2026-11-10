@@ -34,7 +34,8 @@ The draft is selected by `$schema` when it names a supported meta-schema exactly
 - [x] `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`
 - [x] Exact arithmetic: `Long` fast path, `BigDecimal` otherwise; no `Double` rounding
 - [x] `multipleOf` never expands powers of ten: `1e2147483647` is decided from its digits as written
-- [x] Numbers are converted only when a numeric keyword needs them
+- [x] Numbers are converted only when a numeric keyword needs them; `const`, `enum` and `uniqueItems` compare digits and
+  exponents without converting
 
 ### Object ✅
 - [x] `properties`, `required`, `additionalProperties`, `patternProperties`
@@ -119,7 +120,7 @@ implemented yet ([#5](https://github.com/rawo/ktson/issues/5)).
 - **Official JSON Schema Test Suite:** 4,462 / 4,462 assertions (100%) for `draft2019-09` and `draft2020-12`,
   including `optional/format`, `optional/bignum.json` and `optional/ecmascript-regex.json`; plus the official
   `output-tests` against Basic output
-- **Custom tests:** 1,403, covering keywords for both drafts, formats, references, `unevaluated*`, output formats,
+- **Custom tests:** 1,410, covering keywords for both drafts, formats, references, `unevaluated*`, output formats,
   error locations, numeric precision, concurrency, validator lifecycle and Java callers. The README's Test Coverage
   section and `CLAUDE.md` break them down per file
 - **Performance tests:** 9, run with `./gradlew performanceTest`

@@ -7,7 +7,7 @@
 `vocabulary.json`, `infinite-loop-detection.json` and the rest of `optional/`. The suite is pinned to
 `TEST_SUITE_REF` in `.github/workflows/build.yml`.
 
-**Custom tests**: 1,403 (100% passing); see the README's Test Coverage section and the per-file list in `CLAUDE.md`.
+**Custom tests**: 1,410 (100% passing); see the README's Test Coverage section and the per-file list in `CLAUDE.md`.
 
 ## What's Implemented ✅
 
@@ -48,7 +48,8 @@
 ### Numbers
 - Exact `Long`/`BigDecimal` comparisons, integer classification, equality and `multipleOf`
 - Bounded by the digits as written, never by exponents: `1e2147483647` and `100e2147483647` neither throw nor
-  expand (#70, #86); numbers are converted only for numeric keywords (#84)
+  expand (#70, #86); numbers are converted only for numeric keywords (#84), and
+  `const`/`enum`/`uniqueItems` compare them without converting (#107)
 
 ### Results and Output
 - `ValidationResult` with `ValidationError`: RFC 6901 `instanceLocation`, `keyword`, `schemaPath` (keyword

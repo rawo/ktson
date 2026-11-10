@@ -191,7 +191,7 @@ validate()
 - **IdnLabelLengthTest.kt** - 4 tests: the 63-character A-label limit is exact, and oversized labels are rejected before Punycode work (#79)
 - **IpLengthTest.kt** - 4 tests: `ipv4`/`ipv6` accept the 15- and 45-character longest forms and reject 1 MB candidates without allocating in proportion (#88)
 - **HostnameBidiTest.kt** - 9 tests: in a Bidi domain `hostname` applies the Bidi rule to ASCII labels too; a valid hostname is a valid idn-hostname (#82)
-- **NumericParsingTest.kt** - 5 tests: numbers are converted only for `SchemaKeywords.NUMERIC_KEYWORDS`; integer tokens are classified without parsing (#84)
+- **NumericParsingTest.kt** - 12 tests: numbers are converted only for `SchemaKeywords.NUMERIC_KEYWORDS`; integer tokens are classified without parsing (#84); `const`/`enum`/`uniqueItems` decide 400,000-digit numbers in time, exactly as `BigDecimal` equality did (#107)
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 42 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
 - **ReferenceLookupCostTest.kt** - 4 tests: anchor, `$id` and loaded-document references applied to 100 items walk a 2,000-definition schema once; equal anchor names in different resources stay apart (#92)
@@ -258,8 +258,10 @@ anchor/`$id` searches and error-location walks are iterative and need no limit; 
   the JDK exposes no joining-type data.
 
 ### 3. Numeric Precision
-Bounds, integer classification, `multipleOf` and numeric equality use exact `Long`/`BigDecimal`
-arithmetic. `multipleOf` uses `BigDecimal.isMultipleOf()` (`Divisibility.kt`): exact, and never expands powers of ten,
+Bounds, integer classification and `multipleOf` use exact `Long`/`BigDecimal` arithmetic. Numeric equality (`const`,
+`enum`, `uniqueItems`) compares `DecimalToken`s (`DecimalToken.kt`): sign, significant digits and exponent, linear in the
+digits, since converting to `BigDecimal` is quadratic in them (#107). A number `BigDecimal` rejects (scale outside `Int`)
+still equals only its own text; keep that, or equality verdicts change. `multipleOf` uses `BigDecimal.isMultipleOf()` (`Divisibility.kt`): exact, and never expands powers of ten,
 so `1e2147483647` neither allocates gigabytes nor throws (#70); do not use `BigDecimal.remainder`. Never call
 `stripTrailingZeros()` on a number with a nonpositive scale: for `100e2147483647` it overflows the scale and throws (#86). Integer tokens
 within `Long` range take a fast path; parsed decimal schema limits are
