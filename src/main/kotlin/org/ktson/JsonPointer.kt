@@ -214,6 +214,12 @@ internal class ReferenceResolver(private val store: SchemaStore) {
     private val anchors = HashMap<SearchKey, JsonElement?>()
     private val resourcesById = HashMap<SearchKey, ResolvedReference?>()
 
+    /**
+     * Absolute URIs the store could not load in this validation, so a reference applied to every item asks the loader
+     * once, not once per item (#108). Per validation, like the store's own rule: a later validation may try again.
+     */
+    private val unloadable = HashSet<String>()
+
     /** Sets [schema]'s registration, remembering what it replaces in the innermost hop. */
     private fun register(schema: JsonElement, uri: String) {
         val previous = schemaAbsoluteUris.put(schema, uri)
@@ -314,7 +320,9 @@ internal class ReferenceResolver(private val store: SchemaStore) {
         if (absoluteUri != uriPart || baseId.isNotEmpty()) {
             findResource(resourceRoot, absoluteUri)?.let { return it }
         }
-        return store.load(absoluteUri)?.let { loaded(it, absoluteUri) }
+        if (absoluteUri in unloadable) return null
+        val document = store.load(absoluteUri) ?: return null.also { unloadable.add(absoluteUri) }
+        return loaded(document, absoluteUri)
     }
 
     /** The resource in [document] whose `$id` is [targetUri], with its base, searched once per base of [document]. */

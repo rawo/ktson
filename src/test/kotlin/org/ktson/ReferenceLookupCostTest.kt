@@ -13,7 +13,8 @@ import java.lang.management.ManagementFactory
 
 /**
  * A reference applied to every item of an array finds its target once per validation: anchor and `$id` searches are
- * remembered, so a 2,000-definition schema is not walked again for each of 100 items (#92).
+ * remembered, so a 2,000-definition schema is not walked again for each of 100 items (#92). A remote reference the
+ * loader cannot provide is asked for once per validation, not once per item (#108).
  */
 class ReferenceLookupCostTest :
     DescribeSpec({
@@ -64,5 +65,23 @@ class ReferenceLookupCostTest :
             validator.validate(Json.parseToJsonElement("""{"a":"x","b":"x","c":true}"""), schema).isValid shouldBe false
             validator.validate(Json.parseToJsonElement("""{"a":1,"b":1,"c":true}"""), schema).isValid shouldBe false
             validator.validate(Json.parseToJsonElement("""{"a":1,"b":"x","c":1}"""), schema).isValid shouldBe false
+        }
+
+        // Before: 1,000 loader calls in one validation, each of which may be a network request (#108)
+        SchemaVersion.entries.forEach { version ->
+            it("asks schemaLoader once per validation for a remote reference it cannot provide, in $version") {
+                val requested = java.util.Collections.synchronizedList(mutableListOf<String>())
+                val validator = JsonValidator(schemaLoader = { uri ->
+                    requested.add(uri)
+                    null
+                })
+                val schema = JsonSchema.fromString("""{"${'$'}id":"https://example.com/root","items":{"${'$'}ref":"https://other.example/missing.json"}}""", version)
+                val items = JsonArray(List(1_000) { JsonPrimitive(it) })
+                validator.validate(items, schema).isValid shouldBe false
+                requested shouldBe listOf("https://other.example/missing.json")
+                // The miss is not cached by the validator: the next validation asks again
+                validator.validate(items, schema).isValid shouldBe false
+                requested.size shouldBe 2
+            }
         }
     })

@@ -15,6 +15,8 @@ class ContainsEvaluationTest :
         val ref = "${'$'}ref"
         val input = JsonArray(listOf(JsonPrimitive(0), JsonPrimitive(0)) + List(1000) { JsonPrimitive(1) })
 
+        // Loader calls show whether an item reached the branch with the unloadable $ref: 0 means none did. A URI the
+        // loader cannot provide is asked for once per validation (#108), so a validation that reaches any item makes 1
         fun loads(schema: String): Int {
             var calls = 0
             val validator = JsonValidator(schemaLoader = {
@@ -36,7 +38,7 @@ class ContainsEvaluationTest :
 
         it("evaluates no item after minContains matches") {
             loads("""{"contains":$matchOrLoad,"minContains":2}""") shouldBe 0
-            loads("""{"contains":$matchOrLoad,"minContains":3}""") shouldBe 1000
+            loads("""{"contains":$matchOrLoad,"minContains":3}""") shouldBe 1
         }
 
         it("evaluates no item when minContains is 0 and there is no maxContains") {
@@ -44,7 +46,7 @@ class ContainsEvaluationTest :
         }
 
         it("still counts every match against maxContains") {
-            loads("""{"contains":$matchOrLoad,"maxContains":5}""") shouldBe 1000
+            loads("""{"contains":$matchOrLoad,"maxContains":5}""") shouldBe 1
             result("[0,1,0]", """{"contains":{"const":0},"maxContains":1}""").isValid shouldBe false
             result("[0,1,0]", """{"contains":{"const":0},"maxContains":2}""").isValid shouldBe true
             result("[0,0]", """{"contains":{"const":0},"minContains":0,"maxContains":1}""").isValid shouldBe false

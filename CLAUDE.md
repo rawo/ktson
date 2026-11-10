@@ -194,7 +194,7 @@ validate()
 - **NumericParsingTest.kt** - 12 tests: numbers are converted only for `SchemaKeywords.NUMERIC_KEYWORDS`; integer tokens are classified without parsing (#84); `const`/`enum`/`uniqueItems` decide 400,000-digit numbers in time, exactly as `BigDecimal` equality did (#107)
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
 - **ReferenceResolutionTest.kt** - 42 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
-- **ReferenceLookupCostTest.kt** - 4 tests: anchor, `$id` and loaded-document references applied to 100 items walk a 2,000-definition schema once; equal anchor names in different resources stay apart (#92)
+- **ReferenceLookupCostTest.kt** - 6 tests: anchor, `$id` and loaded-document references applied to 100 items walk a 2,000-definition schema once; equal anchor names in different resources stay apart (#92); `schemaLoader` is asked once per validation for a URI it cannot provide (#108)
 - **SharedDocumentBaseTest.kt** - 4 tests: a relative `$id` in one parsed document loaded under two URIs resolves in each retrieval context, in either order (#91)
 - **KeywordNamedPropertyTest.kt** - 15 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
 - **UnevaluatedAcrossResourcesTest.kt** - 24 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated, and evaluates the branches of an inline `$id` subschema in its own resource and dynamic scope; a relative `$id` inside a URI-based hop resolves against the hop's base in the collectors too (#90, #98, #105)
@@ -385,6 +385,9 @@ Release notes are generated from the commit log, so commits must follow Conventi
   in its fragments are followed. `SchemaStore` keeps no element→URI map: a loader may return one parsed object for
   several URIs, so the base must travel with the reference (#54). Registrations made during a hop (a relative `$id`
   below the resource) are undone with it, so another retrieval context of the same document derives its own (#91)
+- An absolute URI the store could not load is remembered per validation in `ReferenceResolver` (`unloadable`), so
+  the loader is asked once per validation, not once per use (#108); `SchemaStore` still caches no miss, so the next
+  validation retries
 - Anchor and `$id` searches are remembered per validation in `ReferenceResolver` (#92), keyed by the searched element's
   identity, the kind of search or the document's base, and the target. A new input to a search must join the key; never
   move these caches to the validator (#37, #40)
