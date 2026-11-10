@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rejected every instance with "Could not resolve reference", and a same-named definition inside the subschema was
   credited to `unevaluatedProperties` instead of the enclosing resource's. Such refs now resolve in the enclosing
   resource (#104).
+- **Breaking verdict change:** `unevaluatedProperties` and `unevaluatedItems` now see what a subschema with a relative
+  `$id` evaluated when it sits inside a URI-based `$ref` hop. Only the verdict pass registered such a subschema's
+  absolute URI, and the registration is undone when the hop ends (#91), so the `unevaluated*` collectors resolved its
+  relative `$ref` against nothing: `{"$ref":"http://e.com/other","unevaluatedProperties":false}`, with
+  `http://e.com/other` holding `{"allOf":[{"$id":"sub/","$ref":"item.json",...}]}`, rejected `{"a":1}` although
+  `item.json` evaluates `a`, and in a loaded document `schemaLoader` received the relative URI `item.json`. The
+  collectors now register the resource as the verdict pass does (#105).
 
 ## [4.0.0] - 2026-11-04
 

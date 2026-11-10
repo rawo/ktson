@@ -112,5 +112,41 @@ class UnevaluatedAcrossResourcesTest :
                     }
                 }
             }
+
+            // A relative $id inside a URI-based $ref hop is resolved against the hop's base when a collector enters it,
+            // as in validateElement; withBase undoes the verdict pass's registration, so a collector that did not
+            // register it resolved "item.json" against nothing (#105)
+            describe("$version: a relative \$id inside a URI-based \$ref hop, entered by the collectors") {
+                fun sub(item: String) = """{"${'$'}id":"sub/","${'$'}defs":{"i":{"${'$'}id":"item.json",$item}},"${'$'}ref":"item.json"}"""
+                fun embedded(keyword: String, item: String) = """
+                    {"${'$'}id":"http://e.com/root","${'$'}ref":"http://e.com/other","$keyword":false,
+                     "${'$'}defs":{"o":{"${'$'}id":"http://e.com/other","allOf":[${sub(item)}]}}}
+                """
+
+                it("lets unevaluatedProperties see the properties its relative \$ref evaluated") {
+                    val schema = embedded("unevaluatedProperties", """"properties":{"a":true}""")
+                    isValid(schema, """{"a":1}""", version) shouldBe true
+                    isValid(schema, """{"a":1,"b":2}""", version) shouldBe false
+                }
+
+                it("lets unevaluatedItems see the items its relative \$ref evaluated") {
+                    val schema = embedded("unevaluatedItems", firstItem)
+                    isValid(schema, "[1]", version) shouldBe true
+                    isValid(schema, "[1,2]", version) shouldBe false
+                }
+
+                it("in a loaded document, resolves it and passes schemaLoader only absolute URIs") {
+                    val requested = java.util.Collections.synchronizedList(mutableListOf<String>())
+                    val document = Json.parseToJsonElement("""{"allOf":[${sub(""""properties":{"a":true}""")}]}""")
+                    val loader: (String) -> JsonElement? = { uri ->
+                        requested.add(uri)
+                        if (uri == "http://r.example/root.json") document else null
+                    }
+                    val schema = """{"${'$'}ref":"http://r.example/root.json","unevaluatedProperties":false}"""
+                    isValid(schema, """{"a":1}""", version, loader) shouldBe true
+                    isValid(schema, """{"a":1,"b":2}""", version, loader) shouldBe false
+                    requested.all { it.startsWith("http://") } shouldBe true
+                }
+            }
         }
     })

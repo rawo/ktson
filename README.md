@@ -560,7 +560,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 1393 tests (100% passing)
+- **Custom Tests**: 1399 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -582,7 +582,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - A loaded document shared by several retrieval URIs: 4 tests
   - Reference lookups once per validation (anchors, `$id`s, loaded documents): 4 tests
   - Keyword-named properties (`$id`, `$anchor`, `$dynamicAnchor`): 15 tests
-  - `unevaluated*` across schema resources (URI-based `$ref`s, inline `$id` subschemas and their dynamic scope): 18 tests
+  - `unevaluated*` across schema resources (URI-based `$ref`s, inline `$id` subschemas and their dynamic scope, relative `$id` inside a hop): 24 tests
   - Validator lifecycle (garbage collection, meta-schema validator, bounded caches): 4 tests
   - Undecided results under `not`, `if`, `oneOf` and `maxContains`: 17 tests
   - ECMA 262 `pattern` dialect (whitespace, `\c`, `$`, `.`, `\p` aliases): 44 tests

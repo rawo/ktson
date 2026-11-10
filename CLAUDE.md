@@ -197,7 +197,7 @@ validate()
 - **ReferenceLookupCostTest.kt** - 4 tests: anchor, `$id` and loaded-document references applied to 100 items walk a 2,000-definition schema once; equal anchor names in different resources stay apart (#92)
 - **SharedDocumentBaseTest.kt** - 4 tests: a relative `$id` in one parsed document loaded under two URIs resolves in each retrieval context, in either order (#91)
 - **KeywordNamedPropertyTest.kt** - 15 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
-- **UnevaluatedAcrossResourcesTest.kt** - 18 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated, and evaluates the branches of an inline `$id` subschema in its own resource and dynamic scope (#90, #98)
+- **UnevaluatedAcrossResourcesTest.kt** - 24 tests: `unevaluated*` sees what subschemas behind URI-based `$ref`s evaluated, and evaluates the branches of an inline `$id` subschema in its own resource and dynamic scope; a relative `$id` inside a URI-based hop resolves against the hop's base in the collectors too (#90, #98, #105)
 - **UnevaluatedNestingTest.kt** - 8 tests: 40 levels of `anyOf`/`oneOf`/`if` with `unevaluated*` at one location stay fast; reused branch verdicts respect the dynamic scope and are never undecided (#30)
 - **AbsoluteKeywordLocationTest.kt** - 53 tests for `absoluteKeywordLocation` across `$ref`, anchors, relative `$id`, remote refs, `$dynamicRef`, `$recursiveRef`, URN `$id` and base URIs
 - **JavaOutputUsageTest.kt** - 2 tests running `src/test/java/org/ktson/JavaOutputUsage.java`, a Java caller of the output API
@@ -345,7 +345,9 @@ Release notes are generated from the commit log, so commits must follow Conventi
    reference leads, and `validateElement()` stamps `absoluteKeywordLocation` for every hop. A new
    reference keyword goes into `resolveReferences()`, never into a copy. Below a schema with `$id`, every call passes
    its effective resource root and dynamic scope, in the collectors as in `validateElement()` (#90); all three derive
-   them from `resourceRootAt()`/`scopeAt()` (one `startsResource()` test), never from their own copy (#98)
+   them from `resourceRootAt()`/`scopeAt()` (one `startsResource()` test), never from their own copy (#98), and all three
+   call `enterResource()` there to register the resource's absolute URI: a hop's registrations are undone when it
+   ends (#91), so a collector re-entering it must register again (#105)
 9. Verdict passes may stop early (`anyOf` returns at its first valid branch, #78; `contains` without `maxContains`
    at `minContains` matches, #89) because `unevaluated*`
    annotations come only from the separate `collectEvaluated*()` passes, which visit every branch. Keep that split:

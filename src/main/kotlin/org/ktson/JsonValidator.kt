@@ -192,6 +192,34 @@ class JsonValidator @JvmOverloads constructor(
     /** The dynamic scope in effect at [schema]: [dynamicScope] [entering] it when it [startsResource], else unchanged. */
     private fun scopeAt(schema: JsonElement, dynamicScope: List<JsonElement>): List<JsonElement> = if (startsResource(schema)) dynamicScope.entering(schema) else dynamicScope
 
+    /**
+     * Registers the absolute URI of [schema] when it [startsResource], resolving its `$id` against [resourceRoot]'s, so
+     * relative `$ref`s below it resolve against it. The verdict pass and both `unevaluated*` collectors call it where
+     * they take [resourceRootAt] and [scopeAt]: a hop's registrations are undone when it ends (#91), so a collector
+     * re-entering a hop must register again, or a relative `$id` there resolves against nothing (#105).
+     */
+    private fun enterResource(schema: JsonElement, resourceRoot: JsonElement, evaluation: Evaluation) {
+        // `is JsonObject` is only for the smart cast; startsResource decides
+        if (schema !is JsonObject || !startsResource(schema)) return
+        val rawId = schema.stringKeyword(SchemaKeywords.ID) ?: ""
+        // A resource's absolute URI is fixed by where it sits in its document. Once registered, keep
+        // it: re-resolving its relative $id against itself (it can be its own resourceRoot) would
+        // nest it again, e.g. "nested/n.json" -> ".../nested/nested/n.json".
+        if (rawId.isEmpty() || evaluation.references.hasAbsoluteUri(schema)) return
+        val parentUri = evaluation.references.getAbsoluteUri(resourceRoot)
+        val absoluteId =
+            if (parentUri.isNotEmpty()) {
+                try {
+                    UriResolver.resolveUri(parentUri, rawId)
+                } catch (_: Exception) {
+                    rawId
+                }
+            } else {
+                rawId
+            }
+        evaluation.references.registerAbsoluteUri(schema, absoluteId)
+    }
+
     /** Whether this is a JSON integer token: an optional minus and digits, with no fraction or exponent. */
     private fun String.isIntegerToken(): Boolean {
         val start = if (startsWith('-')) 1 else 0
@@ -231,29 +259,7 @@ class JsonValidator @JvmOverloads constructor(
         val effectiveResourceRoot = resourceRootAt(schemaElement, resourceRoot)
         val effectiveScope = scopeAt(schemaElement, dynamicScope)
 
-        // Register the absolute URI for new resource roots so relative $id and missing-$id schemas
-        // resolve subsequent relative $refs correctly (e.g. base URI change, nested remote refs).
-        // `is JsonObject` is only for the smart cast; startsResource decides
-        if (schemaElement is JsonObject && startsResource(schemaElement)) {
-            val rawId = schemaElement.stringKeyword(SchemaKeywords.ID) ?: ""
-            // A resource's absolute URI is fixed by where it sits in its document. Once registered, keep
-            // it: re-resolving its relative $id against itself (it can be its own resourceRoot) would
-            // nest it again, e.g. "nested/n.json" -> ".../nested/nested/n.json".
-            if (rawId.isNotEmpty() && !evaluation.references.hasAbsoluteUri(schemaElement)) {
-                val parentUri = evaluation.references.getAbsoluteUri(resourceRoot)
-                val absoluteId =
-                    if (parentUri.isNotEmpty()) {
-                        try {
-                            UriResolver.resolveUri(parentUri, rawId)
-                        } catch (_: Exception) {
-                            rawId
-                        }
-                    } else {
-                        rawId
-                    }
-                evaluation.references.registerAbsoluteUri(schemaElement, absoluteId)
-            }
-        }
+        enterResource(schemaElement, resourceRoot, evaluation)
 
         when (schemaElement) {
             is JsonObject -> {
@@ -1306,6 +1312,7 @@ class JsonValidator @JvmOverloads constructor(
 
         val effectiveResourceRoot = resourceRootAt(schemaElement, resourceRoot)
         val effectiveScope = scopeAt(schemaElement, dynamicScope)
+        enterResource(schemaElement, resourceRoot, evaluation)
 
         val evaluated = mutableSetOf<Int>()
 
@@ -1456,6 +1463,7 @@ class JsonValidator @JvmOverloads constructor(
 
         val effectiveResourceRoot = resourceRootAt(schemaElement, resourceRoot)
         val effectiveScope = scopeAt(schemaElement, dynamicScope)
+        enterResource(schemaElement, resourceRoot, evaluation)
 
         val evaluated = mutableSetOf<String>()
 
