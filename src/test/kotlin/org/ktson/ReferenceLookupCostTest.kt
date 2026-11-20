@@ -14,7 +14,8 @@ import java.lang.management.ManagementFactory
 /**
  * A reference applied to every item of an array finds its target once per validation: anchor and `$id` searches are
  * remembered, so a 2,000-definition schema is not walked again for each of 100 items (#92). A remote reference the
- * loader cannot provide is asked for once per validation, not once per item (#108).
+ * loader cannot provide is asked for once per validation, not once per item (#108), and a URI-based reference parses its
+ * URIs once per validation (#114).
  */
 class ReferenceLookupCostTest :
     DescribeSpec({
@@ -46,6 +47,26 @@ class ReferenceLookupCostTest :
                 validator.validate(input, schema).isValid shouldBe true
                 (threads.getThreadAllocatedBytes(Thread.currentThread().threadId()) - before) shouldBeLessThan 10_000_000L
                 loads shouldBe if (ref.startsWith("https:")) 1 else 0
+            }
+        }
+
+        // Each application re-parsed its base and reference to resolve and check them: over 20,000 items a URI-based $ref
+        // allocated about 5.9 KB per item against 0.9 KB for a JSON Pointer to the same target (#114)
+        SchemaVersion.entries.forEach { version ->
+            for (ref in listOf("https://example.com/item", "item")) {
+                it("parses the URIs of $ref once per validation, not once per item, in $version") {
+                    val schema = JsonSchema.fromString(
+                        """{"${'$'}id":"https://example.com/root","items":{"${'$'}ref":"$ref"},"${'$'}defs":{"i":{"${'$'}id":"item","type":"integer"}}}""",
+                        version,
+                    )
+                    val items = JsonArray(List(20_000) { JsonPrimitive(it) })
+                    val validator = JsonValidator()
+                    repeat(3) { validator.validate(items, schema).isValid shouldBe true }
+                    val before = threads.getThreadAllocatedBytes(Thread.currentThread().threadId())
+                    validator.validate(items, schema).isValid shouldBe true
+                    (threads.getThreadAllocatedBytes(Thread.currentThread().threadId()) - before) / 20_000 shouldBeLessThan 2_500L
+                    validator.validate(JsonArray(listOf(JsonPrimitive(1), JsonPrimitive("x"))), schema).isValid shouldBe false
+                }
             }
         }
 

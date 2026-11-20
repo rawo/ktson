@@ -10,7 +10,7 @@ of them in the same commit as every change (test counts, fixed issues, features,
 - Kotlin 2.4.0, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
 - Official JSON Schema Test Suite: 4,462 assertions run, 100% passing (168 excluded), pinned by `TEST_SUITE_REF`
   in `.github/workflows/build.yml`
-- Custom tests: 1,461 (100% passing); the full `./gradlew test` run is 5,931 tests
+- Custom tests: 1,465 (100% passing); the full `./gradlew test` run is 5,935 tests
 - `kotlinx-coroutines-core`/`-test` are test-only dependencies; the API is synchronous
 
 ## Architecture
@@ -117,6 +117,9 @@ of them in the same commit as every change (test counts, fixed issues, features,
 - **#108 (2026-11-10): DONE** (perf, verdicts unchanged). `ReferenceResolver.unloadable` remembers URIs the store
   could not load for the rest of the validation; `SchemaStore` still caches no miss. `ContainsEvaluationTest` used
   loader calls to count evaluated items (1,000); it now expects 1, and its 0-call short-circuit checks are unchanged.
+- **#114 (2026-11-20): DONE** (perf, verdicts unchanged). `ReferenceResolver.resolved()`/`absolute()` memoize
+  `resolveUri` and `isAbsoluteUri` per validation (pure functions of their strings). URI `$ref` over 200,000 items:
+  523 ms, 5.9 KB/item → 94 ms, 0.96 KB/item, the same as a local `$ref`.
 - **#113 (2026-11-20): DONE** (breaking API: `Example.kt` left the JAR). The cleanup bundle from the review of 9046d8a.
   `Example.kt` moved to the tests (`ExampleTest` runs it); `JsonSchema.absoluteBaseUri()` is public and
   `effectiveBaseUri` deprecated (value kept); `UriResolver` is `@JvmStatic`/`@JvmOverloads`; `quoted()` uses

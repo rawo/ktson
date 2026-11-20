@@ -48,6 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that the embedded meta-schemas equal the test resources they were generated from (#113).
 
 ### Performance
+- A URI-based `$ref` (`"$ref":"item"` or `"https://example.com/item"`) no longer re-parses its URIs on every
+  application. Each one resolved the reference against its resource's base and checked both for absoluteness, parsing
+  them again each time: over 200,000 items it took 523 ms and 5.9 KB per item, against 94 ms and 0.9 KB for a JSON
+  Pointer to the same target. Resolutions and absoluteness checks are now remembered per validation: 94 ms and 0.96 KB
+  per item. Verdicts are unchanged (#114).
 - Nested `unevaluated*` and `contains` no longer cost time exponential in the depth of the instance. A schema's own
   `unevaluatedItems`/`unevaluatedProperties` subschema was applied to each unevaluated member twice, once by the
   collection of evaluated members and once by the verdict pass, and every `contains` item was validated by both passes

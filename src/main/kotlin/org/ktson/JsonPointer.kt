@@ -220,6 +220,21 @@ internal class ReferenceResolver(private val store: SchemaStore) {
      */
     private val unloadable = HashSet<String>()
 
+    /**
+     * URI resolutions and absoluteness checks already done in this validation, so a URI-based reference applied to every
+     * item parses its URIs once, not once per item (#114). Both depend only on their strings.
+     */
+    private val resolvedUris = HashMap<String, HashMap<String, String?>>()
+    private val absoluteUris = HashMap<String, Boolean>()
+
+    /** [reference] resolved against [base], or null when either is not a valid URI reference. */
+    private fun resolved(base: String, reference: String): String? {
+        val byReference = resolvedUris.getOrPut(base) { HashMap() }
+        return if (byReference.containsKey(reference)) byReference[reference] else runCatching { UriResolver.resolveUri(base, reference) }.getOrNull().also { byReference[reference] = it }
+    }
+
+    private fun absolute(uri: String): Boolean = absoluteUris.getOrPut(uri) { isAbsolute(uri) }
+
     /** Sets [schema]'s registration, remembering what it replaces in the innermost hop. */
     private fun register(schema: JsonElement, uri: String) {
         val previous = schemaAbsoluteUris.put(schema, uri)
@@ -240,12 +255,12 @@ internal class ReferenceResolver(private val store: SchemaStore) {
         if (absoluteUri.isEmpty()) return
         // Never downgrade: a later search that only knows a relative $id must not replace the absolute
         // URI registered for the same schema (that made resolution depend on evaluation order).
-        val replacesAbsolute = schemaAbsoluteUris[schema]?.let { isAbsolute(it) } == true
-        if (!replacesAbsolute || isAbsolute(absoluteUri)) register(schema, absoluteUri)
+        val replacesAbsolute = schemaAbsoluteUris[schema]?.let { absolute(it) } == true
+        if (!replacesAbsolute || absolute(absoluteUri)) register(schema, absoluteUri)
     }
 
     /** Whether [schema] already has an absolute URI registered (see [registerAbsoluteUri]). */
-    internal fun hasAbsoluteUri(schema: JsonElement): Boolean = schemaAbsoluteUris[schema]?.let { isAbsolute(it) } == true
+    internal fun hasAbsoluteUri(schema: JsonElement): Boolean = schemaAbsoluteUris[schema]?.let { absolute(it) } == true
 
     /**
      * Returns the effective absolute base URI for [schema]:
@@ -256,7 +271,7 @@ internal class ReferenceResolver(private val store: SchemaStore) {
     internal fun getAbsoluteUri(schema: JsonElement): String {
         schemaAbsoluteUris[schema]?.let { return it }
         val rawId = (schema as? JsonObject)?.stringKeyword(SchemaKeywords.ID)?.let { resourceUriOf("", it) } ?: ""
-        return if (rawId.isNotEmpty() && UriResolver.isAbsoluteUri(rawId)) rawId else ""
+        return if (rawId.isNotEmpty() && absolute(rawId)) rawId else ""
     }
 
     /**
@@ -309,12 +324,12 @@ internal class ReferenceResolver(private val store: SchemaStore) {
         resourceRoot: JsonElement,
     ): ResolvedReference? {
         val baseId = getAbsoluteUri(resourceRoot)
-        if (isAbsolute(baseId)) {
-            runCatching { UriResolver.resolveUri(baseId, uriPart) }.getOrNull()?.let { findResource(rootSchema, it) }?.let { return it }
+        if (absolute(baseId)) {
+            resolved(baseId, uriPart)?.let { findResource(rootSchema, it) }?.let { return it }
         }
         findResource(rootSchema, uriPart)?.let { return it }
 
-        val absoluteUri = if (baseId.isNotEmpty()) runCatching { UriResolver.resolveUri(baseId, uriPart) }.getOrDefault(uriPart) else uriPart
+        val absoluteUri = if (baseId.isNotEmpty()) resolved(baseId, uriPart) ?: uriPart else uriPart
         store.cached(absoluteUri)?.let { return loaded(it, absoluteUri) }
         // The target URI may be embedded within resourceRoot (e.g. a nested $id sub-schema)
         if (absoluteUri != uriPart || baseId.isNotEmpty()) {
@@ -327,14 +342,14 @@ internal class ReferenceResolver(private val store: SchemaStore) {
 
     /** The resource in [document] whose `$id` is [targetUri], with its base, searched once per base of [document]. */
     private fun findResource(document: JsonElement, targetUri: String): ResolvedReference? = resourcesById.remember(SearchKey(document, getAbsoluteUri(document), targetUri)) {
-        findSchemaByUri(document, targetUri)?.let { ResolvedReference(it, it, getAbsoluteUri(it).takeIf { uri -> isAbsolute(uri) }) }
+        findSchemaByUri(document, targetUri)?.let { ResolvedReference(it, it, getAbsoluteUri(it).takeIf { uri -> absolute(uri) }) }
     }
 
     /** A document retrieved from [retrievalUri]: its own $id, resolved against that URI, else the URI is its base. */
     private fun loaded(document: JsonElement, retrievalUri: String): ResolvedReference {
         val id = (document as? JsonObject)?.stringKeyword(SchemaKeywords.ID)
-        val canonical = id?.let { runCatching { UriResolver.resolveUri(retrievalUri, it) }.getOrNull()?.substringBefore('#') }
-        return ResolvedReference(document, document, canonical?.takeIf { isAbsolute(it) } ?: retrievalUri.takeIf { isAbsolute(it) })
+        val canonical = id?.let { resolved(retrievalUri, it)?.substringBefore('#') }
+        return ResolvedReference(document, document, canonical?.takeIf { absolute(it) } ?: retrievalUri.takeIf { absolute(it) })
     }
 
     /**
