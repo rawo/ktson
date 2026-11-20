@@ -83,7 +83,7 @@ internal class MetaSchemaCheck(private val maxValidationDepth: Int) {
 
     private val metaSchemas = ConcurrentHashMap<SchemaVersion, JsonSchema>()
 
-    private fun metaSchemaOf(version: SchemaVersion): JsonSchema = metaSchemas.computeIfAbsent(version) { JsonSchema(MetaSchemas.load(MetaSchemas.uriOf(it))!!, it) }
+    private fun metaSchemaOf(version: SchemaVersion): JsonSchema = metaSchemas.computeIfAbsent(version) { JsonSchema(MetaSchemas.load(it.uri)!!, it) }
 
     /** How deeply objects and arrays nest in [element], measured iteratively. */
     private fun nestingDepth(element: JsonElement): Int {

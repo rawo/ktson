@@ -160,8 +160,11 @@ class JsonValidator @JvmOverloads constructor(
      * Validates a JSON element against a schema element
      */
 
-    /** A string value as it appears in a message, shortened so a long instance cannot flood the output. */
-    private fun quoted(value: String): String = if (value.length > MAX_MESSAGE_VALUE_LENGTH) "\"${value.take(MAX_MESSAGE_VALUE_LENGTH)}...\"" else "\"$value\""
+    /**
+     * A string value as it appears in a message: JSON-escaped like const/enum values, so instance text cannot break a
+     * message's line (#113), and shortened so a long instance cannot flood the output.
+     */
+    private fun quoted(value: String): String = JsonPrimitive(value).preview(MAX_MESSAGE_VALUE_LENGTH)
 
     /** A numeric keyword's value as written in the schema, so messages do not show 10 as 10.0. */
     private fun JsonObject.numberText(keyword: String): String = this[keyword]?.jsonPrimitive?.content ?: "?"

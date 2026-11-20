@@ -32,17 +32,18 @@ data class JsonSchema @JvmOverloads constructor(
     val effectiveVersion: SchemaVersion = detectedVersion ?: version
 
     /**
-     * The effective base URI for resolving relative references
-     * Uses $id if present, otherwise falls back to provided baseUri
+     * The `$id` if present, otherwise [baseUri]. A relative `$id` is not resolved against [baseUri], so this is not
+     * always the base the validator resolves references against; [absoluteBaseUri] is (#113).
      */
+    @Deprecated("Not the base references resolve against when \$id is relative", ReplaceWith("absoluteBaseUri()"))
     val effectiveBaseUri: String = id ?: baseUri
 
     /**
-     * The absolute URI that relative references in this schema resolve against: an absolute `$id`,
-     * else `$id` resolved against [baseUri], else [baseUri]; without fragment. Null when none of
-     * them is an absolute URI.
+     * The absolute URI that relative references in this schema resolve against, and that [JsonValidator]
+     * passes to its schemaLoader: an absolute `$id`, else `$id` resolved against [baseUri], else
+     * [baseUri]; without fragment. Null when none of them is an absolute URI.
      */
-    internal fun absoluteBaseUri(): String? {
+    fun absoluteBaseUri(): String? {
         fun absolute(uri: String?): String? = uri?.substringBefore('#')?.takeIf { it.isNotEmpty() && runCatching { UriResolver.isAbsoluteUri(it) }.getOrDefault(false) }
         val base = absolute(baseUri)
         val rawId = id ?: return base

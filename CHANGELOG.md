@@ -29,6 +29,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rejected every instance with "Could not resolve reference", with or without the `#` in the `$ref`. Every `$id` now
   gives its resource a URI without the fragment (#110).
 
+### Changed
+- **Breaking API change:** the usage examples (`Example.kt`: a top-level `main()` and `example1BasicValidation` …
+  `example7SchemaValidation` in `org.ktson`) moved from the library to the tests, where `ExampleTest` runs them. The JAR
+  no longer contains `org.ktson.ExampleKt` (#113).
+- `JsonSchema.absoluteBaseUri()` is public: the base references resolve against and `schemaLoader` URIs derive from
+  (an absolute `$id`, else `$id` resolved against `baseUri`, else `baseUri`; null when none is absolute).
+  `effectiveBaseUri` is deprecated: it is `$id ?: baseUri`, so for `{"$id":"child.json"}` with base
+  `https://x.example/a/` it was `child.json` while the validator resolved against `https://x.example/a/child.json`
+  (#113).
+- `UriResolver`'s functions are `@JvmStatic` and `normalizeUri` is `@JvmOverloads`, so Java calls
+  `UriResolver.normalizeUri(uri)` instead of `UriResolver.INSTANCE.normalizeUri(uri, false)` (#113).
+- Messages for `pattern`, `minLength`, `maxLength`, `format`, `patternProperties` and `propertyNames` quote the
+  instance value as JSON, like `const` and `enum` do, instead of as raw text: a quote or line break in an instance
+  string could print a forged `Validation error at ...` line in `ValidationError.toString()`. A long value is now cut
+  as in `const` messages (`"zzz...`). Only message text changes (#113).
+- `SchemaVersion.metaSchemaUri` is derived from `SchemaVersion.uri`, the only copy of each draft's URI; a test checks
+  that the embedded meta-schemas equal the test resources they were generated from (#113).
+
 ### Performance
 - Nested `unevaluated*` and `contains` no longer cost time exponential in the depth of the instance. A schema's own
   `unevaluatedItems`/`unevaluatedProperties` subschema was applied to each unevaluated member twice, once by the

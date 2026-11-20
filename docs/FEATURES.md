@@ -110,8 +110,11 @@ implemented yet ([#5](https://github.com/rawo/ktson/issues/5)).
 ## API ✅
 
 - Synchronous Kotlin API; run validation on a worker thread to keep it off I/O or UI threads
-- Java-friendly: `@JvmStatic` factories and `@JvmOverloads` defaults. Java callers are tested in
-  `src/test/java/org/ktson/`
+- Java-friendly: `@JvmStatic` factories and `UriResolver` functions, `@JvmOverloads` defaults. Java callers are
+  tested in `src/test/java/org/ktson/`
+- `JsonSchema.absoluteBaseUri()`: the absolute base a schema's references resolve against
+- Error messages quote instance values as JSON, so instance text cannot forge lines in `toString()`
+- Usage examples live in the tests (`src/test/kotlin/org/ktson/Example.kt`), not in the library
 - Native-image friendly: no reflection, runtime resources or dynamic class loading
 - Validates complete JSON values; frame streams (for example NDJSON) into units before validating
 
@@ -120,7 +123,7 @@ implemented yet ([#5](https://github.com/rawo/ktson/issues/5)).
 - **Official JSON Schema Test Suite:** 4,462 / 4,462 assertions (100%) for `draft2019-09` and `draft2020-12`,
   including `optional/format`, `optional/bignum.json` and `optional/ecmascript-regex.json`; plus the official
   `output-tests` against Basic output
-- **Custom tests:** 1,439, covering keywords for both drafts, formats, references, `unevaluated*`, output formats,
+- **Custom tests:** 1,461, covering keywords for both drafts, formats, references, `unevaluated*`, output formats,
   error locations, numeric precision, concurrency, validator lifecycle and Java callers. The README's Test Coverage
   section and `CLAUDE.md` break them down per file
 - **Performance tests:** 9, run with `./gradlew performanceTest`

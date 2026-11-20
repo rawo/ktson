@@ -22,6 +22,7 @@ object UriResolver {
      * - resolveUri("https://example.com/schemas/base.json", "../other.json") -> "https://example.com/other.json"
      * - resolveUri("", "https://example.com/schema.json") -> "https://example.com/schema.json"
      */
+    @JvmStatic
     fun resolveUri(baseUri: String, refUri: String): String {
         // An empty reference is the base itself, minus any fragment the base carries (RFC 3986 §5.2.2, #74)
         if (refUri.isEmpty()) {
@@ -88,6 +89,7 @@ object UriResolver {
      * @param uri The URI to check
      * @return true if the URI is absolute, false otherwise
      */
+    @JvmStatic
     fun isAbsoluteUri(uri: String): Boolean {
         if (uri.isEmpty()) return false
         return parse(uri).scheme != null
@@ -105,6 +107,8 @@ object UriResolver {
      * @param removeFragment Whether to remove the fragment (default: false)
      * @return The normalized URI
      */
+    @JvmStatic
+    @JvmOverloads
     fun normalizeUri(uri: String, removeFragment: Boolean = false): String {
         if (uri.isEmpty()) return uri
 
@@ -204,6 +208,7 @@ object UriResolver {
      * @param uri The URI to extract from
      * @return The fragment (without #, percent-decoded), or null if no fragment
      */
+    @JvmStatic
     fun extractFragment(uri: String): String? {
         if (uri.isEmpty()) return null
         return parse(uri).fragment?.let { percentDecode(it) }
@@ -215,6 +220,7 @@ object UriResolver {
      * @param uri The URI to process
      * @return The URI without fragment
      */
+    @JvmStatic
     fun removeFragment(uri: String): String = normalizeUri(uri, removeFragment = true)
 
     /**
@@ -226,6 +232,7 @@ object UriResolver {
      * @return the components
      * @throws URISyntaxException if [uri] is not a valid URI reference
      */
+    @JvmStatic
     fun parseUri(uri: String): UriComponents {
         require(uri.isNotEmpty()) { "URI must not be empty" }
         val parts = parse(uri)

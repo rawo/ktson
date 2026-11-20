@@ -402,20 +402,14 @@ internal class ReferenceResolver(private val store: SchemaStore) {
     internal fun findDynamicAnchorInResource(
         schema: JsonElement,
         anchorName: String,
-        isRoot: Boolean = true,
-    ): JsonElement? = anchors.remember(SearchKey(schema, if (isRoot) "dynamic" else "dynamic, inner", anchorName)) {
-        findDynamicAnchor(schema, anchorName, isRoot, isSchema = true)
+    ): JsonElement? = anchors.remember(SearchKey(schema, "dynamic", anchorName)) {
+        findDynamicAnchor(schema, anchorName)
     }
 
-    private fun findDynamicAnchor(
-        schema: JsonElement,
-        anchorName: String,
-        isRoot: Boolean,
-        isSchema: Boolean,
-    ): JsonElement? {
+    private fun findDynamicAnchor(schema: JsonElement, anchorName: String): JsonElement? {
         // Iterative depth-first search in document order, so deeply nested schemas cannot overflow the stack (#31)
         val pending = ArrayDeque<SearchNode>()
-        (schema as? JsonObject)?.let { pending.addLast(SearchNode(it, isRoot, isSchema, baseUri = "")) }
+        (schema as? JsonObject)?.let { pending.addLast(SearchNode(it, isRoot = true, isSchema = true, baseUri = "")) }
         while (pending.isNotEmpty()) {
             val node = pending.removeLast()
             if (node.isSchema) {

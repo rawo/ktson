@@ -48,6 +48,18 @@ class JavaApiUsageTest :
             }
         }
 
+        describe("UriResolver from Java") {
+            it("its functions are callable as static methods and match Kotlin") {
+                JavaApiUsage.resolveUri("https://a.example/b/c", "../d") shouldBe UriResolver.resolveUri("https://a.example/b/c", "../d")
+                JavaApiUsage.normalizeUri("HTTPS://A.example/./x#f") shouldBe UriResolver.normalizeUri("HTTPS://A.example/./x#f")
+                JavaApiUsage.describeUri("https://a.example/p#f") shouldBe "true https://a.example/p f /p"
+            }
+
+            it("JsonSchema.absoluteBaseUri matches Kotlin") {
+                JavaApiUsage.absoluteBaseUri("""{"${'$'}id":"child.json"}""", "https://x.example/a/") shouldBe "https://x.example/a/child.json"
+            }
+        }
+
         describe("JsonValidator from Java") {
             val emailSchema = """{"format":"email"}"""
 

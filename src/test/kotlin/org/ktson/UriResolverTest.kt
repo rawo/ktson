@@ -5,6 +5,7 @@ import io.kotest.core.spec.style.DescribeSpec
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.shouldBe
+import kotlinx.serialization.json.JsonPrimitive
 import java.net.URISyntaxException
 
 class UriResolverTest :
@@ -146,13 +147,31 @@ class UriResolverTest :
 			it("extracts \$id when present and sets effectiveBaseUri") {
 			val s = JsonSchema.fromString("""{"${'$'}id":"https://example.com/s/a.json"}""")
 			s.id.shouldBe("https://example.com/s/a.json")
+			@Suppress("DEPRECATION")
 			s.effectiveBaseUri.shouldBe("https://example.com/s/a.json")
 		}
 
 			it("uses provided baseUri when \$id missing") {
 			val s = JsonSchema.fromString("""{"type":"object"}""", baseUri = "https://example.com/root/")
 			s.id.shouldBe(null)
+			@Suppress("DEPRECATION")
 			s.effectiveBaseUri.shouldBe("https://example.com/root/")
+		}
+
+		// effectiveBaseUri is id ?: baseUri, not the base the validator resolves against (#113)
+		it("absoluteBaseUri is the base schemaLoader URIs are resolved against") {
+			JsonSchema.fromString("""{"${'$'}id":"child.json"}""", baseUri = "https://x.example/a/").absoluteBaseUri().shouldBe("https://x.example/a/child.json")
+			JsonSchema.fromString("""{"${'$'}id":"https://h.example/s#"}""").absoluteBaseUri().shouldBe("https://h.example/s")
+			JsonSchema.fromString("""{"type":"object"}""", baseUri = "https://example.com/root/").absoluteBaseUri().shouldBe("https://example.com/root/")
+			JsonSchema.fromString("""{"${'$'}id":"child.json"}""").absoluteBaseUri().shouldBe(null)
+			val requested = mutableListOf<String>()
+			val validator = JsonValidator(schemaLoader = {
+			    requested += it
+			    null
+			})
+			val schema = JsonSchema.fromString("""{"${'$'}id":"child.json","${'$'}ref":"other.json"}""", baseUri = "https://x.example/a/")
+			validator.validate(JsonPrimitive(1), schema)
+			requested.shouldBe(listOf(schema.absoluteBaseUri()!!.replace("child.json", "other.json")))
 		}
 
 		it("JsonSchema.extractId extracts from element") {

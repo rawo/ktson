@@ -3,16 +3,13 @@ package org.ktson
 /**
  * Supported JSON Schema versions
  */
-enum class SchemaVersion(val uri: String, val metaSchemaUri: String) {
-    DRAFT_2019_09(
-        uri = "https://json-schema.org/draft/2019-09/schema",
-        metaSchemaUri = "https://json-schema.org/draft/2019-09/schema",
-    ),
-    DRAFT_2020_12(
-        uri = "https://json-schema.org/draft/2020-12/schema",
-        metaSchemaUri = "https://json-schema.org/draft/2020-12/schema",
-    ),
+enum class SchemaVersion(val uri: String) {
+    DRAFT_2019_09("https://json-schema.org/draft/2019-09/schema"),
+    DRAFT_2020_12("https://json-schema.org/draft/2020-12/schema"),
     ;
+
+    /** The URI of this draft's meta-schema: the same as [uri]. */
+    val metaSchemaUri: String get() = uri
 
     companion object {
         /**
@@ -23,7 +20,7 @@ enum class SchemaVersion(val uri: String, val metaSchemaUri: String) {
         @JvmStatic
         fun fromUri(uri: String?): SchemaVersion? {
             val identifier = uri?.removeSuffix("#") ?: return null
-            return entries.firstOrNull { identifier == it.uri || identifier == it.metaSchemaUri }
+            return entries.firstOrNull { identifier == it.uri }
         }
     }
 }

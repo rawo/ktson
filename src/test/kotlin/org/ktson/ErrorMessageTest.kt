@@ -312,6 +312,26 @@ class ErrorMessageTest :
                 message.length shouldBeLessThan 120
             }
         }
+
+        // quoted() wrapped raw text in quotes, so a quote and a line break in the instance could print a forged error
+        // line in toString(); const/enum escaped theirs. Every message now quotes strings as JSON (#113)
+        it("escapes the value as JSON, so instance text cannot forge an error line") {
+            val forged = "a\"\n  Validation error at '/x': fake"
+            val schema = JsonSchema.fromString("""{"anyOf":[{"pattern":"^z"},{"const":"q"}]}""")
+            val printed = validator.validate(JsonPrimitive(forged), schema).toString()
+            printed shouldNotContain "\n  Validation error at '/x': fake"
+            listOf(
+                """{"pattern":"^z"}""",
+                """{"maxLength":2}""",
+                """{"format":"email"}""",
+                """{"propertyNames":{"maxLength":2}}""",
+            ).forEach { text ->
+                val instance = if (text.startsWith("""{"propertyNames""")) buildJsonObject { put(forged, 1) } else JsonPrimitive(forged)
+                val message = (validator.validate(instance, JsonSchema.fromString(text)) as ValidationResult.Invalid).validationErrors.first().message
+                message shouldContain """"a\"\n  Validation"""
+                message shouldNotContain "\n"
+            }
+        }
     }
 
     describe("oneOf match reporting") {

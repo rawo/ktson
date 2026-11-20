@@ -70,4 +70,25 @@ public final class JavaApiUsage {
         JsonValidator validator = new JsonValidator(true, true, 500, uri -> uri.equals(remoteUri) ? parse(remoteJson) : null);
         return validator.validate(instanceJson, schemaJson).isValid();
     }
+
+    /** UriResolver.resolveUri without going through INSTANCE. */
+    public static String resolveUri(String base, String reference) {
+        return UriResolver.resolveUri(base, reference);
+    }
+
+    /** UriResolver.normalizeUri with removeFragment left at its default. */
+    public static String normalizeUri(String uri) {
+        return UriResolver.normalizeUri(uri);
+    }
+
+    /** UriResolver.isAbsoluteUri, removeFragment, extractFragment and parseUri without going through INSTANCE. */
+    public static String describeUri(String uri) {
+        return UriResolver.isAbsoluteUri(uri) + " " + UriResolver.removeFragment(uri) + " " + UriResolver.extractFragment(uri)
+            + " " + UriResolver.parseUri(uri).getPath();
+    }
+
+    /** JsonSchema.absoluteBaseUri as a Java caller reads it. */
+    public static String absoluteBaseUri(String schemaJson, String baseUri) {
+        return JsonSchema.fromString(schemaJson, SchemaVersion.DRAFT_2020_12, baseUri).absoluteBaseUri();
+    }
 }

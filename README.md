@@ -237,7 +237,7 @@ val schema = """
 """
 ```
 
-For more examples, see [docs/REF_USAGE_EXAMPLES.md](docs/REF_USAGE_EXAMPLES.md) and [src/main/kotlin/org/ktson/Example.kt](src/main/kotlin/org/ktson/Example.kt).
+For more examples, see [docs/REF_USAGE_EXAMPLES.md](docs/REF_USAGE_EXAMPLES.md) and [src/test/kotlin/org/ktson/Example.kt](src/test/kotlin/org/ktson/Example.kt).
 
 ### Standard output formats
 
@@ -560,15 +560,15 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 1439 tests (100% passing)
+- **Custom Tests**: 1461 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
   - Depth limit protection: 19 tests
   - Deeply nested values and schemas walked iteratively: 8 tests
-  - URI resolver (including the RFC 3986 §5.4 examples): 92 tests
+  - URI resolver (including the RFC 3986 §5.4 examples) and `JsonSchema.absoluteBaseUri()`: 93 tests
   - Format validation: 418 tests
-  - Error messages: 32 tests
+  - Error messages (including JSON-escaped values): 33 tests
   - Bounded value previews in messages (huge strings, keys, objects, nesting): 8 tests
   - Numeric precision and concurrent numeric validation: 88 tests
   - Instance locations, legacy access and JSON Pointer resolution: 116 tests
@@ -605,10 +605,12 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - `$dynamicRef` resources, encoded anchors and dynamic scope: 7 tests
   - Output-tests runner file discovery: 4 tests
   - Java interop for output formats: 2 tests
-  - Java interop for the core API: 11 tests
+  - Java interop for the core API (including `UriResolver`): 13 tests
   - `$schema` dialect detection: 11 tests
   - Draft-specific keywords only in their own draft: 7 tests
   - `validateSchema` against the official meta-schemas: 36 tests
+  - Embedded meta-schemas identical to the test resources: 17 tests
+  - The usage examples in `Example.kt` run: 1 test
 
 - **Official JSON Schema Test Suite**: 4,462 tests
   - ✅ Passing: 4,462 (100%)
@@ -670,7 +672,7 @@ Comprehensive documentation is available in the [docs](docs/) directory:
 ### Getting Started
 - [FEATURES.md](docs/FEATURES.md) - Complete feature list
 - [REF_USAGE_EXAMPLES.md](docs/REF_USAGE_EXAMPLES.md) - Reference usage examples
-- [Example.kt](src/main/kotlin/org/ktson/Example.kt) - Code examples
+- [Example.kt](src/test/kotlin/org/ktson/Example.kt) - Code examples
 
 ### Testing
 - [TESTING.md](docs/TESTING.md) - Testing approach and methodology
