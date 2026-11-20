@@ -560,7 +560,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
 
 ### Test Coverage
 
-- **Custom Tests**: 1437 tests (100% passing)
+- **Custom Tests**: 1439 tests (100% passing)
   - Draft 2019-09: 47 tests
   - Draft 2020-12: 54 tests
   - Edge cases & thread safety: 39 tests
@@ -592,7 +592,7 @@ assuming a regression — but pin 1.0.0 if you need the old verdicts.
   - `type` and `multipleOf` at the edge of BigDecimal's scale range: 4 tests
   - `anyOf` short circuit (loads, failure reports, `unevaluated*` annotations): 3 tests
   - `contains` short circuit (`minContains`, `maxContains`, `unevaluatedItems`): 6 tests
-  - `regex` format syntax scan (group forms, linear allocation): 2 tests
+  - `regex` format syntax check (group forms, linear allocation, long literal runs): 4 tests
   - IDN label length (exact limit, cheap rejection): 4 tests
   - IP address length (longest forms, cheap rejection): 4 tests
   - `hostname` Bidi rule on ASCII labels in Bidi domains: 9 tests

@@ -51,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `BigDecimal`, which is quadratic in the digits: a 400,000-digit decimal took 3.6 s against `{"type":"number"}`, and
   again for every `type` applied to it; it now takes about 1 ms. Verdicts are unchanged, including for numbers
   `BigDecimal` rejects, which are still neither integer nor number (#111).
+- The `regex` format checks a pattern that starts with a long run of literal characters in linear time. Java's
+  `Pattern.compile` builds a Boyer-Moore table for such a run, quadratic in its length for repetitive text, so a
+  200,000-character `"aaa…"` instance took 7.5 s per check; the check now compiles case-insensitively, which builds no
+  table and accepts exactly the same patterns, and takes about 5 ms. Verdicts are unchanged (#112).
 - A remote `$ref` that `schemaLoader` cannot provide is asked for once per validation instead of once per use:
   `{"items":{"$ref":"https://other.example/missing.json"}}` over 1,000 items made 1,000 loader calls, each possibly a
   network request, in one `validate()`; it now makes one. The miss is not cached across validations, so the next

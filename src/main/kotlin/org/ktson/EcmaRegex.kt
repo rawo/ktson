@@ -1,5 +1,7 @@
 package org.ktson
 
+import java.util.regex.Pattern
+
 /**
  * The ECMA 262 regular expression dialect JSON Schema specifies, on top of Java's engine: the syntax check behind
  * the `regex` format and the translation of ECMA 262 constructs Java reads differently, shared by that format and
@@ -14,7 +16,9 @@ internal object EcmaRegex {
     fun isValidEcmaRegex(value: String): Boolean {
         if (!hasOnlyEcmaRegexSyntax(value)) return false
         return try {
-            Regex(translatePatternToJava(value))
+            // Only whether it compiles matters, which the flag does not change. Without it, Java builds a Boyer-Moore
+            // table for a leading literal run, quadratic in the run: 200,000 "a"s took 7.5 s (#112)
+            Pattern.compile(translatePatternToJava(value), Pattern.CASE_INSENSITIVE)
             true
         } catch (_: Exception) {
             false
