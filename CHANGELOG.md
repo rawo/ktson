@@ -24,6 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collectors now register the resource as the verdict pass does (#105).
 
 ### Performance
+- Nested `unevaluated*` and `contains` no longer cost time exponential in the depth of the instance. A schema's own
+  `unevaluatedItems`/`unevaluatedProperties` subschema was applied to each unevaluated member twice, once by the
+  collection of evaluated members and once by the verdict pass, and every `contains` item was validated by both passes
+  too, so each level of nesting below a member doubled the cost: `{"type":"array","unevaluatedItems":{"$ref":"#"}}`
+  took 3 s for a 45-byte instance nested 22 deep, and 4x more per two levels, for valid instances too through
+  `contains` with `maxContains`. The verdict pass now validates each unevaluated member once, inside the collection,
+  and the collection reuses the `contains` item verdicts the verdict pass reached: 22 levels take about 1 ms and 200
+  levels under 10 ms. Verdicts are unchanged (#109).
 - Nested `unevaluated*` no longer costs quadratic time in the nesting depth. Each level's verdict pass collects what
   its subtree evaluated, and every level above it walked that subtree again, so 400 levels of `allOf` with
   `unevaluatedProperties` over 2,000 evaluated properties took 10.2 s, each doubling of the levels costing about 4×. What a schema evaluated at an instance is now remembered while that

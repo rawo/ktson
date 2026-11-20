@@ -526,17 +526,16 @@ class JsonValidator @JvmOverloads constructor(
         // Unevaluated properties (2019-09 and later)
         if (instance is JsonObject) {
             schema[UNEVALUATED_PROPERTIES]?.let { unevalPropsSchema ->
-                val evaluated = collectEvaluatedProperties(instance, schema, path, version, evaluation, depth, resourceRoot, dynamicScope)
-                instance.keys.forEach { propName ->
-                    if (propName !in evaluated) {
-                        val propPath = childOf(path, propName)
-                        when {
-                            unevalPropsSchema is JsonPrimitive && unevalPropsSchema.booleanOrNull == false ->
-                                errors.add(ValidationError(path, "Unevaluated property '$propName' is not allowed", UNEVALUATED_PROPERTIES, at(schemaPath, UNEVALUATED_PROPERTIES)))
-                            unevalPropsSchema is JsonPrimitive && unevalPropsSchema.booleanOrNull == true -> {}
-                            else ->
-                                validateElement(instance[propName]!!, unevalPropsSchema, propPath, at(schemaPath, UNEVALUATED_PROPERTIES), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
-                        }
+                // The collection applies this keyword's subschema to each unevaluated property, as an annotation source for
+                // enclosing schemas; it does so here with the errors kept, so no property is validated twice (#109)
+                val evaluated = collectEvaluatedProperties(instance, schema, path, version, evaluation, depth, resourceRoot, dynamicScope) { propName ->
+                    val before = errors.size
+                    validateElement(instance[propName]!!, unevalPropsSchema, childOf(path, propName), at(schemaPath, UNEVALUATED_PROPERTIES), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+                    errors.size == before
+                }
+                if (unevalPropsSchema is JsonPrimitive && unevalPropsSchema.booleanOrNull == false) {
+                    instance.keys.filter { it !in evaluated }.forEach { propName ->
+                        errors.add(ValidationError(path, "Unevaluated property '$propName' is not allowed", UNEVALUATED_PROPERTIES, at(schemaPath, UNEVALUATED_PROPERTIES)))
                     }
                 }
             }
@@ -545,17 +544,15 @@ class JsonValidator @JvmOverloads constructor(
         // Unevaluated items (2019-09 and later)
         if (instance is JsonArray) {
             schema[UNEVALUATED_ITEMS]?.let { unevalItemsSchema ->
-                val evaluated = collectEvaluatedIndices(instance, schema, path, version, evaluation, depth, resourceRoot, dynamicScope)
-                instance.indices.forEach { index ->
-                    if (index !in evaluated) {
-                        val itemPath = childOf(path, index.toString())
-                        when {
-                            unevalItemsSchema is JsonPrimitive && unevalItemsSchema.booleanOrNull == false ->
-                                errors.add(ValidationError(path, "Unevaluated item at index $index is not allowed", UNEVALUATED_ITEMS, at(schemaPath, UNEVALUATED_ITEMS)))
-                            unevalItemsSchema is JsonPrimitive && unevalItemsSchema.booleanOrNull == true -> {}
-                            else ->
-                                validateElement(instance[index], unevalItemsSchema, itemPath, at(schemaPath, UNEVALUATED_ITEMS), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
-                        }
+                // As for unevaluatedProperties: each unevaluated item is validated once, by the collection (#109)
+                val evaluated = collectEvaluatedIndices(instance, schema, path, version, evaluation, depth, resourceRoot, dynamicScope) { index ->
+                    val before = errors.size
+                    validateElement(instance[index], unevalItemsSchema, childOf(path, index.toString()), at(schemaPath, UNEVALUATED_ITEMS), errors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+                    errors.size == before
+                }
+                if (unevalItemsSchema is JsonPrimitive && unevalItemsSchema.booleanOrNull == false) {
+                    instance.indices.filter { it !in evaluated }.forEach { index ->
+                        errors.add(ValidationError(path, "Unevaluated item at index $index is not allowed", UNEVALUATED_ITEMS, at(schemaPath, UNEVALUATED_ITEMS)))
                     }
                 }
             }
@@ -890,6 +887,10 @@ class JsonValidator @JvmOverloads constructor(
                 val itemErrors = mutableListOf<ValidationError>()
                 val undecided = evaluation.leftUndecided {
                     validateElement(item, containsSchema, childOf(path, index.toString()), at(schemaPath, CONTAINS), itemErrors, version, evaluation, depth + 1, resourceRoot, dynamicScope)
+                }
+                // The collection of evaluated items asks again which items matched (#109)
+                if (!undecided && evaluation.collects(instance)) {
+                    evaluation.rememberVerdict(application(item, containsSchema, evaluation, depth + 1, resourceRoot, dynamicScope), itemErrors.isEmpty(), instance)
                 }
                 if (itemErrors.isEmpty()) {
                     matches++
@@ -1298,6 +1299,7 @@ class JsonValidator @JvmOverloads constructor(
         depth: Int,
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
+        unevaluatedMember: ((Int) -> Boolean)? = null,
     ): Set<Int> {
         // Same limit as validateElement, which has already reported the depth error (#29)
         if (depth > maxValidationDepth) return emptySet()
@@ -1310,7 +1312,7 @@ class JsonValidator @JvmOverloads constructor(
 
         // Already collected while this instance is collected: an outer level's collection reaches every level below (#106)
         val application = if (evaluation.collects(instance)) application(instance, schemaElement, evaluation, depth, effectiveResourceRoot, effectiveScope) else null
-        application?.let { evaluation.knownEvaluated<Int>(it) }?.let { return it }
+        if (unevaluatedMember == null) application?.let { evaluation.knownEvaluated<Int>(it) }?.let { return it }
         val undecidedBefore = evaluation.undecided
 
         val evaluated = mutableSetOf<Int>()
@@ -1359,9 +1361,14 @@ class JsonValidator @JvmOverloads constructor(
 
             val matchingIndices = mutableListOf<Int>()
             instance.forEachIndexed { index, item ->
-                val tempErrors = mutableListOf<ValidationError>()
-                validateElement(item, containsSchema, childOf(path, index.toString()), "", tempErrors, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)
-                if (tempErrors.isEmpty()) matchingIndices.add(index)
+                // The verdict pass validated the items it needed while this array is collected (#109)
+                val known = application?.let { evaluation.knownVerdict(application(item, containsSchema, evaluation, depth + 1, effectiveResourceRoot, effectiveScope), instance) }
+                val matches = known ?: run {
+                    val tempErrors = mutableListOf<ValidationError>()
+                    validateElement(item, containsSchema, childOf(path, index.toString()), "", tempErrors, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)
+                    tempErrors.isEmpty()
+                }
+                if (matches) matchingIndices.add(index)
             }
             // Annotation only produced when contains validates (minContains satisfied)
             if (matchingIndices.size >= minContains) {
@@ -1425,9 +1432,12 @@ class JsonValidator @JvmOverloads constructor(
                 unevalItemsSchema is JsonPrimitive && unevalItemsSchema.booleanOrNull == false -> {}
                 else ->
                     yetUnevaluated.forEach { index ->
-                        val tempErrors = mutableListOf<ValidationError>()
-                        validateElement(instance[index], unevalItemsSchema, childOf(path, index.toString()), "", tempErrors, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)
-                        if (tempErrors.isEmpty()) evaluated.add(index)
+                        val valid = unevaluatedMember?.invoke(index) ?: run {
+                            val tempErrors = mutableListOf<ValidationError>()
+                            validateElement(instance[index], unevalItemsSchema, childOf(path, index.toString()), "", tempErrors, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)
+                            tempErrors.isEmpty()
+                        }
+                        if (valid) evaluated.add(index)
                     }
             }
         }
@@ -1452,6 +1462,7 @@ class JsonValidator @JvmOverloads constructor(
         depth: Int,
         resourceRoot: JsonElement,
         dynamicScope: List<JsonElement>,
+        unevaluatedMember: ((String) -> Boolean)? = null,
     ): Set<String> {
         // Same limit as validateElement, which has already reported the depth error (#29)
         if (depth > maxValidationDepth) return emptySet()
@@ -1467,7 +1478,7 @@ class JsonValidator @JvmOverloads constructor(
 
         // Already collected while this instance is collected: an outer level's collection reaches every level below (#106)
         val application = if (evaluation.collects(instance)) application(instance, schemaElement, evaluation, depth, effectiveResourceRoot, effectiveScope) else null
-        application?.let { evaluation.knownEvaluated<String>(it) }?.let { return it }
+        if (unevaluatedMember == null) application?.let { evaluation.knownEvaluated<String>(it) }?.let { return it }
         val undecidedBefore = evaluation.undecided
 
         val evaluated = mutableSetOf<String>()
@@ -1561,9 +1572,12 @@ class JsonValidator @JvmOverloads constructor(
                 unevalPropsSchema is JsonPrimitive && unevalPropsSchema.booleanOrNull == false -> {}
                 else ->
                     yetUnevaluated.forEach { propName ->
-                        val tempErrors = mutableListOf<ValidationError>()
-                        validateElement(instance[propName]!!, unevalPropsSchema, childOf(path, propName), "", tempErrors, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)
-                        if (tempErrors.isEmpty()) evaluated.add(propName)
+                        val valid = unevaluatedMember?.invoke(propName) ?: run {
+                            val tempErrors = mutableListOf<ValidationError>()
+                            validateElement(instance[propName]!!, unevalPropsSchema, childOf(path, propName), "", tempErrors, version, evaluation, depth + 1, effectiveResourceRoot, effectiveScope)
+                            tempErrors.isEmpty()
+                        }
+                        if (valid) evaluated.add(propName)
                     }
             }
         }

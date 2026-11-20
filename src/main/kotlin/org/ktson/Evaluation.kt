@@ -50,8 +50,9 @@ internal class Evaluation(val rootSchema: JsonElement, store: SchemaStore) {
 
     /**
      * Starts the evaluation of a schema with unevaluated* against [instance]. Until the matching [leaveCollector],
-     * the verdicts of anyOf/oneOf branches and if conditions at [instance] are remembered, so the collection of
-     * evaluated properties and items does not validate them again: at every nesting level that doubled the work (#30).
+     * the verdicts of anyOf/oneOf branches and if conditions at [instance], and of its `contains` items, are remembered,
+     * so the collection of evaluated properties and items does not validate them again: at every nesting level that
+     * doubled the work (#30, #109).
      */
     fun enterCollector(instance: JsonElement) {
         collectors.add(instance)
@@ -68,14 +69,18 @@ internal class Evaluation(val rootSchema: JsonElement, store: SchemaStore) {
     /** Whether a verdict at [instance] can be needed by a collection pass, and is worth remembering. */
     fun collects(instance: JsonElement): Boolean = collectors.isNotEmpty() && collectors.last() === instance
 
-    fun knownVerdict(application: Application): Boolean? = verdicts[application.instance]?.get(application)
+    /**
+     * The verdict of [application], remembered at [collected]: the application's own instance for a branch, the array
+     * for one of its `contains` items (#109).
+     */
+    fun knownVerdict(application: Application, collected: JsonElement = application.instance): Boolean? = verdicts[collected]?.get(application)
 
     /**
-     * Remembers a decided verdict at the instance [collects] accepts. Only decided verdicts may be passed: an undecided
-     * one must be reached, and marked, again.
+     * Remembers a decided verdict at [collected], an instance [collects] accepts. Only decided verdicts may be passed: an
+     * undecided one must be reached, and marked, again.
      */
-    fun rememberVerdict(application: Application, valid: Boolean) {
-        verdicts.getOrPut(application.instance) { HashMap() }[application] = valid
+    fun rememberVerdict(application: Application, valid: Boolean, collected: JsonElement = application.instance) {
+        verdicts.getOrPut(collected) { HashMap() }[application] = valid
     }
 
     /** The members [application] evaluated, if collected before: property names at an object, indices at an array. */

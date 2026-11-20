@@ -105,6 +105,51 @@ class UnevaluatedNestingTest :
             }
         }
 
+        // A schema's own unevaluated* subschema was applied to each unevaluated member twice, by the collection pass and
+        // by the verdict pass, and so were contains items: every level of nesting below a member doubled the cost. 22
+        // levels of a 45-byte instance took 3 seconds, 4x per two levels (#109). Each member is now validated once
+        SchemaVersion.entries.forEach { version ->
+            describe("unevaluated* and contains applied to 24 levels of nested members in $version") {
+                val depth = 24
+
+                fun nestedArray(innermost: String) = json("[".repeat(depth) + innermost + "]".repeat(depth))
+                fun nestedObject(innermost: String) = json("""{"a":""".repeat(depth) + innermost + "}".repeat(depth))
+                fun schema(text: String) = JsonSchema.fromString(text, version)
+
+                fun decidesInTime(schema: JsonSchema, valid: JsonElement?, invalid: JsonElement) {
+                    val validator = JsonValidator()
+                    val millis = measureTimeMillis {
+                        valid?.let { validator.validate(it, schema).isValid shouldBe true }
+                        validator.validate(invalid, schema).isValid shouldBe false
+                    }
+                    millis shouldBeLessThan 1_000
+                }
+
+                it("decide unevaluatedItems with a recursive subschema in time") {
+                    decidesInTime(schema("""{"type":"array","unevaluatedItems":{"${'$'}ref":"#"}}"""), nestedArray(""), nestedArray("1"))
+                }
+
+                it("decide unevaluatedProperties with a recursive subschema in time") {
+                    decidesInTime(schema("""{"type":"object","unevaluatedProperties":{"${'$'}ref":"#"}}"""), nestedObject("{}"), nestedObject("1"))
+                }
+
+                it("decide literally nested unevaluatedProperties in time") {
+                    var text = """{"type":"object"}"""
+                    repeat(depth) { text = """{"type":"object","unevaluatedProperties":$text}""" }
+                    decidesInTime(schema(text), nestedObject("{}"), nestedObject("1"))
+                }
+
+                it("decide contains with unevaluatedItems in time") {
+                    decidesInTime(schema("""{"type":"array","contains":{"${'$'}ref":"#"},"unevaluatedItems":false}"""), null, nestedArray("1"))
+                }
+
+                it("decide contains with maxContains and unevaluatedItems in time") {
+                    val text = """{"type":"array","contains":{"${'$'}ref":"#"},"minContains":0,"maxContains":5,"unevaluatedItems":false}"""
+                    decidesInTime(schema(text), nestedArray(""), json("[" + nestedArray("").toString() + ",1]"))
+                }
+            }
+        }
+
         it("keeps verdicts of one branch reached in different dynamic scopes apart") {
             // shared's anyOf branch is the same schema element under a and under b, but its $dynamicRef leads to
             // a's node (valid, evaluates "a") in one scope and to b's node (invalid) in the other. b is validated
