@@ -597,16 +597,13 @@ class JsonValidator @JvmOverloads constructor(
             if (element.content.isIntegerToken() || element.content.toLongOrNull() != null) {
                 TYPE_INTEGER
             } else {
-                val dec = element.content.toBigDecimalOrNull()
-                if (dec != null) {
-                    // A nonpositive scale is an integer already; stripping one can overflow the scale (#86)
-                    if (dec.scale() <= 0 || dec.stripTrailingZeros().scale() <= 0) {
-                        TYPE_INTEGER
-                    } else {
-                        TYPE_NUMBER
-                    }
-                } else {
-                    TYPE_UNKNOWN
+                // Read from its digits and exponent: converting to BigDecimal is quadratic in the digits (#111). A number
+                // BigDecimal rejects (its scale outside Int range) is neither, as before
+                val token = DecimalToken.parse(element.content)
+                when {
+                    token == null -> TYPE_UNKNOWN
+                    token.isInteger -> TYPE_INTEGER
+                    else -> TYPE_NUMBER
                 }
             }
         }

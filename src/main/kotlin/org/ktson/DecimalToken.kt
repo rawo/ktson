@@ -14,6 +14,9 @@ internal class DecimalToken private constructor(
 ) {
     private val isZero get() = digitsStart == digitsEnd
 
+    /** Whether the value is a whole number: zero, or significant digits with a nonnegative exponent (#111). */
+    val isInteger get() = isZero || exponent >= 0
+
     fun sameValue(other: DecimalToken): Boolean {
         if (isZero || other.isZero) return isZero && other.isZero
         val length = digitsEnd - digitsStart

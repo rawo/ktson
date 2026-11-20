@@ -72,14 +72,36 @@ class NumericParsingTest :
             }
         }
 
+        // type converted every token with a point or an exponent to BigDecimal: 3.6 s for a 400,000-digit decimal (#111)
+        SchemaVersion.entries.forEach { version ->
+            it("classifies a 400,000-digit decimal for type in time in $version") {
+                val fraction = Json.parseToJsonElement("0." + "1".repeat(400_000))
+                val whole = Json.parseToJsonElement("1".repeat(400_000) + ".0")
+                val number = JsonSchema.fromString("""{"type":"number"}""", version)
+                val integer = JsonSchema.fromString("""{"type":"integer"}""", version)
+                val millis = measureTimeMillis {
+                    validator.validate(fraction, number).isValid shouldBe true
+                    validator.validate(fraction, integer).isValid shouldBe false
+                    validator.validate(whole, integer).isValid shouldBe true
+                }
+                millis shouldBeLessThan 500
+            }
+        }
+
+        it("classifies tokens for type as BigDecimal did, including numbers whose scale BigDecimal rejects") {
+            val wrong = mutableListOf<String>()
+            for (token in equalityTokens) {
+                val decimal = token.toBigDecimalOrNull()
+                val expectedInteger = decimal != null && (decimal.scale() <= 0 || decimal.stripTrailingZeros().scale() <= 0)
+                val integer = validator.validate(Json.parseToJsonElement(token), JsonSchema.fromString("""{"type":"integer"}""")).isValid
+                val number = validator.validate(Json.parseToJsonElement(token), JsonSchema.fromString("""{"type":"number"}""")).isValid
+                if (integer != expectedInteger || number != (decimal != null)) wrong += "$token: integer $integer, number $number"
+            }
+            wrong.shouldBeEmpty()
+        }
+
         it("decides numeric equality as BigDecimal did, including numbers whose scale BigDecimal rejects") {
-            val tokens = listOf(
-                "0", "-0", "0.0", "-0.0", "0e5", "0E-5", "1", "1.0", "10e-1", "100e-2", "0.1e1", "0.10E+1", "1e2", "100", "1e+2",
-                "-1", "-1.0", "-10e-1", "1.5", "15e-1", "-1.5", "2.5", "007", "7", "12345678901234567890", "1234567890123456789e1",
-                "12345678901234567890.000", "1e2147483647", "10e2147483646", "1e-2147483648", "0.1e-2147483647", "1e2147483648",
-                "10e2147483647", "1e2147483649", "10e2147483648", "1e99999999999999999999", "10e99999999999999999998",
-                "1e-99999999999999999999", "1e0000000000000000000000002", "100",
-            )
+            val tokens = equalityTokens
             val wrong = mutableListOf<String>()
             for (a in tokens) {
                 for (b in tokens) {
@@ -90,4 +112,14 @@ class NumericParsingTest :
             }
             wrong.shouldBeEmpty()
         }
-    })
+    }) {
+    private companion object {
+        val equalityTokens = listOf(
+                "0", "-0", "0.0", "-0.0", "0e5", "0E-5", "1", "1.0", "10e-1", "100e-2", "0.1e1", "0.10E+1", "1e2", "100", "1e+2",
+                "-1", "-1.0", "-10e-1", "1.5", "15e-1", "-1.5", "2.5", "007", "7", "12345678901234567890", "1234567890123456789e1",
+                "12345678901234567890.000", "1e2147483647", "10e2147483646", "1e-2147483648", "0.1e-2147483647", "1e2147483648",
+                "10e2147483647", "1e2147483649", "10e2147483648", "1e99999999999999999999", "10e99999999999999999998",
+                "1e-99999999999999999999", "1e0000000000000000000000002", "100", "2.50", "1.250e2", "0.00100e3", "-0.0500e2", "1.25e1",
+        )
+    }
+}

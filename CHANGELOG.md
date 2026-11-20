@@ -47,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   both to `BigDecimal`, which is quadratic in the digits: a 400,000-digit instance took 3.6 s against `{"const":1}`,
   10.8 s against a three-value `enum` and 7.2 s in a two-item `uniqueItems` array; each now takes under 35 ms. Verdicts
   are unchanged, including for numbers `BigDecimal` rejects, which still equal only their own text (#107).
+- `type` classifies a number with a point or an exponent from its digits and exponent instead of converting it to
+  `BigDecimal`, which is quadratic in the digits: a 400,000-digit decimal took 3.6 s against `{"type":"number"}`, and
+  again for every `type` applied to it; it now takes about 1 ms. Verdicts are unchanged, including for numbers
+  `BigDecimal` rejects, which are still neither integer nor number (#111).
 - A remote `$ref` that `schemaLoader` cannot provide is asked for once per validation instead of once per use:
   `{"items":{"$ref":"https://other.example/missing.json"}}` over 1,000 items made 1,000 loader calls, each possibly a
   network request, in one `validate()`; it now makes one. The miss is not cached across validations, so the next

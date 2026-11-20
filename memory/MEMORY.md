@@ -10,7 +10,7 @@ of them in the same commit as every change (test counts, fixed issues, features,
 - Kotlin 2.4.0, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
 - Official JSON Schema Test Suite: 4,462 assertions run, 100% passing (168 excluded), pinned by `TEST_SUITE_REF`
   in `.github/workflows/build.yml`
-- Custom tests: 1,434 (100% passing); the full `./gradlew test` run is 5,904 tests
+- Custom tests: 1,437 (100% passing); the full `./gradlew test` run is 5,907 tests
 - `kotlinx-coroutines-core`/`-test` are test-only dependencies; the API is synchronous
 
 ## Architecture
@@ -98,6 +98,9 @@ of them in the same commit as every change (test counts, fixed issues, features,
 - **#106 (2026-11-10): DONE** (perf, verdicts unchanged). Collected `unevaluated*` sets are remembered per `Application`
   in `Evaluation` while the instance is collected, like the #30 verdicts; not when undecided (the #51 test guards it).
   400 levels of `allOf` over 2,000 members: 10.2 s → 0.16 s.
+- **#111 (2026-11-20): DONE** (perf, verdicts unchanged). `getJsonType()` classifies tokens with a point or exponent by
+  `DecimalToken.isInteger` (zero, or exponent of the significant digits ≥ 0); an oracle test pins the old `BigDecimal`
+  rule. 400,000-digit decimal against `type`: 3.6 s → ~1 ms.
 - **#110 (2026-11-20): DONE** (breaking verdict change). `resourceUriOf()` (`JsonPointer.kt`) resolves an `$id` and
   drops its fragment; `enterResource`, `searchById` and `getAbsoluteUri` use it, so a nested `$id` ending in `#` is
   found by references with or without the `#`. Loaded documents and `AbsoluteLocations` already dropped it.
