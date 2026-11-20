@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `http://e.com/other` holding `{"allOf":[{"$id":"sub/","$ref":"item.json",...}]}`, rejected `{"a":1}` although
   `item.json` evaluates `a`, and in a loaded document `schemaLoader` received the relative URI `item.json`. The
   collectors now register the resource as the verdict pass does (#105).
+- **Breaking verdict change:** a subschema whose `$id` ends in an empty fragment (`"http://example.com/item.json#"`,
+  `"item.json#"`), which both meta-schemas allow and which names the same resource as the `$id` without it, can now be
+  referenced. Only the root's `$id` dropped the fragment; a nested one was registered and searched with it, so
+  `{"$defs":{"i":{"$id":"http://example.com/item.json#","type":"integer"}},"$ref":"http://example.com/item.json"}`
+  rejected every instance with "Could not resolve reference", with or without the `#` in the `$ref`. Every `$id` now
+  gives its resource a URI without the fragment (#110).
 
 ### Performance
 - Nested `unevaluated*` and `contains` no longer cost time exponential in the depth of the instance. A schema's own

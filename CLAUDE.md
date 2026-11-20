@@ -193,7 +193,7 @@ validate()
 - **HostnameBidiTest.kt** - 9 tests: in a Bidi domain `hostname` applies the Bidi rule to ASCII labels too; a valid hostname is a valid idn-hostname (#82)
 - **NumericParsingTest.kt** - 12 tests: numbers are converted only for `SchemaKeywords.NUMERIC_KEYWORDS`; integer tokens are classified without parsing (#84); `const`/`enum`/`uniqueItems` decide 400,000-digit numbers in time, exactly as `BigDecimal` equality did (#107)
 - **BoundedCacheTest.kt** - 4 tests for `BoundedCache` (compute once, null not cached, size bound, concurrent bound)
-- **ReferenceResolutionTest.kt** - 42 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration
+- **ReferenceResolutionTest.kt** - 54 tests for percent-decoded `$ref` fragments, `JsonSchema.baseUri` resolution and stable `$id` registration; an `$id` ending in an empty fragment names the same resource (#110)
 - **ReferenceLookupCostTest.kt** - 6 tests: anchor, `$id` and loaded-document references applied to 100 items walk a 2,000-definition schema once; equal anchor names in different resources stay apart (#92); `schemaLoader` is asked once per validation for a URI it cannot provide (#108)
 - **SharedDocumentBaseTest.kt** - 4 tests: a relative `$id` in one parsed document loaded under two URIs resolves in each retrieval context, in either order (#91)
 - **KeywordNamedPropertyTest.kt** - 15 tests: properties named `$id`/`$anchor`/`$dynamicAnchor` neither throw nor hide anchors
@@ -396,6 +396,8 @@ Release notes are generated from the commit log, so commits must follow Conventi
   move these caches to the validator (#37, #40)
 - When adding new ref types, update `ReferenceResolver` in `JsonPointer.kt` and `resolveReferences()` in `JsonValidator.kt`
 - The root's absolute base (`JsonSchema.absoluteBaseUri()`: absolute `$id`, else `$id` resolved against `baseUri`, else `baseUri`) is registered before validation, so `schemaLoader` receives absolute URIs
+- A `$id` becomes its resource's URI through `resourceUriOf()` (resolved, fragment dropped), so `item.json#` and
+  `item.json` name one resource (#110); never register a resolved `$id` with its fragment
 - `$id` registrations only improve: an absolute URI is never replaced by a relative one, and a registered resource is not re-resolved (its relative `$id` would otherwise nest again)
 - `$id`, `$anchor`, `$dynamicAnchor` and `$schema` count only when their value is a string (`stringKeyword()`): a property may be named `$id`, and a malformed value is left to `validateSchema` (#57). That includes
   `startsResource()`: a non-string `$id` starts no resource, so refs below it resolve in the enclosing one (#104)

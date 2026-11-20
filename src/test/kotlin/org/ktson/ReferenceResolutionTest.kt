@@ -225,5 +225,48 @@ class ReferenceResolutionTest :
                     validator.validate(Json.parseToJsonElement("""{"a":1.5,"b":20}"""), schema).isValid shouldBe false
                 }
             }
+
+            // Both meta-schemas allow an $id to end in an empty fragment ("item.json#"), which names the same resource as
+            // "item.json". Only the root's $id dropped it: a nested one was registered with the "#", so a $ref without it
+            // was "Could not resolve reference" (#110)
+            describe("$version an \$id with an empty fragment") {
+                fun defsItem(id: String, ref: String) = """{"${'$'}id":"http://example.com/root.json","${'$'}defs":{"i":{"${'$'}id":"$id","type":"integer"}},"${'$'}ref":"$ref"}"""
+
+                it("is found by an absolute reference without the fragment") {
+                    val schema = defsItem("http://example.com/item.json#", "http://example.com/item.json")
+                    isValid(schema, "1", version) shouldBe true
+                    isValid(schema, "\"x\"", version) shouldBe false
+                }
+
+                it("is found by a relative reference when the \$id is relative") {
+                    val schema = defsItem("item.json#", "item.json")
+                    isValid(schema, "1", version) shouldBe true
+                    isValid(schema, "\"x\"", version) shouldBe false
+                }
+
+                it("is found below a nested resource") {
+                    val schema = """{"${'$'}id":"http://example.com/root.json","${'$'}defs":{"n":{"${'$'}id":"http://example.com/n/","${'$'}defs":{"m":{"${'$'}id":"http://example.com/n/nested.json#","type":"integer"}}}},"${'$'}ref":"http://example.com/n/nested.json"}"""
+                    isValid(schema, "1", version) shouldBe true
+                    isValid(schema, "\"x\"", version) shouldBe false
+                }
+
+                it("resolves the relative references inside it against the resource") {
+                    val schema = """{"${'$'}id":"http://example.com/root.json","${'$'}defs":{"i":{"${'$'}id":"http://example.com/a/item.json#","${'$'}ref":"other.json"},"o":{"${'$'}id":"http://example.com/a/other.json","type":"integer"}},"${'$'}ref":"http://example.com/a/item.json"}"""
+                    isValid(schema, "1", version) shouldBe true
+                    isValid(schema, "\"x\"", version) shouldBe false
+                }
+
+                it("is found by a reference with the empty fragment too") {
+                    val schema = defsItem("http://example.com/item.json#", "http://example.com/item.json#")
+                    isValid(schema, "1", version) shouldBe true
+                    isValid(schema, "\"x\"", version) shouldBe false
+                }
+
+                it("still identifies the root, as before") {
+                    val schema = """{"${'$'}id":"http://example.com/root.json#","${'$'}defs":{"i":{"type":"integer"}},"${'$'}ref":"http://example.com/root.json#/${'$'}defs/i"}"""
+                    isValid(schema, "1", version) shouldBe true
+                    isValid(schema, "\"x\"", version) shouldBe false
+                }
+            }
         }
     })

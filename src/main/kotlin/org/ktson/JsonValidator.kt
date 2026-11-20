@@ -206,18 +206,7 @@ class JsonValidator @JvmOverloads constructor(
         // it: re-resolving its relative $id against itself (it can be its own resourceRoot) would
         // nest it again, e.g. "nested/n.json" -> ".../nested/nested/n.json".
         if (rawId.isEmpty() || evaluation.references.hasAbsoluteUri(schema)) return
-        val parentUri = evaluation.references.getAbsoluteUri(resourceRoot)
-        val absoluteId =
-            if (parentUri.isNotEmpty()) {
-                try {
-                    UriResolver.resolveUri(parentUri, rawId)
-                } catch (_: Exception) {
-                    rawId
-                }
-            } else {
-                rawId
-            }
-        evaluation.references.registerAbsoluteUri(schema, absoluteId)
+        evaluation.references.registerAbsoluteUri(schema, resourceUriOf(evaluation.references.getAbsoluteUri(resourceRoot), rawId))
     }
 
     /** Whether this is a JSON integer token: an optional minus and digits, with no fraction or exponent. */

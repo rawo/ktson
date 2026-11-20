@@ -255,7 +255,7 @@ internal class ReferenceResolver(private val store: SchemaStore) {
      */
     internal fun getAbsoluteUri(schema: JsonElement): String {
         schemaAbsoluteUris[schema]?.let { return it }
-        val rawId = (schema as? JsonObject)?.stringKeyword(SchemaKeywords.ID) ?: ""
+        val rawId = (schema as? JsonObject)?.stringKeyword(SchemaKeywords.ID)?.let { resourceUriOf("", it) } ?: ""
         return if (rawId.isNotEmpty() && UriResolver.isAbsoluteUri(rawId)) rawId else ""
     }
 
@@ -472,12 +472,7 @@ internal class ReferenceResolver(private val store: SchemaStore) {
                     // URI as baseUri, so resolving its relative $id again would nest it once per search.
                     hasAbsoluteUri(node.element) -> getAbsoluteUri(node.element)
                     else -> {
-                        val resolved =
-                            try {
-                                UriResolver.resolveUri(node.baseUri, id)
-                            } catch (_: Exception) {
-                                id
-                            }
+                        val resolved = resourceUriOf(node.baseUri, id)
                         // Register the resolved absolute URI so relative $refs within this sub-schema work
                         registerAbsoluteUri(node.element, resolved)
                         resolved
@@ -501,6 +496,25 @@ internal class ReferenceResolver(private val store: SchemaStore) {
  * schema: such a value is not an identifier and must neither throw nor count as one.
  */
 internal fun JsonObject.stringKeyword(keyword: String): String? = (this[keyword] as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+/**
+ * The URI a `$id` gives its resource: [id] resolved against [base] (unless [base] is empty), without its fragment. Both
+ * meta-schemas allow an empty fragment, and "item.json#" names the same resource as "item.json" (#110). An [id] that
+ * cannot be resolved stands for itself.
+ */
+internal fun resourceUriOf(base: String, id: String): String {
+    val resolved =
+        if (base.isEmpty()) {
+            id
+        } else {
+            try {
+                UriResolver.resolveUri(base, id)
+            } catch (_: Exception) {
+                id
+            }
+        }
+    return resolved.substringBefore('#')
+}
 
 /**
  * Decode percent-encoded characters in a URI fragment per RFC 3986.

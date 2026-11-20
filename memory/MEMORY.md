@@ -10,7 +10,7 @@ of them in the same commit as every change (test counts, fixed issues, features,
 - Kotlin 2.4.0, Java 21, Gradle 9.1.0, kotlinx-serialization-json, Kotest
 - Official JSON Schema Test Suite: 4,462 assertions run, 100% passing (168 excluded), pinned by `TEST_SUITE_REF`
   in `.github/workflows/build.yml`
-- Custom tests: 1,422 (100% passing); the full `./gradlew test` run is 5,892 tests
+- Custom tests: 1,434 (100% passing); the full `./gradlew test` run is 5,904 tests
 - `kotlinx-coroutines-core`/`-test` are test-only dependencies; the API is synchronous
 
 ## Architecture
@@ -98,6 +98,9 @@ of them in the same commit as every change (test counts, fixed issues, features,
 - **#106 (2026-11-10): DONE** (perf, verdicts unchanged). Collected `unevaluated*` sets are remembered per `Application`
   in `Evaluation` while the instance is collected, like the #30 verdicts; not when undecided (the #51 test guards it).
   400 levels of `allOf` over 2,000 members: 10.2 s → 0.16 s.
+- **#110 (2026-11-20): DONE** (breaking verdict change). `resourceUriOf()` (`JsonPointer.kt`) resolves an `$id` and
+  drops its fragment; `enterResource`, `searchById` and `getAbsoluteUri` use it, so a nested `$id` ending in `#` is
+  found by references with or without the `#`. Loaded documents and `AbsoluteLocations` already dropped it.
 - **#109 (2026-11-20): DONE** (perf, verdicts unchanged). Found by the read-only review of 9046d8a with #110–#114.
   The verdict pass passes `unevaluatedMember` to `collectEvaluated*()`, so a schema's own `unevaluated*` subschema
   validates each member once with real errors; `contains` item verdicts are remembered at the collected array.
